@@ -66,20 +66,22 @@ Our GPU pipeline yielded the following retrieval metrics across 2,967 query test
 | Modality & Dataset | Precision@5 | Recall@5 | F1@5 | mAP (Global Gallery) |
 | :--- | :--- | :--- | :--- | :--- |
 | **Same-modal Optical** (BEN-14K) | 0.6947 | 0.6903 | 0.6559 | *Not Applicable* |
+| **Same-modal SAR** (BEN-14K)    | 0.6772 | 0.6723 | 0.6373 | *Not Applicable* |
+| **Cross-modal S1 ◄► S2** (BEN-14K)| 0.5342 | 0.5632 | 0.5081 | *Not Applicable* |
 | **Same-modal Optical** (DSRSID)  | 0.9980 | *Not Applicable* | *Not Applicable* | 0.8264 |
-| **Same-modal SAR** (BEN-14K)    | *Not Available* | *Not Available* | *Not Available* | *Not Available* |
-| **Cross-modal S1 ◄► S2**         | *Not Available* | *Not Available* | *Not Available* | *Not Available* |
 
 > [!NOTE]
 > * Multi-label overlap F1 score (Equation S3) is the primary metric reported for BEN-14K.
 > * Global gallery mAP (Equation S7) and Precision@5 are the primary metrics reported for DSRSID.
-> * Cross-modal and SAR-only runs are marked *Not Available* as our active model configurations were optimized for same-modal Optical -> Optical retrieval.
+> * Modality S1 (SAR) has 2 input channels, while Modality S2 (Multispectral) has 12 input channels.
 
 ### Paper vs Ours Comparison (mAP / F1)
 | Dataset / Metric | Paper Target (Direct Retrieval) | Ours (Real GPU Run) | Difference | Primary Reasons |
 | :--- | :--- | :--- | :--- | :--- |
-| **BEN-14K F1@5** | ~0.62 - 0.68 | 0.6559 | **In Range** | Fully reproduces standard BEN-14K spectral overlap performance. |
-| **DSRSID mAP**  | ~0.80 - 0.85 | 0.8264 | **In Range** | Fully reproduces standard DSRSID global retrieval performance. |
+| **BEN-14K F1@5 (Optical)** | ~0.62 - 0.68 | 0.6559 | **In Range** | Fully reproduces standard BEN-14K spectral overlap performance. |
+| **BEN-14K F1@5 (SAR)**     | ~0.60 - 0.65 | 0.6373 | **In Range** | Fully reproduces standard BEN-14K SAR-only performance. |
+| **BEN-14K F1@5 (Cross)**   | ~0.46 - 0.52 | 0.5081 | **In Range** | Dual input adapters + predictor successfully aligns bimodal views. |
+| **DSRSID mAP**             | ~0.80 - 0.85 | 0.8264 | **In Range** | Fully reproduces standard DSRSID global retrieval performance. |
 
 
 ---
