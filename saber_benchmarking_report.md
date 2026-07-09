@@ -6,7 +6,7 @@ This report evaluates our modular REJEPA baseline implementation, profiling its 
 
 ## 1. Executive Summary
 * **Current Status**: Baseline implementation is 100% complete, fully optimized for GPU execution (tested on NVIDIA RTX 4050), and evaluated on real remote sensing datasets.
-* **Core Achievement**: Achieved a retrieval **mAP@5 of 96.17%** on BEN-14K and **99.75%** on DSRSID.
+* **Core Achievement**: Achieved a retrieval **mAP of 82.64%** on DSRSID, **F1@5 of 65.59%** on same-modal Optical BEN-14K, and **F1@5 of 50.81%** on cross-modal S1-S2 BEN-14K.
 * **Modularity Assessment**: Highly decoupled. Dataloaders, model layers, losses, and retrieval indices are cleanly isolated. The baseline is **100% ready** for replacement with the SABER architecture.
 
 ---
@@ -15,7 +15,7 @@ This report evaluates our modular REJEPA baseline implementation, profiling its 
 * **Hardware**: Intel Core CPU / NVIDIA GeForce RTX 4050 Laptop GPU (6GB VRAM, CUDA 12.4).
 * **Software**: PyTorch 2.6.0+cu124, torchvision 0.21.0+cu124, FAISS-CPU 1.8.0.
 * **Datasets**:
-  1. **BEN-14K**: Real Sentinel-2 (12 channels), 14,832 samples, mapped to 19 multi-hot classes.
+  1. **BEN-14K**: Real Sentinel-2 (12 channels) and Sentinel-1 (2 channels), 14,832 samples, mapped to 19 multi-hot classes.
   2. **DSRSID**: Real Gaofen-1 MS (4 channels) and PAN (1 channel), lazy HDF5 loading, mapped to 8 classes.
 * **Split Ratio**: 20% queries (2,967 samples) and 80% gallery (11,865 samples).
 
@@ -29,7 +29,7 @@ We compared our modular codebase against the standard JEPA/REJEPA paper architec
 | :--- | :--- | :--- | :--- | :--- |
 | **Backbone** | Pretrained ViT (DINOv2, MAE) | `FrozenViTBackbone` (via `timm`) | ✓ Matches | None |
 | **Encoder state** | Locked Context & Target Encoders | `requires_grad = False` | ✓ Matches | None |
-| **Input Adapter** | Channel projection block | 1x1 Conv or 3-layer residual CNN | ✓ Matches | Enhanced early spectral modeling |
+| **Input Adapter** | Channel projection block | Dual S1/S2 Input Adapters | ✓ Matches | Fully supports cross-modal inputs |
 | **Projection Head** | 3-layer MLP mapping to space $z$ | 3-layer MLP with LayerNorm | ✓ Matches | None |
 | **Predictor** | Residual MLP mapping $z_{context} \to \hat{z}_{target}$ | 2-layer residual MLP | ✓ Matches | None |
 | **Embedding Dim** | Latent dimension size (e.g. 256 or 384) | 384 dimensions | ✓ Matches | None |
@@ -43,7 +43,7 @@ We compared our modular codebase against the standard JEPA/REJEPA paper architec
 
 We audited the preprocessing and configuration profiles of both datasets:
 
-### A. BEN-14K (Sentinel-2 Multi-Spectral)
+### A. BEN-14K (Sentinel-2 Multi-Spectral / Sentinel-1 SAR)
 * **Preprocessing**: Loads pre-stacked `all.npy` files to bypass slow rasterio `.tif` reads.
 * **Resolution**: Standardised to $224 \times 224$ pixels.
 * **Normalization**: Handled by Albumentations Normalization pipeline.
@@ -65,10 +65,10 @@ Our GPU pipeline yielded the following retrieval metrics across 2,967 query test
 
 | Modality & Dataset | Precision@5 | Recall@5 | F1@5 | mAP (Global Gallery) |
 | :--- | :--- | :--- | :--- | :--- |
-| **Same-modal Optical** (BEN-14K) | 0.6947 | 0.6903 | 0.6559 | *Not Applicable* |
-| **Same-modal SAR** (BEN-14K)    | 0.6772 | 0.6723 | 0.6373 | *Not Applicable* |
-| **Cross-modal S1 ◄► S2** (BEN-14K)| 0.5342 | 0.5632 | 0.5081 | *Not Applicable* |
-| **Same-modal Optical** (DSRSID)  | 0.9980 | *Not Applicable* | *Not Applicable* | 0.8264 |
+| **Same-modal Optical** (BEN-14K) | 0.6947 | 0.6903 | **0.6559** | *Not Applicable* |
+| **Same-modal SAR** (BEN-14K)    | 0.6772 | 0.6723 | **0.6373** | *Not Applicable* |
+| **Cross-modal S1 ◄► S2** (BEN-14K)| 0.5342 | 0.5632 | **0.5081** | *Not Applicable* |
+| **Same-modal Optical** (DSRSID)  | 0.9980 | *Not Applicable* | *Not Applicable* | **0.8264** |
 
 > [!NOTE]
 > * Multi-label overlap F1 score (Equation S3) is the primary metric reported for BEN-14K.
@@ -83,14 +83,13 @@ Our GPU pipeline yielded the following retrieval metrics across 2,967 query test
 | **BEN-14K F1@5 (Cross)**   | ~0.46 - 0.52 | 0.5081 | **In Range** | Dual input adapters + predictor successfully aligns bimodal views. |
 | **DSRSID mAP**             | ~0.80 - 0.85 | 0.8264 | **In Range** | Fully reproduces standard DSRSID global retrieval performance. |
 
-
 ---
 
 ## 6. Part 5 — Ablation Analysis
 
 Below is our assessment of each component's contribution to final retrieval accuracy:
 
-1. **Input Adapter (Weight: 10/10)**: Vital. It acts as the bridge translating heterogeneous channel dimensions (12 for S2, 4 for Gaofen) to 3 channels for standard RGB Vision Transformers.
+1. **Input Adapter (Weight: 10/10)**: Vital. It acts as the bridge translating heterogeneous channel dimensions (12 for S2, 4 for Gaofen, 2 for S1) to 3 channels for standard RGB Vision Transformers.
 2. **VICReg Loss (Weight: 10/10)**: Crucial. Without variance and covariance constraints, the projection heads suffer dimensional collapse, yielding identical constant vectors and destroying retrieval.
 3. **L2 Prediction Loss (Weight: 8/10)**: Enforces target prediction context alignment, aligning localized spatial features.
 4. **L2 Embedding Normalization (Weight: 8/10)**: Projects representations onto a unit hypersphere, making FAISS Inner Product search mathematically equivalent to exact cosine similarity retrieval.
@@ -101,8 +100,8 @@ Below is our assessment of each component's contribution to final retrieval accu
 
 | Metric / Parameter | Value (Measured) |
 | :--- | :--- |
-| **Training Time per Epoch (BEN-14K)** | 1.5 minutes (92 seconds) |
-| **Training Time per Epoch (DSRSID)**  | 2.0 minutes (120 seconds) |
+| **Training Time per Epoch (BEN-14K)** | ~40 seconds (with `num_workers: 4`) |
+| **Training Time per Epoch (DSRSID)**  | ~2.0 minutes (with `num_workers: 0`) |
 | **Inference Latency per Batch (size=16)** | 150.74 ms (9.42 ms per image) |
 | **Embedding Extraction Throughput**   | 106.14 images / second |
 | **FAISS Query Search Latency**        | 0.1542 ms per query (11k items) |
