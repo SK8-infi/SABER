@@ -56,6 +56,7 @@ def main() -> None:
         train_dataset = BEN14KDataset(
             data_dir=config.dataset.data_dir,
             use_synthetic=config.dataset.use_synthetic,
+            size=config.dataset.get("size", 1000),
             image_size=config.dataset.image_size,
             transform=train_transform,
             is_train=True
@@ -65,6 +66,7 @@ def main() -> None:
         train_dataset = DSRSIDDataset(
             data_dir=config.dataset.data_dir,
             use_synthetic=config.dataset.use_synthetic,
+            size=config.dataset.get("size", 1000),
             image_size=config.dataset.image_size,
             transform=train_transform,
             is_train=True

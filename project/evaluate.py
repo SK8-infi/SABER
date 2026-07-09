@@ -54,6 +54,7 @@ def main() -> None:
         eval_dataset = BEN14KDataset(
             data_dir=config.dataset.data_dir,
             use_synthetic=config.dataset.use_synthetic,
+            size=config.dataset.get("size", 1000),
             image_size=config.dataset.image_size,
             transform=eval_transform,
             is_train=False
@@ -63,6 +64,7 @@ def main() -> None:
         eval_dataset = DSRSIDDataset(
             data_dir=config.dataset.data_dir,
             use_synthetic=config.dataset.use_synthetic,
+            size=config.dataset.get("size", 1000),
             image_size=config.dataset.image_size,
             transform=eval_transform,
             is_train=False
