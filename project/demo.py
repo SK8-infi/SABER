@@ -197,27 +197,51 @@ def main() -> None:
         match_name = match["name"]
         match_score = match["score"]
         
-        # Load from file if dataset is real, otherwise generate matching synthetics for demo demo grid
-        img_loaded = False
+        img_arr = None
         if not dataset.use_synthetic:
-            # Attempt to locate the matched image inside the dataset dir
-            for root, _, files in os.walk(config.dataset.data_dir):
-                if match_name in files:
-                    full_path = os.path.join(root, match_name)
-                    try:
-                        from PIL import Image
-                        img_loaded = np.array(Image.open(full_path))
-                        img_loaded = True
-                        break
-                    except Exception:
-                        pass
+            # Load real image from dataset using index parsing/matching
+            if config.dataset.name.lower() == "dsrsid":
+                try:
+                    parts = match_name.split("_")
+                    idx_str = parts[-1].split(".")[0]
+                    match_idx = int(idx_str)
+                    
+                    old_train = dataset.is_train
+                    dataset.is_train = False
+                    item = dataset[match_idx]
+                    dataset.is_train = old_train
+                    
+                    img_tensor = item["image"]
+                    img_arr = img_tensor.permute(1, 2, 0).numpy()
+                except Exception as e:
+                    logger.error(f"Error loading real DSRSID image for display: {e}")
+            elif config.dataset.name.lower() == "ben14k":
+                try:
+                    match_id = match_name.replace(".png", "").replace("_paired", "")
+                    if dataset.modality == "s1":
+                        mask = dataset.df["S1_ID"] == match_id
+                    else:
+                        mask = dataset.df["S2_ID"] == match_id
+                        
+                    indices = dataset.df.index[mask].tolist()
+                    if indices:
+                        match_idx = indices[0]
+                        old_train = dataset.is_train
+                        dataset.is_train = False
+                        item = dataset[match_idx]
+                        dataset.is_train = old_train
+                        
+                        img_tensor = item["image"]
+                        img_arr = img_tensor.permute(1, 2, 0).numpy()
+                except Exception as e:
+                    logger.error(f"Error loading real BEN-14K image for display: {e}")
         
-        if not img_loaded:
+        if img_arr is None:
             # Fallback to generating a synthetic tensor representing the match
             dummy_match = np.random.randn(config.dataset.image_size, config.dataset.image_size, in_channels).astype(np.float32)
             retrieved_imgs.append(dummy_match)
         else:
-            retrieved_imgs.append(img_loaded)
+            retrieved_imgs.append(img_arr)
             
         retrieved_names.append(match_name)
         retrieved_scores.append(match_score)
