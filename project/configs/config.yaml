@@ -10,11 +10,11 @@ viz_dir: "visualizations"
 # Dataset Selection & Dataloader
 # Available datasets: "ben14k", "dsrsid"
 dataset:
-  name: "ben14k"
-  data_dir: "data/ben14k"  # Path to dataset root
-  use_synthetic: true     # If true, runs with synthetic data (perfect for initial run)
+  name: "ben14k"                  # "ben14k" (Sentinel-1/2) or "dsrsid" (Gaofen-1)
+  data_dir: "C:/Users/praba/Downloads/benv1_14k"  # Use "C:/Users/praba/Downloads/DSRSID.mat" for dsrsid
+  use_synthetic: false            # Set to false to train on real data
   batch_size: 16
-  num_workers: 0          # Set to 0 for Windows compatibility in debug
+  num_workers: 0                  # Set to 0 for Windows compatibility in debug
   image_size: 224
 
 # Model Architecture
