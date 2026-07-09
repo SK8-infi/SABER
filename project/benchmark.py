@@ -37,6 +37,7 @@ def run_benchmark(config_path: str, dataset_name: str, data_dir: str):
             use_synthetic=False,
             size=1000,
             image_size=config.dataset.image_size,
+            modality=config.dataset.get("modality", "s2"),
             is_train=False
         )
     else:

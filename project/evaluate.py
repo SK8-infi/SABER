@@ -57,6 +57,7 @@ def main() -> None:
             size=config.dataset.get("size", 1000),
             image_size=config.dataset.image_size,
             transform=eval_transform,
+            modality=config.dataset.get("modality", "s2"),
             is_train=False
         )
         in_channels = eval_dataset.num_channels
@@ -77,11 +78,12 @@ def main() -> None:
     logger.info(f"Evaluation samples: {len(eval_dataset)}")
 
     # Build Dataloader
+    num_workers = 0 if dataset_name == "dsrsid" else config.dataset.num_workers
     eval_loader = DataLoader(
         eval_dataset,
         batch_size=config.dataset.batch_size,
         shuffle=False,
-        num_workers=config.dataset.num_workers
+        num_workers=num_workers
     )
 
     # Create REJEPA model instance

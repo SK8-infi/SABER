@@ -59,6 +59,7 @@ def main() -> None:
             size=config.dataset.get("size", 1000),
             image_size=config.dataset.image_size,
             transform=train_transform,
+            modality=config.dataset.get("modality", "s2"),
             is_train=True
         )
         in_channels = train_dataset.num_channels
@@ -79,11 +80,12 @@ def main() -> None:
     logger.info(f"Training samples: {len(train_dataset)}, Input channels: {in_channels}")
 
     # Build Dataloader
+    num_workers = 0 if dataset_name == "dsrsid" else config.dataset.num_workers
     train_loader = DataLoader(
         train_dataset,
         batch_size=config.dataset.batch_size,
         shuffle=True,
-        num_workers=config.dataset.num_workers,
+        num_workers=num_workers,
         drop_last=True
     )
 

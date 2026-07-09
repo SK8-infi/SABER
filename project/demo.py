@@ -54,6 +54,7 @@ def main() -> None:
             use_synthetic=config.dataset.use_synthetic,
             image_size=config.dataset.image_size,
             transform=eval_transform,
+            modality=config.dataset.get("modality", "s2"),
             is_train=False
         )
         in_channels = dataset.num_channels

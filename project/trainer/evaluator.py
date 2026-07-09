@@ -10,8 +10,7 @@ logger = logging.getLogger("saber")
 class Evaluator:
     """
     Evaluates the retrieval performance of the trained model.
-    Extracts L2-normalized embeddings for the entire evaluation dataset,
-    partitions them into query/gallery splits, and computes standard retrieval metrics.
+    Supports same-modal (S1->S1, S2->S2) and cross-modal (S1->S2) retrieval directions.
     """
     def __init__(
         self,
@@ -35,9 +34,7 @@ class Evaluator:
     def extract_all_embeddings(self) -> Tuple[np.ndarray, np.ndarray, list]:
         """
         Runs inference over the entire dataloader to extract embeddings, labels, and filenames.
-        
-        Returns:
-            A tuple of (embeddings, labels, filenames) as numpy arrays/lists.
+        (Same-modal extraction)
         """
         self.model.eval()
         embeddings_list = []
@@ -58,7 +55,6 @@ class Evaluator:
                 labels_list.append(labels.numpy())
                 filenames_list.extend(names)
 
-        # Concatenate all batch outputs
         all_embeddings = np.concatenate(embeddings_list, axis=0)
         all_labels = np.concatenate(labels_list, axis=0)
 
@@ -67,40 +63,83 @@ class Evaluator:
     def evaluate(self, top_k: int = 5) -> Dict[str, Any]:
         """
         Evaluates retrieval metrics on the dataloader.
-        Partitions data into query (20%) and gallery (80%) subsets deterministically.
-        
-        Args:
-            top_k: Retrieve top K matches.
-            
-        Returns:
-            Dictionary containing metrics and extracted tensors/metadata.
+        Supports same-modal and cross-modal retrieval divisions.
         """
-        embeddings, labels, names = self.extract_all_embeddings()
-        num_samples = len(embeddings)
-        
+        num_samples = len(self.dataloader.dataset)
         if num_samples < 5:
             raise ValueError(f"Dataset has only {num_samples} samples, which is too small for retrieval split.")
 
-        # Determine indices (Query: every 5th image, Gallery: remainder)
+        # Determine query (20%) and gallery (80%) indices deterministically
         query_indices = np.arange(0, num_samples, 5)
         gallery_indices = np.array([i for i in range(num_samples) if i not in query_indices])
 
-        query_embeds = embeddings[query_indices]
-        query_labels = labels[query_indices]
-        
-        gallery_embeds = embeddings[gallery_indices]
-        gallery_labels = labels[gallery_indices]
+        is_cross_modal = (self.config.dataset.name.lower() == "ben14k" and self.config.dataset.get("modality", "s2").lower() == "both")
+
+        if not is_cross_modal:
+            # Same-modal path
+            embeddings, labels, names = self.extract_all_embeddings()
+            query_embeds = embeddings[query_indices]
+            query_labels = labels[query_indices]
+            
+            gallery_embeds = embeddings[gallery_indices]
+            gallery_labels = labels[gallery_indices]
+        else:
+            # Cross-modal path (SAR S1 -> Optical S2)
+            logger.info("Extracting bimodal embeddings for cross-modal evaluation (S1 query, S2 gallery)...")
+            self.model.eval()
+            
+            query_embeds_list = []
+            gallery_embeds_list = []
+            labels_list = []
+            filenames_list = []
+            
+            with torch.no_grad():
+                idx_counter = 0
+                for batch in self.dataloader:
+                    images = batch["image"].to(self.device)  # shape: (B, 14, 224, 224)
+                    labels = batch["label"]
+                    names = batch["name"]
+                    
+                    batch_size = images.shape[0]
+                    for b in range(batch_size):
+                        global_idx = idx_counter + b
+                        img_slice = images[b:b+1]  # shape: (1, 14, 224, 224)
+                        
+                        if global_idx in query_indices:
+                            # S1 Query embedding: pass first 2 channels (SAR)
+                            x_q = img_slice[:, :2, :, :]
+                            embed = self.model.get_retrieval_embedding(x_q)
+                            query_embeds_list.append(embed.cpu().numpy())
+                        else:
+                            # S2 Gallery embedding: pass remaining 12 channels (MS)
+                            x_g = img_slice[:, 2:, :, :]
+                            embed = self.model.get_retrieval_embedding(x_g)
+                            gallery_embeds_list.append(embed.cpu().numpy())
+                            
+                    labels_list.append(labels.numpy())
+                    filenames_list.extend(names)
+                    idx_counter += batch_size
+                    
+            query_embeds = np.concatenate(query_embeds_list, axis=0)
+            gallery_embeds = np.concatenate(gallery_embeds_list, axis=0)
+            labels = np.concatenate(labels_list, axis=0)
+            names = filenames_list
+            
+            query_labels = labels[query_indices]
+            gallery_labels = labels[gallery_indices]
+            
+            # Synthesize final embeddings array for FAISS building compatibility
+            embeddings = np.zeros((num_samples, query_embeds.shape[1]), dtype=np.float32)
+            embeddings[query_indices] = query_embeds
+            embeddings[gallery_indices] = gallery_embeds
 
         logger.info(f"Retrieval Split: {len(query_indices)} queries, {len(gallery_indices)} gallery items.")
 
-        # Compute cosine similarity matrix
-        # Since embeddings are L2 normalized, similarity is the dot product
+        # Compute cosine similarity matrix (inner product of L2-normalized embeddings)
         similarity_matrix = query_embeds @ gallery_embeds.T
 
-        # Detect multilabel dataset configuration
-        is_multilabel = (self.config.dataset.name.lower() == "ben14k")
-
         # Calculate metrics
+        is_multilabel = (self.config.dataset.name.lower() == "ben14k")
         metrics = compute_retrieval_metrics(
             similarity_matrix=similarity_matrix,
             query_labels=query_labels,
