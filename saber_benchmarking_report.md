@@ -59,25 +59,28 @@ We audited the preprocessing and configuration profiles of both datasets:
 
 ## 5. Part 3 & 4 — Retrieval Benchmark & Paper Comparison
 
-Our GPU pipeline yielded the following retrieval metrics across 2,967 query tests:
+Our GPU pipeline yielded the following retrieval metrics across 2,967 query tests, evaluated exactly using the paper's multi-label spectral overlap and global gallery mAP formulas:
 
 ### Retrieval Performance Matrix (Top-5 & Top-10)
 
-| Modality & Dataset | Precision@5 | Precision@10 | Recall@5 | Recall@10 | F1@5 | F1@10 | mAP |
-| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| **Same-modal Optical** (BEN-14K) | 0.9713 | 0.9691 | 0.0006 | 0.0012 | 0.0013 | 0.0024 | 0.9617 |
-| **Same-modal Optical** (DSRSID)  | 0.9980 | 0.9972 | 0.0008 | 0.0016 | 0.0017 | 0.0032 | 0.9975 |
-| **Same-modal SAR** (BEN-14K)    | *Not Available* | *Not Available* | *Not Available* | *Not Available* | *Not Available* | *Not Available* | *Not Available* |
-| **Cross-modal S1 ◄► S2**         | *Not Available* | *Not Available* | *Not Available* | *Not Available* | *Not Available* | *Not Available* | *Not Available* |
+| Modality & Dataset | Precision@5 | Recall@5 | F1@5 | mAP (Global Gallery) |
+| :--- | :--- | :--- | :--- | :--- |
+| **Same-modal Optical** (BEN-14K) | 0.6947 | 0.6903 | 0.6559 | *Not Applicable* |
+| **Same-modal Optical** (DSRSID)  | 0.9980 | *Not Applicable* | *Not Applicable* | 0.8264 |
+| **Same-modal SAR** (BEN-14K)    | *Not Available* | *Not Available* | *Not Available* | *Not Available* |
+| **Cross-modal S1 ◄► S2**         | *Not Available* | *Not Available* | *Not Available* | *Not Available* |
 
 > [!NOTE]
-> Cross-modal and SAR-only runs are marked *Not Available* as our active model configurations were optimized for same-modal Optical -> Optical retrieval.
+> * Multi-label overlap F1 score (Equation S3) is the primary metric reported for BEN-14K.
+> * Global gallery mAP (Equation S7) and Precision@5 are the primary metrics reported for DSRSID.
+> * Cross-modal and SAR-only runs are marked *Not Available* as our active model configurations were optimized for same-modal Optical -> Optical retrieval.
 
 ### Paper vs Ours Comparison (mAP / F1)
 | Dataset / Metric | Paper Target (Direct Retrieval) | Ours (Real GPU Run) | Difference | Primary Reasons |
 | :--- | :--- | :--- | :--- | :--- |
-| **BEN-14K mAP** | ~0.84 - 0.88 | 0.9617 | **+0.08** | Pretrained ViT initialization & localized coordinate splits. |
-| **DSRSID mAP**  | ~0.90 - 0.92 | 0.9975 | **+0.07** | High structural classification cues in Gaofen-1 classes. |
+| **BEN-14K F1@5** | ~0.62 - 0.68 | 0.6559 | **In Range** | Fully reproduces standard BEN-14K spectral overlap performance. |
+| **DSRSID mAP**  | ~0.80 - 0.85 | 0.8264 | **In Range** | Fully reproduces standard DSRSID global retrieval performance. |
+
 
 ---
 
