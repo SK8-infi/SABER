@@ -74,10 +74,16 @@ class SABER(nn.Module):
         )
 
     def _get_wvs_for_channels(self, num_channels: int) -> List[float]:
-        if num_channels == 2:
-            return self.s1_wvs
+        if num_channels == 1:
+            return [0.675] # Gaofen-1 Panchromatic central wavelength
+        elif num_channels == 2:
+            return self.s1_wvs # Sentinel-1 SAR
+        elif num_channels == 4:
+            return [0.485, 0.555, 0.660, 0.830] # Gaofen-1 Multispectral central wavelengths
         elif num_channels == 12:
-            return self.s2_wvs
+            return self.s2_wvs # Sentinel-2 MS
+        elif num_channels == 14:
+            return self.s1_wvs + self.s2_wvs # Concatenated Sentinel-1 + Sentinel-2
         else:
             raise ValueError(f"Unsupported channel dimension: {num_channels}")
 
