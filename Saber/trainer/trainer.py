@@ -1,6 +1,7 @@
 import os
 import torch
 import logging
+import copy
 from typing import Any, Dict
 from torch.utils.tensorboard import SummaryWriter
 from torch.utils.data import DataLoader
@@ -9,7 +10,7 @@ logger = logging.getLogger("saber")
 
 class Trainer:
     """
-    Manages the training loop for the REJEPA system.
+    Manages the training loop for the REJEPA/SABER system.
     Supports Automated Mixed Precision (AMP), gradient clipping,
     AdamW optimization, cosine learning rate decay, and TensorBoard logging.
     """
@@ -25,7 +26,7 @@ class Trainer:
     ) -> None:
         """
         Args:
-            model: The REJEPA model instance.
+            model: The REJEPA/SABER model instance.
             train_loader: DataLoader containing the training data.
             optimizer: Optimizes model parameters.
             scheduler: Adjusts learning rate during training.
@@ -51,35 +52,62 @@ class Trainer:
         
         self.scaler = torch.cuda.amp.GradScaler(enabled=self.amp_enabled)
 
+        # Configurable EMA target encoder path for cross-modal prediction stability
+        self.use_ema = config.train.get("use_ema", False)
+        self.ema_decay = config.train.get("ema_decay", 0.99)
+        if self.use_ema:
+            logger.info("Initializing EMA target model copy for training.")
+            self.target_model = copy.deepcopy(model).to(device)
+            for p in self.target_model.parameters():
+                p.requires_grad = False
+        else:
+            self.target_model = None
+
     def train_epoch(self, epoch: int) -> Dict[str, float]:
         """Runs a single epoch of training."""
         self.model.train()
+        if self.target_model is not None:
+            self.target_model.eval()
         
-        # We only train Projection Head, Predictor, and Input Adapter
-        # Freezing of Backbone is guaranteed in backbone setup.
-        epoch_losses = {
-            "loss": 0.0,
-            "prediction_loss": 0.0,
-            "invariance_loss": 0.0,
-            "variance_loss": 0.0,
-            "covariance_loss": 0.0
-        }
-        
+        epoch_losses = {}
         num_batches = len(self.train_loader)
         if num_batches == 0:
-            return {k: 0.0 for k in epoch_losses}
+            return {}
 
         for batch_idx, batch in enumerate(self.train_loader):
             # Move images and labels to target device
             x1 = batch["image1"].to(self.device)
             x2 = batch["image2"].to(self.device)
+            labels = batch.get("label", None)
+            if labels is not None:
+                labels = labels.to(self.device)
 
             self.optimizer.zero_grad()
 
             # Execute forward pass under autocast for mixed precision
             with torch.cuda.amp.autocast(enabled=self.amp_enabled):
-                z1, z2, z1_pred = self.model(x1, x2)
-                loss_dict = self.criterion(z1, z2, z1_pred)
+                if self.use_ema and self.target_model is not None:
+                    # 1. Online forward pass (computes z1 and z1_pred)
+                    z1, _, z1_pred = self.model(x1, x2)
+                    
+                    # 2. Target forward pass (using EMA target model with stop-gradient)
+                    with torch.no_grad():
+                        _, z2, _ = self.target_model(x1, x2)
+                        z2 = z2.detach()
+                else:
+                    # Standard online dual projection path
+                    z1, z2, z1_pred = self.model(x1, x2)
+                
+                # Forward to loss criterion (with labels if supported)
+                if labels is not None:
+                    try:
+                        loss_dict = self.criterion(z1, z2, z1_pred, labels)
+                    except TypeError:
+                        # Fallback if loss function doesn't accept labels
+                        loss_dict = self.criterion(z1, z2, z1_pred)
+                else:
+                    loss_dict = self.criterion(z1, z2, z1_pred)
+                
                 loss = loss_dict["loss"]
 
             # Backward pass using gradient scaling
@@ -97,15 +125,23 @@ class Trainer:
             self.scaler.step(self.optimizer)
             self.scaler.update()
 
-            # Accumulate loss metrics
-            for k in epoch_losses:
+            # Update EMA target model parameters
+            if self.use_ema and self.target_model is not None:
+                with torch.no_grad():
+                    for param, target_param in zip(self.model.parameters(), self.target_model.parameters()):
+                        target_param.data.mul_(self.ema_decay).add_(param.data, alpha=1.0 - self.ema_decay)
+
+            # Accumulate loss metrics dynamically
+            for k in loss_dict:
+                if k not in epoch_losses:
+                    epoch_losses[k] = 0.0
                 epoch_losses[k] += loss_dict[k].item()
 
         # Average losses
         for k in epoch_losses:
             epoch_losses[k] /= num_batches
 
-        # Step Cosine Scheduler (if step-level is preferred, run after each batch; here epoch-level)
+        # Step Cosine Scheduler
         if self.scheduler is not None:
             self.scheduler.step()
 
@@ -120,21 +156,16 @@ class Trainer:
             current_lr = self.optimizer.param_groups[0]["lr"]
 
             # Log metrics to stdout and TensorBoard
+            loss_str = " | ".join(f"{k.capitalize()[:4]}: {v:.4f}" for k, v in losses.items())
             logger.info(
                 f"Epoch [{epoch}/{self.epochs}] "
-                f"Loss: {losses['loss']:.4f} | "
-                f"Pred: {losses['prediction_loss']:.4f} | "
-                f"Var: {losses['variance_loss']:.4f} | "
-                f"Cov: {losses['covariance_loss']:.4f} | "
+                f"{loss_str} | "
                 f"LR: {current_lr:.6f}"
             )
 
             # TensorBoard logging
-            self.tb_writer.add_scalar("Train/Total_Loss", losses["loss"], epoch)
-            self.tb_writer.add_scalar("Train/Prediction_Loss", losses["prediction_loss"], epoch)
-            self.tb_writer.add_scalar("Train/Invariance_Loss", losses["invariance_loss"], epoch)
-            self.tb_writer.add_scalar("Train/Variance_Loss", losses["variance_loss"], epoch)
-            self.tb_writer.add_scalar("Train/Covariance_Loss", losses["covariance_loss"], epoch)
+            for k, v in losses.items():
+                self.tb_writer.add_scalar(f"Train/{k.capitalize()}_Loss", v, epoch)
             self.tb_writer.add_scalar("Train/Learning_Rate", current_lr, epoch)
 
             # Save epoch checkpoint
@@ -143,7 +174,7 @@ class Trainer:
                 "model_state_dict": self.model.state_dict(),
                 "optimizer_state_dict": self.optimizer.state_dict(),
                 "scheduler_state_dict": self.scheduler.state_dict() if self.scheduler else None,
-                "loss": losses["loss"]
+                "loss": losses.get("loss", 0.0)
             }
             
             checkpoint_path = os.path.join(self.checkpoint_dir, f"checkpoint_epoch_{epoch}.pth")

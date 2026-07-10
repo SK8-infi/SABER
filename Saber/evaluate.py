@@ -10,30 +10,38 @@ from Saber.utils.config import load_config
 from Saber.utils.seed import set_seed
 from Saber.utils.logger import setup_logger
 from Saber.utils.checkpoint import load_checkpoint
-from datasets.ben14k import BEN14KDataset
-from datasets.dsrsid import DSRSIDDataset
-from datasets.transforms import get_transforms
+from Saber.datasets.ben14k import BEN14KDataset
+from Saber.datasets.dsrsid import DSRSIDDataset
+from Saber.datasets.transforms import get_transforms
 from Saber.models.rejepa import REJEPA
+from Saber.models.saber import SABER
 from Saber.trainer.evaluator import Evaluator
-from Saber.retrieval.faiss_index import FAISSIndex
+from Saber.retrieval.faiss_index import AdvancedFAISSIndex
 from Saber.visualization.tsne import plot_tsne
 from Saber.visualization.umap import plot_umap
 from Saber.visualization.similarity import plot_similarity_matrix
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Evaluate REJEPA Retrieval performance and build FAISS Index")
+    parser = argparse.ArgumentParser(description="Evaluate REJEPA/SABER Retrieval performance and build FAISS Index")
     parser.add_argument("--config", type=str, default="Saber/configs/config.yaml", help="Path to config file")
+    parser.add_argument("--architecture", type=str, default=None, help="Override model architecture ('saber' or 'rejepa')")
     parser.add_argument("--checkpoint", type=str, default=None, help="Path to trained model checkpoint file (.pth)")
     parser.add_argument("--synthetic", type=str, default=None, help="Force synthetic dataset mode ('true' or 'false')")
     parser.add_argument("--dataset_name", type=str, default=None, help="Override dataset name ('ben14k' or 'dsrsid')")
     parser.add_argument("--data_dir", type=str, default=None, help="Override path to dataset directory")
     parser.add_argument("--modality", type=str, default=None, help="Override dataset modality ('s1', 's2', 'both')")
+    parser.add_argument("--size", type=int, default=None, help="Override dataset size")
+    parser.add_argument("--batch_size", type=int, default=None, help="Override evaluation batch size")
     args = parser.parse_args()
 
     # Load configuration
     config = load_config(args.config)
 
     # CLI Overrides
+    if args.architecture is not None:
+        config.model.architecture = args.architecture.lower()
+    if args.batch_size is not None:
+        config.dataset.batch_size = args.batch_size
     if args.synthetic is not None:
         config.dataset.use_synthetic = (args.synthetic.lower() == "true")
     if args.dataset_name is not None:
@@ -42,10 +50,12 @@ def main() -> None:
         config.dataset.data_dir = args.data_dir
     if args.modality is not None:
         config.dataset.modality = args.modality
+    if args.size is not None:
+        config.dataset.size = args.size
 
     # Set up Logger
     logger = setup_logger(name="saber", log_dir=config.log_dir)
-    logger.info("Initializing REJEPA Evaluation & Indexing runner...")
+    logger.info("Initializing REJEPA/SABER Evaluation & Indexing runner...")
 
     # Seed random number generators
     set_seed(config.seed)
@@ -95,10 +105,19 @@ def main() -> None:
         num_workers=num_workers
     )
 
-    # Create REJEPA model instance
-    model = REJEPA(config=config, in_channels=in_channels).to(device)
+    # Create model instance based on architecture config
+    arch = config.model.get("architecture", "saber").lower()
+    if arch == "saber":
+        logger.info("Instantiating SABER model (DOFA + LoRA)...")
+        model = SABER(config=config, in_channels=in_channels).to(device)
+    elif arch == "rejepa":
+        logger.info("Instantiating REJEPA model (timm baseline)...")
+        model = REJEPA(config=config, in_channels=in_channels).to(device)
+    else:
+        raise ValueError(f"Unknown architecture target: '{arch}'")
 
     # Load checkpoint parameters if provided
+    checkpoint_state = None
     if args.checkpoint and os.path.exists(args.checkpoint):
         try:
             logger.info(f"Loading checkpoint parameters from: '{args.checkpoint}'")
@@ -138,16 +157,48 @@ def main() -> None:
     gallery_names = [results["names"][i] for i in gallery_indices]
 
     # Build and serialize the FAISS index (using gallery items)
-    faiss_index = FAISSIndex(
+    index_type = config.retrieval.get("index_type", "flat").lower()
+    faiss_index = AdvancedFAISSIndex(
         dimension=config.model.projection_head.out_dim,
-        metric=config.retrieval.metric
+        metric=config.retrieval.metric,
+        index_type=index_type,
+        nlist=config.retrieval.get("nlist", 64),
+        pq_m=config.retrieval.get("pq_m", 64),
+        pq_bits=config.retrieval.get("pq_bits", 4),
+        hnsw_m=config.retrieval.get("hnsw_m", 32),
+        nprobe=config.retrieval.get("nprobe", 8),
+        hash_bits=config.hashing.get("num_bits", 256),
+        fast_scan=config.retrieval.get("fast_scan", False)
     )
-    faiss_index.build_index(gallery_embeddings)
+
+    # Compute binary codes if hashing is requested
+    binary_codes = None
+    if index_type == "binary_hnsw" or config.hashing.get("enabled", False):
+        from Saber.models.hashing_head import HashingHead
+        hashing_head = HashingHead(
+            in_dim=config.model.projection_head.out_dim,
+            num_bits=config.hashing.get("num_bits", 256),
+            hidden_dim=config.hashing.get("hidden_dim", 512)
+        ).to(device)
+        
+        # Load hashing head weights from checkpoint if available
+        if checkpoint_state and "hashing_head_state_dict" in checkpoint_state:
+            hashing_head.load_state_dict(checkpoint_state["hashing_head_state_dict"])
+            logger.info("Successfully loaded HashingHead parameters from checkpoint.")
+        else:
+            logger.warning("No pre-trained HashingHead weights found. Using initialized hashing projections.")
+
+        hashing_head.eval()
+        with torch.no_grad():
+            gallery_embeddings_tensor = torch.tensor(gallery_embeddings, device=device)
+            binary_codes = hashing_head.hard_codes(gallery_embeddings_tensor).cpu().numpy()
+
+    faiss_index.build_index(gallery_embeddings, binary_codes=binary_codes)
     
     # Save FAISS Index
     faiss_index.save_index(config.retrieval.index_path)
 
-    # Save gallery metadata sidecar (for fast labels/filenames matching in demo queries)
+    # Save gallery metadata sidecar
     metadata_path = os.path.splitext(config.retrieval.index_path)[0] + "_metadata.pth"
     metadata_dir = os.path.dirname(metadata_path)
     if metadata_dir:

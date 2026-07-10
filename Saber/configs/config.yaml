@@ -11,7 +11,7 @@ viz_dir: "visualizations"
 # Available datasets: "ben14k", "dsrsid"
 dataset:
   name: "ben14k"                  # "ben14k" (Sentinel-1/2) or "dsrsid" (Gaofen-1)
-  data_dir: "C:/Users/praba/Downloads/benv1_14k"  # Use "C:/Users/praba/Downloads/DSRSID.mat" for dsrsid
+  data_dir: "c:/Github/SABER/Datasets/benv1_14k"  # Use "c:/Github/SABER/Datasets/DSRSID/DSRSID-001.mat" for dsrsid
   use_synthetic: false            # Set to false to train on real data
   size: 14832                     # Dataset size (e.g. 14832 for full ben14k, 80000 for dsrsid)
   modality: "s2"                  # "s2" (optical), "s1" (SAR), or "both" (cross-modal)
@@ -21,6 +21,7 @@ dataset:
 
 # Model Architecture
 model:
+  architecture: "saber"           # "saber" (DOFA + LoRA) or "rejepa" (baseline)
   # Backbone choice: e.g. "vit_base_patch16_224", "vit_base_patch16_224.dino", "vit_base_patch16_224.mae"
   backbone_name: "vit_base_patch16_224"
   pretrained: true
@@ -43,14 +44,34 @@ model:
     num_layers: 2         # Only used if predictor is mlp or transformer blocks
     num_heads: 4          # Only used for transformer predictor
 
-# Loss Configurations
+# Stochastic Latent Bridge (Dev 2)
+bridge:
+  enabled: false
+  hidden_dim: 512
+  num_blocks: 3
+  ode_steps: 5
+
+# Embedding Geometry Optimization (Dev 3)
+geometry:
+  enabled: true
+  jaccard_weight: 1.0
+  ranking_weight: 1.0
+  ranking_temp_s: 0.1
+  ranking_temp_p: 0.07
+
+# Hashing Configuration (Dev 4)
+hashing:
+  enabled: false
+  num_bits: 256
+  hidden_dim: 512
+  quantization_weight: 0.01
+
+# Loss Configurations (Baseline REJEPA weights)
 loss:
-  # Loss components weights
   prediction_weight: 1.0
   vicreg_invariance_weight: 25.0
   vicreg_variance_weight: 25.0
   vicreg_covariance_weight: 1.0
-  # VICReg hyperparams
   vicreg_epsilon: 0.0001
 
 # Training Details
@@ -60,12 +81,24 @@ train:
   epochs: 10
   grad_clip: 1.0
   amp: true              # Automated Mixed Precision
+  use_ema: false         # EMA target model copy
+  ema_decay: 0.99
 
 # Retrieval Details
 retrieval:
   top_k: 5
   metric: "cosine"       # "cosine" or "l2"
+  index_type: "flat"     # "flat", "ivfpq", or "binary_hnsw"
   index_path: "checkpoints/faiss_index.bin"
+  nlist: 64
+  pq_m: 64
+  pq_bits: 4
+  hnsw_m: 32
+  nprobe: 8
+  fast_scan: false
+  rerank_enabled: false
+  rerank_shortlist_k: 100
+  rerank_neighbor_k: 10
 
 # Visualizations
 visualization:

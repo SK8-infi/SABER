@@ -2,9 +2,21 @@ import logging
 import torch
 import torch.nn as nn
 import timm
-from typing import Optional
+from typing import Optional, List
+import os
+import sys
 
 logger = logging.getLogger("saber")
+
+# Add local dofa dir to sys.path so we can import from dofa_v1
+dofa_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "dofa"))
+if dofa_dir not in sys.path:
+    sys.path.insert(0, dofa_dir)
+
+try:
+    from dofa_v1 import vit_base_patch16
+except ImportError as e:
+    logger.error(f"Could not import dofa_v1 from local dofa directory: {e}")
 
 class FrozenViTBackbone(nn.Module):
     """
@@ -69,3 +81,45 @@ class FrozenViTBackbone(nn.Module):
         with torch.no_grad():
             features = self.model(x)
         return features
+
+
+class FrozenDOFABackbone(nn.Module):
+    """
+    Loads and freezes the pre-trained DOFA ViT backbone.
+    Utilizes a wavelength-conditioned patch embedding hypernetwork.
+    """
+    def __init__(self, pretrained: bool = True) -> None:
+        super().__init__()
+        self.model = vit_base_patch16()
+        self.embed_dim = 768
+        
+        if pretrained:
+            url = "https://huggingface.co/earthflow/DOFA/resolve/main/DOFA_ViT_base_e100.pth"
+            try:
+                logger.info(f"Loading DOFA pretrained weights from HF: {url}")
+                state_dict = torch.hub.load_state_dict_from_url(url, map_location='cpu')
+                self.model.load_state_dict(state_dict, strict=False)
+                logger.info("Successfully loaded DOFA pretrained weights.")
+            except Exception as e:
+                logger.error(f"Failed to load DOFA weights: {e}")
+                raise e
+                
+        # Freeze backbone parameters
+        for p in self.model.parameters():
+            p.requires_grad = False
+            
+    def forward(self, x: torch.Tensor, wave_list: List[float]) -> torch.Tensor:
+        """
+        Extract features from input tensor x conditioned on wavelengths list.
+        Args:
+            x: Input tensor of shape (B, C, H, W).
+            wave_list: Central wavelengths in micrometers. Shape (C,).
+        Returns:
+            Pooled feature representation of shape (B, 768).
+        """
+        # Always run in eval mode for frozen backbone
+        self.model.eval()
+        with torch.no_grad():
+            features = self.model.forward_features(x, wave_list)
+        return features
+
