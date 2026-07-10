@@ -25,9 +25,10 @@ class SABER(nn.Module):
         self.config = config
         self.in_channels = in_channels
 
-        # Wavelengths in micrometers
-        self.s1_wvs = [0.055, 0.055] # C-band Radar
-        self.s2_wvs = [0.443, 0.490, 0.560, 0.665, 0.705, 0.740, 0.783, 0.842, 0.945, 1.375, 1.610, 2.190] # 12 bands Sentinel-2
+        # Wavelengths in micrometers (Sentinel-1 Radar uses C-band 5.405 GHz frequency representation in DOFA)
+        self.s1_wvs = [5.405, 5.405]
+        # Sentinel-2: B1 (0.443), B2 (0.490), B3 (0.560), B4 (0.665), B5 (0.705), B6 (0.740), B7 (0.783), B8 (0.842), B8A (0.865), B9 (0.945), B11 (1.610), B12 (2.190)
+        self.s2_wvs = [0.443, 0.490, 0.560, 0.665, 0.705, 0.740, 0.783, 0.842, 0.865, 0.945, 1.610, 2.190]
 
         # 1. Wavelength-Conditioned Foundation Backbone
         self.backbone = FrozenDOFABackbone(pretrained=config.model.pretrained)
