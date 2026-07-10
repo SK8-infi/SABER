@@ -9,9 +9,9 @@ from torch.utils.data import DataLoader
 
 from Saber.utils.config import load_config
 from Saber.utils.checkpoint import load_checkpoint
-from Saber.datasets.ben14k import BEN14KDataset
-from Saber.datasets.dsrsid import DSRSIDDataset
-from Saber.datasets.transforms import get_transforms
+from datasets.ben14k import BEN14KDataset
+from datasets.dsrsid import DSRSIDDataset
+from datasets.transforms import get_transforms
 from Saber.models.rejepa import REJEPA
 from Saber.retrieval.faiss_index import FAISSIndex
 from Saber.retrieval.retriever import Retriever

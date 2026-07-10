@@ -9,9 +9,9 @@ from torch.utils.data import DataLoader
 from rejepa.utils.config import load_config
 from rejepa.utils.seed import set_seed
 from rejepa.utils.logger import setup_logger
-from rejepa.datasets.ben14k import BEN14KDataset
-from rejepa.datasets.dsrsid import DSRSIDDataset
-from rejepa.datasets.transforms import get_transforms
+from datasets.ben14k import BEN14KDataset
+from datasets.dsrsid import DSRSIDDataset
+from datasets.transforms import get_transforms
 from rejepa.models.rejepa import REJEPA
 from rejepa.losses.combined_loss import CombinedLoss
 from rejepa.trainer.trainer import Trainer

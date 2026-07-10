@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 import logging
 from typing import Dict, Any, Optional, List
-from rejepa.datasets.base_dataset import BaseDataset
+from datasets.base_dataset import BaseDataset
 
 logger = logging.getLogger("saber")
 

@@ -10,9 +10,9 @@ from rejepa.utils.config import load_config
 from rejepa.utils.seed import set_seed
 from rejepa.utils.logger import setup_logger
 from rejepa.utils.checkpoint import load_checkpoint
-from rejepa.datasets.ben14k import BEN14KDataset
-from rejepa.datasets.dsrsid import DSRSIDDataset
-from rejepa.datasets.transforms import get_transforms
+from datasets.ben14k import BEN14KDataset
+from datasets.dsrsid import DSRSIDDataset
+from datasets.transforms import get_transforms
 from rejepa.models.rejepa import REJEPA
 from rejepa.trainer.evaluator import Evaluator
 from rejepa.retrieval.faiss_index import FAISSIndex

@@ -8,8 +8,8 @@ import logging
 import argparse
 from torch.utils.data import DataLoader
 from Saber.utils.config import load_config
-from Saber.datasets.ben14k import BEN14KDataset
-from Saber.datasets.dsrsid import DSRSIDDataset
+from datasets.ben14k import BEN14KDataset
+from datasets.dsrsid import DSRSIDDataset
 from Saber.models.backbone import FrozenViTBackbone
 from Saber.models.input_adapter import InputAdapter
 from Saber.models.projection_head import ProjectionHead
