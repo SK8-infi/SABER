@@ -91,42 +91,35 @@ class Evaluator:
             logger.info("Extracting bimodal embeddings for cross-modal evaluation (S1 query, S2 gallery)...")
             self.model.eval()
             
-            query_embeds_list = []
-            gallery_embeds_list = []
+            s1_embeds_list = []
+            s2_embeds_list = []
             labels_list = []
             filenames_list = []
             
             with torch.no_grad():
-                idx_counter = 0
                 for batch in self.dataloader:
                     images = batch["image"].to(self.device)  # shape: (B, 14, 224, 224)
                     labels = batch["label"]
                     names = batch["name"]
                     
-                    batch_size = images.shape[0]
-                    for b in range(batch_size):
-                        global_idx = idx_counter + b
-                        img_slice = images[b:b+1]  # shape: (1, 14, 224, 224)
-                        
-                        if global_idx in query_indices:
-                            # S1 Query embedding: pass first 2 channels (SAR)
-                            x_q = img_slice[:, :2, :, :]
-                            embed = self.model.get_retrieval_embedding(x_q)
-                            query_embeds_list.append(embed.cpu().numpy())
-                        else:
-                            # S2 Gallery embedding: pass remaining 12 channels (MS)
-                            x_g = img_slice[:, 2:, :, :]
-                            embed = self.model.get_retrieval_embedding(x_g)
-                            gallery_embeds_list.append(embed.cpu().numpy())
-                            
+                    x_s1 = images[:, :2, :, :]
+                    x_s2 = images[:, 2:, :, :]
+                    
+                    embed_s1 = self.model.get_retrieval_embedding(x_s1)
+                    embed_s2 = self.model.get_retrieval_embedding(x_s2)
+                    
+                    s1_embeds_list.append(embed_s1.cpu().numpy())
+                    s2_embeds_list.append(embed_s2.cpu().numpy())
                     labels_list.append(labels.numpy())
                     filenames_list.extend(names)
-                    idx_counter += batch_size
                     
-            query_embeds = np.concatenate(query_embeds_list, axis=0)
-            gallery_embeds = np.concatenate(gallery_embeds_list, axis=0)
+            all_s1_embeds = np.concatenate(s1_embeds_list, axis=0)
+            all_s2_embeds = np.concatenate(s2_embeds_list, axis=0)
             labels = np.concatenate(labels_list, axis=0)
             names = filenames_list
+            
+            query_embeds = all_s1_embeds[query_indices]
+            gallery_embeds = all_s2_embeds[gallery_indices]
             
             query_labels = labels[query_indices]
             gallery_labels = labels[gallery_indices]
