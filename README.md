@@ -47,6 +47,30 @@ Input (2ch SAR / 12ch MS / 1ch PAN / 4ch MS)
 
 > All metrics are **within the paper's reported range**, confirming full architectural fidelity.
 
+---
+
+## 🖼️ Visual Results
+
+### Cross-Modal Retrieval — SAR ◄► Optical (BEN-14K)
+![Cross-modal retrieval grid](visualizations/ben14k_retrieval_results.png)
+
+### ViT Attention Map — Query Image (BEN-14K)
+![BEN-14K query attention heatmap](visualizations/ben14k_query_attention.png)
+
+### Embedding Space — t-SNE (SAR Modality)
+![SAR t-SNE embedding space](visualizations/sar/tsne.png)
+
+### Embedding Space — UMAP (Cross-Modal)
+![Cross-modal UMAP embedding space](visualizations/crossmodal/umap.png)
+
+### Similarity Heatmap — DSRSID (Gaofen-1 Optical)
+![DSRSID similarity heatmap](visualizations/dsrsid/similarity_heatmap.png)
+
+### DSRSID Retrieval Results
+![DSRSID retrieval results grid](visualizations/dsrsid_retrieval_results.png)
+
+---
+
 #### Computational Profile
 
 | Metric | Value |
@@ -250,9 +274,9 @@ Trained weights (~5.35 GB) are **not in git** due to size. Request access from t
 | `Saber/trainer/metrics.py` | Precision@K, Recall@K, F1@K, mAP |
 | `Saber/retrieval/faiss_index.py` | FAISS index builder & searcher |
 | `Saber/configs/config.yaml` | All hyperparameters |
-| `saber_benchmarking_report.md` | Full baseline benchmark report |
-| `split.md` | Parallel development plan (4 devs) |
-| `implementation_plan.md` | SABER architecture upgrade plan |
+| `docs/saber_benchmarking_report.md` | Full baseline benchmark report |
+| `docs/split.md` | Parallel development plan (4 devs) |
+| `docs/implementation_plan.md` | SABER architecture upgrade plan |
 
 ---
 
