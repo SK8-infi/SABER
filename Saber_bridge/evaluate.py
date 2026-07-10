@@ -6,23 +6,23 @@ import argparse
 import torch
 import numpy as np
 from torch.utils.data import DataLoader
-from rejepa.utils.config import load_config
-from rejepa.utils.seed import set_seed
-from rejepa.utils.logger import setup_logger
-from rejepa.utils.checkpoint import load_checkpoint
+from Saber_bridge.utils.config import load_config
+from Saber_bridge.utils.seed import set_seed
+from Saber_bridge.utils.logger import setup_logger
+from Saber_bridge.utils.checkpoint import load_checkpoint
 from datasets.ben14k import BEN14KDataset
 from datasets.dsrsid import DSRSIDDataset
 from datasets.transforms import get_transforms
-from rejepa.models.rejepa import REJEPA
-from rejepa.trainer.evaluator import Evaluator
-from rejepa.retrieval.faiss_index import FAISSIndex
-from rejepa.visualization.tsne import plot_tsne
-from rejepa.visualization.umap import plot_umap
-from rejepa.visualization.similarity import plot_similarity_matrix
+from Saber_bridge.models.rejepa import REJEPA
+from Saber_bridge.trainer.evaluator import Evaluator
+from Saber_bridge.retrieval.faiss_index import FAISSIndex
+from Saber_bridge.visualization.tsne import plot_tsne
+from Saber_bridge.visualization.umap import plot_umap
+from Saber_bridge.visualization.similarity import plot_similarity_matrix
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Evaluate REJEPA Retrieval performance and build FAISS Index")
-    parser.add_argument("--config", type=str, default="rejepa/configs/config.yaml", help="Path to config file")
+    parser.add_argument("--config", type=str, default="Saber/configs/config.yaml", help="Path to config file")
     parser.add_argument("--checkpoint", type=str, default=None, help="Path to trained model checkpoint file (.pth)")
     parser.add_argument("--synthetic", type=str, default=None, help="Force synthetic dataset mode ('true' or 'false')")
     parser.add_argument("--dataset_name", type=str, default=None, help="Override dataset name ('ben14k' or 'dsrsid')")

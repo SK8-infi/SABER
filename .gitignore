@@ -1,5 +1,5 @@
 # Logs
-logs
+logs/
 *.log
 npm-debug.log*
 yarn-debug.log*
@@ -7,15 +7,16 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
-node_modules
-dist
-dist-ssr
+# General dependencies
+node_modules/
+dist/
+dist-ssr/
 *.local
 
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
-.idea
+.idea/
 .DS_Store
 *.suo
 *.ntvs*
@@ -27,12 +28,22 @@ dist-ssr
 .venv/
 rejepa/.venv/
 Saber/.venv/
+Saber_bridge/.venv/
 __pycache__/
 *.pyc
+
+# Project checkpoints & data outputs
 checkpoints/
 rejepa/checkpoints/
 Saber/checkpoints/
+Saber_bridge/checkpoints/
+Saber_bridge/checkpoints_bridge/
+Saber_bridge/extracted/
+Saber_bridge/visualizations_bridge/
+
 data/
 rejepa/data/
 Saber/data/
-Datasets/
+Saber_bridge/data/
+/Datasets/
+!datasets/

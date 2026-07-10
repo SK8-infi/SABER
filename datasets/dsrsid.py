@@ -3,7 +3,7 @@ import torch
 import numpy as np
 import logging
 from typing import Dict, Any, Optional
-from rejepa.datasets.base_dataset import BaseDataset
+from datasets.base_dataset import BaseDataset
 
 logger = logging.getLogger("saber")
 

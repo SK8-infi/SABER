@@ -6,19 +6,19 @@ import argparse
 import torch
 from torch.utils.data import DataLoader
 
-from rejepa.utils.config import load_config
-from rejepa.utils.seed import set_seed
-from rejepa.utils.logger import setup_logger
+from Saber_bridge.utils.config import load_config
+from Saber_bridge.utils.seed import set_seed
+from Saber_bridge.utils.logger import setup_logger
 from datasets.ben14k import BEN14KDataset
 from datasets.dsrsid import DSRSIDDataset
 from datasets.transforms import get_transforms
-from rejepa.models.rejepa import REJEPA
-from rejepa.losses.combined_loss import CombinedLoss
-from rejepa.trainer.trainer import Trainer
+from Saber_bridge.models.rejepa import REJEPA
+from Saber_bridge.losses.combined_loss import CombinedLoss
+from Saber_bridge.trainer.trainer import Trainer
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Train REJEPA-style Remote Sensing Image Retrieval System")
-    parser.add_argument("--config", type=str, default="rejepa/configs/config.yaml", help="Path to config file")
+    parser.add_argument("--config", type=str, default="Saber/configs/config.yaml", help="Path to config file")
     parser.add_argument("--epochs", type=int, default=None, help="Override epochs count")
     parser.add_argument("--batch_size", type=int, default=None, help="Override training batch size")
     parser.add_argument("--synthetic", type=str, default=None, help="Force synthetic dataset mode ('true' or 'false')")

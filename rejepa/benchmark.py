@@ -8,8 +8,8 @@ import logging
 import argparse
 from torch.utils.data import DataLoader
 from rejepa.utils.config import load_config
-from rejepa.datasets.ben14k import BEN14KDataset
-from rejepa.datasets.dsrsid import DSRSIDDataset
+from datasets.ben14k import BEN14KDataset
+from datasets.dsrsid import DSRSIDDataset
 from rejepa.models.backbone import FrozenViTBackbone
 from rejepa.models.input_adapter import InputAdapter
 from rejepa.models.projection_head import ProjectionHead

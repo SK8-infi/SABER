@@ -7,13 +7,13 @@ import numpy as np
 import logging
 import argparse
 from torch.utils.data import DataLoader
-from Saber.utils.config import load_config
+from Saber_bridge.utils.config import load_config
 from datasets.ben14k import BEN14KDataset
 from datasets.dsrsid import DSRSIDDataset
-from Saber.models.backbone import FrozenViTBackbone
-from Saber.models.input_adapter import InputAdapter
-from Saber.models.projection_head import ProjectionHead
-from Saber.retrieval.faiss_index import FAISSIndex
+from Saber_bridge.models.backbone import FrozenViTBackbone
+from Saber_bridge.models.input_adapter import InputAdapter
+from Saber_bridge.models.projection_head import ProjectionHead
+from Saber_bridge.retrieval.faiss_index import FAISSIndex
 
 logging.basicConfig(level=logging.INFO, format="[%(asctime)s] [%(levelname)s]: %(message)s")
 logger = logging.getLogger("benchmark")

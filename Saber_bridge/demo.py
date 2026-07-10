@@ -7,16 +7,16 @@ import torch
 import numpy as np
 from torch.utils.data import DataLoader
 
-from Saber.utils.config import load_config
-from Saber.utils.checkpoint import load_checkpoint
+from Saber_bridge.utils.config import load_config
+from Saber_bridge.utils.checkpoint import load_checkpoint
 from datasets.ben14k import BEN14KDataset
 from datasets.dsrsid import DSRSIDDataset
 from datasets.transforms import get_transforms
-from Saber.models.rejepa import REJEPA
-from Saber.retrieval.faiss_index import FAISSIndex
-from Saber.retrieval.retriever import Retriever
-from Saber.visualization.similarity import plot_retrieval_grid
-from Saber.visualization.attention import visualize_attention_map
+from Saber_bridge.models.rejepa import REJEPA
+from Saber_bridge.retrieval.faiss_index import FAISSIndex
+from Saber_bridge.retrieval.retriever import Retriever
+from Saber_bridge.visualization.similarity import plot_retrieval_grid
+from Saber_bridge.visualization.attention import visualize_attention_map
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Query the FAISS index using a query image")
@@ -35,7 +35,7 @@ def main() -> None:
         config.dataset.use_synthetic = (args.synthetic.lower() == "true")
 
     # Set up Logger
-    from Saber.utils.logger import setup_logger
+    from Saber_bridge.utils.logger import setup_logger
     logger = setup_logger(name="saber", log_dir=config.log_dir)
     logger.info("Initializing REJEPA Retrieval Query Demo...")
 
