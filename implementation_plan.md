@@ -26,13 +26,28 @@ graph TD
 
 ## 🛠️ Proposed Changes
 
-We will implement SABER as a set of modular components under `project/models/saber.py` and `project/losses/saber_loss.py`, routing configurations seamlessly without affecting other training and retrieval workflows.
+We will execute this upgrade in two phases. Phase 0 will patch critical bugs in the existing evaluation and data loading harness. Phase 1 will introduce the new SABER modules under `rejepa/models/saber.py` and `rejepa/losses/saber_loss.py`.
 
 ---
 
+### Phase 0: Harness & Baseline Bug Fixes
+
+Before building SABER, we must fix three critical flaws in the existing harness to ensure accurate measurement and prevent system crashes:
+
+#### [MODIFY] [evaluator.py](file:///c:/Github/SABER/rejepa/trainer/evaluator.py)
+* **Fix OOM Crash (NxN Similarity Matrix)**: The current evaluation calculates the full dense similarity matrix in memory, which crashes on large validation sets. We will replace this with chunked computation or utilize the existing FAISS index for evaluation.
+* **Fix Data Leakage (Geographic Splitting)**: The `split_query_gallery` function uses deterministic stride splitting (`np.arange(0, num, 5)`). We will refactor this to prevent data leakage, utilizing geographic tile IDs if available, or robust randomized splitting.
+
+#### [MODIFY] [ben14k.py](file:///c:/Github/SABER/rejepa/datasets/ben14k.py)
+* **Fix Cross-Modal Early Fusion Bug**: Currently, when `modality="both"`, the dataset loader concatenates Sentinel-1 and Sentinel-2 bands into a 14-channel image. We will modify `__getitem__` to return a dictionary or tuple `(img_s1, img_s2)` so the bimodal cross-attention modules can process the modalities independently.
+
+---
+
+### Phase 1: SABER Architecture Implementation
+
 ### 1. Model Component
 
-#### [NEW] [saber.py](file:///c:/Users/praba/OneDrive/Desktop/LFX26/SABER/project/models/saber.py)
+#### [NEW] [saber.py](file:///c:/Users/praba/OneDrive/Desktop/LFX26/SABER/rejepa/models/saber.py)
 * **BimodalCrossAttention**: A modular transformer block utilizing multi-head cross-attention. It allows S1 tokens to query S2 features (and vice versa) to model cross-sensor contexts.
 * **SABER**: The top-level PyTorch module.
   1. Instantiates bimodal adapters (`adapter_s1` and `adapter_s2`).
@@ -45,7 +60,7 @@ We will implement SABER as a set of modular components under `project/models/sab
 
 ### 2. Losses Component
 
-#### [NEW] [saber_loss.py](file:///c:/Users/praba/OneDrive/Desktop/LFX26/SABER/project/losses/saber_loss.py)
+#### [NEW] [saber_loss.py](file:///c:/Users/praba/OneDrive/Desktop/LFX26/SABER/rejepa/losses/saber_loss.py)
 * **InfoNCELoss**: Computes the contrastive similarity matrix between bimodal representations. It aligns positive coordinate S1/S2 pairs while repelling negative sample coordinates in the batch:
   $$\mathcal{L}_{InfoNCE} = -\log \frac{\exp(\text{sim}(z_{s1}, z_{s2}) / \tau)}{\sum_{j} \exp(\text{sim}(z_{s1}, z_j) / \tau)}$$
 * **SABERCombinedLoss**: Combines predictive loss, VICReg constraints, and InfoNCE contrastive alignment:
@@ -55,7 +70,7 @@ We will implement SABER as a set of modular components under `project/models/sab
 
 ### 3. Pipeline & Configuration Routers
 
-#### [MODIFY] [config.yaml](file:///c:/Users/praba/OneDrive/Desktop/LFX26/SABER/project/configs/config.yaml)
+#### [MODIFY] [config.yaml](file:///c:/Users/praba/OneDrive/Desktop/LFX26/SABER/rejepa/configs/config.yaml)
 * Introduce architecture switch configurations:
   ```yaml
   model:
@@ -70,7 +85,7 @@ We will implement SABER as a set of modular components under `project/models/sab
         infonce: 0.5
   ```
 
-#### [MODIFY] [train.py](file:///c:/Users/praba/OneDrive/Desktop/LFX26/SABER/project/train.py) & [evaluate.py](file:///c:/Users/praba/OneDrive/Desktop/LFX26/SABER/project/evaluate.py)
+#### [MODIFY] [train.py](file:///c:/Users/praba/OneDrive/Desktop/LFX26/SABER/rejepa/train.py) & [evaluate.py](file:///c:/Users/praba/OneDrive/Desktop/LFX26/SABER/rejepa/evaluate.py)
 * Read `model.architecture` from config.
 * Dynamically instantiate either the baseline `REJEPA` model or the new `SABER` model.
 * Route training loss calculation to `SABERCombinedLoss` when SABER is active.
@@ -84,24 +99,24 @@ We will evaluate SABER on the RTX 4050 GPU using the exact paper metrics compile
 ### 1. Same-Modal Optical Verification (BEN-14K)
 * Train on Sentinel-2 MS bands:
   ```powershell
-  (Get-Content project/configs/config.yaml) -replace 'modality: "both"', 'modality: "s2"' | Set-Content project/configs/config.yaml
-  ./project/.venv/Scripts/python project/train.py --epochs 5 --synthetic false --batch_size 32
+  (Get-Content rejepa/configs/config.yaml) -replace 'modality: "both"', 'modality: "s2"' | Set-Content rejepa/configs/config.yaml
+  ./rejepa/.venv/Scripts/python rejepa/train.py --epochs 5 --synthetic false --batch_size 32
   ```
 * Verify target metrics: Precision@5, Recall@5, F1@5.
 
 ### 2. Same-Modal SAR Verification (BEN-14K)
 * Train on Sentinel-1 SAR bands:
   ```powershell
-  (Get-Content project/configs/config.yaml) -replace 'modality: "s2"', 'modality: "s1"' | Set-Content project/configs/config.yaml
-  ./project/.venv/Scripts/python project/train.py --epochs 5 --synthetic false --batch_size 32
+  (Get-Content rejepa/configs/config.yaml) -replace 'modality: "s2"', 'modality: "s1"' | Set-Content rejepa/configs/config.yaml
+  ./rejepa/.venv/Scripts/python rejepa/train.py --epochs 5 --synthetic false --batch_size 32
   ```
 * Verify target metrics: Precision@5, Recall@5, F1@5.
 
 ### 3. Cross-Modal Bimodal Verification (BEN-14K)
 * Train on paired Sentinel-1 / Sentinel-2 bands:
   ```powershell
-  (Get-Content project/configs/config.yaml) -replace 'modality: "s1"', 'modality: "both"' | Set-Content project/configs/config.yaml
-  ./project/.venv/Scripts/python project/train.py --epochs 5 --synthetic false --batch_size 32
+  (Get-Content rejepa/configs/config.yaml) -replace 'modality: "s1"', 'modality: "both"' | Set-Content rejepa/configs/config.yaml
+  ./rejepa/.venv/Scripts/python rejepa/train.py --epochs 5 --synthetic false --batch_size 32
   ```
 * Verify cross-modal target metrics: S1 ◄► S2 retrieval Precision@5, Recall@5, and F1@5.
 

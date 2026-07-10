@@ -25,13 +25,18 @@ dist-ssr
 
 # Python
 .venv/
-project/.venv/
+rejepa/.venv/
+Saber/.venv/
 __pycache__/
 *.pyc
 checkpoints/
-project/checkpoints/
+rejepa/checkpoints/
+Saber/checkpoints/
 visualizations/
-project/visualizations/
+rejepa/visualizations/
+Saber/visualizations/
 data/
-project/data/
+rejepa/data/
+Saber/data/
+Datasets/
 
