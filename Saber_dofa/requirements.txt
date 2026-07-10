@@ -1,0 +1,15 @@
+torch
+torchvision
+timm
+faiss-cpu
+albumentations
+pyyaml
+scikit-learn
+umap-learn
+matplotlib
+pandas
+tensorboard
+pillow
+numpy
+h5py
+peft
