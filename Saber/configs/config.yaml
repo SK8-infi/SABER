@@ -16,7 +16,7 @@ dataset:
   size: 14832                     # Dataset size (e.g. 14832 for full ben14k, 80000 for dsrsid)
   modality: "s2"                  # "s2" (optical), "s1" (SAR), or "both" (cross-modal)
   batch_size: 16
-  num_workers: 0                  # Set to 0 for Windows compatibility in debug
+  num_workers: 4                  # Set to 4 for parallel loading speedup
   image_size: 224
 
 # Model Architecture
@@ -46,10 +46,11 @@ model:
 
 # Stochastic Latent Bridge (Dev 2)
 bridge:
-  enabled: false
+  enabled: true
   hidden_dim: 512
   num_blocks: 3
   ode_steps: 5
+  checkpoint: "checkpoints/bridge_best_dsrsid.pth"
 
 # Embedding Geometry Optimization (Dev 3)
 geometry:

@@ -88,10 +88,15 @@ def compute_retrieval_metrics(
             if total_relevant == 0:
                 continue
 
-            # Precision@K: Equation (S4)
+            # Precision@K: fraction of top-K that are relevant
             retrieved_relevance = relevance[top_k_indices]
-            precision_val = np.sum(retrieved_relevance) / top_k
+            num_hits = np.sum(retrieved_relevance)
+            precision_val = num_hits / top_k
             precisions.append(precision_val)
+
+            # Recall@K: fraction of all relevant items that appear in top-K
+            recall_val = num_hits / total_relevant
+            recalls.append(recall_val)
 
             # Global Average Precision (AP) over the full gallery: Equations (S5) & (S6)
             all_relevance = relevance[ranked_indices]

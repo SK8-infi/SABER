@@ -74,16 +74,32 @@ class DSRSIDDataset(BaseDataset):
                 )
                 self.use_synthetic = True
             else:
-                # Open temporarily to read dataset size
+                # Open temporarily to read dataset size and build stratified index map
                 import h5py
                 try:
                     with h5py.File(self.mat_path, "r") as f:
-                        if self.modality == "pan":
-                            self.total_samples = f["PAN_IMAGES"].shape[0]
-                        else:
-                            self.total_samples = f["MUL_IMAGES"].shape[0]
+                        self.total_samples = f["MUL_IMAGES"].shape[0]
+                        # Read all labels to build stratified sample indices
+                        # LAND_COVER_TYPES shape is (1, N) with float64 values 1.0–8.0
+                        all_labels = f["LAND_COVER_TYPES"][0, :].astype(int)  # shape (N,)
+
                     self.size = min(self.size, self.total_samples)
-                    logger.info(f"Connected to DSRSID.mat at '{self.mat_path}'. Using {self.size} samples.")
+
+                    # Build stratified indices: sample equally from each class
+                    unique_classes = np.unique(all_labels)
+                    num_classes = len(unique_classes)
+                    per_class = max(1, self.size // num_classes)
+                    rng = np.random.RandomState(42)
+                    selected = []
+                    for cls in unique_classes:
+                        cls_indices = np.where(all_labels == cls)[0]
+                        n_take = min(per_class, len(cls_indices))
+                        chosen = rng.choice(cls_indices, size=n_take, replace=False)
+                        selected.append(chosen)
+                    self.sample_indices = np.sort(np.concatenate(selected))[:self.size]
+                    self.size = len(self.sample_indices)
+
+                    logger.info(f"Connected to DSRSID.mat at '{self.mat_path}'. Using {self.size} samples (stratified across {num_classes} classes).")
                 except Exception as e:
                     logger.error(f"Error reading DSRSID.mat: {e}. Falling back to synthetic mode.")
                     self.use_synthetic = True
@@ -97,43 +113,38 @@ class DSRSIDDataset(BaseDataset):
             import h5py
             self.f_handle = h5py.File(self.mat_path, "r")
 
+        # Map sequential idx to the stratified sample index
+        real_idx = int(self.sample_indices[idx]) if hasattr(self, 'sample_indices') else idx
         # 1. Load label (DSRSID labels are float64, 1.0 to 8.0)
         # Shift 1-indexed [1, 8] label values to 0-indexed [0, 7] labels for PyTorch compatibility
-        label_raw = float(self.f_handle["LAND_COVER_TYPES"][0, idx])
+        label_raw = float(self.f_handle["LAND_COVER_TYPES"][0, real_idx])
         label = int(max(0.0, label_raw - 1.0))
 
         # 2. Load image array
         if self.modality == "pan":
             # PAN images shape is (1, 256, 256)
-            img = np.array(self.f_handle["PAN_IMAGES"][idx], dtype=np.uint8)
+            img = np.array(self.f_handle["PAN_IMAGES"][real_idx], dtype=np.uint8)
             # Rearrange to HWC (256, 256, 1) for Albumentations augmentations
             img = np.moveaxis(img, 0, -1)
         elif self.modality == "both":
             # PAN images shape is (1, 256, 256)
-            img_pan = np.array(self.f_handle["PAN_IMAGES"][idx], dtype=np.uint8)
+            img_pan = np.array(self.f_handle["PAN_IMAGES"][real_idx], dtype=np.uint8)
             img_pan = np.moveaxis(img_pan, 0, -1)
             # MS images shape is (4, 64, 64)
-            img_ms = np.array(self.f_handle["MUL_IMAGES"][idx], dtype=np.uint8)
+            img_ms = np.array(self.f_handle["MUL_IMAGES"][real_idx], dtype=np.uint8)
             img_ms = np.moveaxis(img_ms, 0, -1)
             
-            # Resize using PIL to make them spatially compatible
-            from PIL import Image
-            pil_pan = Image.fromarray(img_pan[:, :, 0])
-            pil_ms = [Image.fromarray(img_ms[:, :, c]) for c in range(4)]
-            
-            pil_pan = pil_pan.resize((self.image_size, self.image_size), Image.BILINEAR)
-            pil_ms = [im.resize((self.image_size, self.image_size), Image.BILINEAR) for im in pil_ms]
-            
-            pan_resized = np.expand_dims(np.array(pil_pan), axis=-1)
-            ms_resized = np.stack([np.array(im) for im in pil_ms], axis=-1)
-            img = np.concatenate([pan_resized, ms_resized], axis=-1)
+            # Resize MS image (64x64x4) to match PAN spatial dimension (256x256) using cv2 for massive speedup
+            import cv2
+            img_ms_resized = cv2.resize(img_ms, (img_pan.shape[1], img_pan.shape[0]), interpolation=cv2.INTER_LINEAR)
+            img = np.concatenate([img_pan, img_ms_resized], axis=-1)
         else:
             # MS images shape is (4, 64, 64)
-            img = np.array(self.f_handle["MUL_IMAGES"][idx], dtype=np.uint8)
+            img = np.array(self.f_handle["MUL_IMAGES"][real_idx], dtype=np.uint8)
             # Rearrange to HWC (64, 64, 4) for Albumentations augmentations
             img = np.moveaxis(img, 0, -1)
 
-        name = f"DSRSID_{self.modality}_{idx}.png"
+        name = f"DSRSID_{self.modality}_{real_idx}.png"
 
         # Apply spatial/color transforms
         if self.is_train:

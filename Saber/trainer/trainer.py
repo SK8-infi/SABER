@@ -148,6 +148,9 @@ class Trainer:
                 if k not in epoch_losses:
                     epoch_losses[k] = 0.0
                 epoch_losses[k] += loss_dict[k].item()
+                
+            if batch_idx % 50 == 0:
+                logger.info(f"Epoch [{epoch}] - Batch [{batch_idx}/{num_batches}] - Loss: {loss.item():.4f}")
 
         # Average losses
         for k in epoch_losses:

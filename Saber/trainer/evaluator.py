@@ -42,8 +42,9 @@ class Evaluator:
         filenames_list = []
 
         logger.info("Extracting embeddings for evaluation...")
+        num_batches = len(self.dataloader)
         with torch.no_grad():
-            for batch in self.dataloader:
+            for batch_idx, batch in enumerate(self.dataloader):
                 images = batch["image"].to(self.device)
                 labels = batch["label"]
                 names = batch["name"]
@@ -54,6 +55,9 @@ class Evaluator:
                 embeddings_list.append(embeds.cpu().numpy())
                 labels_list.append(labels.numpy())
                 filenames_list.extend(names)
+                
+                if batch_idx % 100 == 0:
+                    logger.info(f"Extraction Batch [{batch_idx}/{num_batches}] completed.")
 
         all_embeddings = np.concatenate(embeddings_list, axis=0)
         all_labels = np.concatenate(labels_list, axis=0)
@@ -87,7 +91,6 @@ class Evaluator:
             gallery_embeds = embeddings[gallery_indices]
             gallery_labels = labels[gallery_indices]
         else:
-            # Cross-modal path (SAR S1/PAN -> Optical S2/MS)
             logger.info("Extracting bimodal embeddings for cross-modal evaluation (S1 query, S2 gallery)...")
             self.model.eval()
             
@@ -97,9 +100,10 @@ class Evaluator:
             filenames_list = []
             
             s1_channels = getattr(self.model, "s1_channels", 2)
+            num_batches = len(self.dataloader)
             
             with torch.no_grad():
-                for batch in self.dataloader:
+                for batch_idx, batch in enumerate(self.dataloader):
                     images = batch["image"].to(self.device)
                     labels = batch["label"]
                     names = batch["name"]
@@ -115,13 +119,23 @@ class Evaluator:
                     labels_list.append(labels.numpy())
                     filenames_list.extend(names)
                     
+                    if batch_idx % 100 == 0:
+                        logger.info(f"Bimodal Extraction Batch [{batch_idx}/{num_batches}] completed.")
+                    
             all_s1_embeds = np.concatenate(s1_embeds_list, axis=0)
             all_s2_embeds = np.concatenate(s2_embeds_list, axis=0)
             labels = np.concatenate(labels_list, axis=0)
             names = filenames_list
             
-            query_embeds = all_s1_embeds[query_indices]
-            gallery_embeds = all_s2_embeds[gallery_indices]
+            direction = self.config.get("retrieval", {}).get("direction", "s1_to_s2").lower()
+            if direction == "s2_to_s1":
+                logger.info("Setting up retrieval direction: S2 (query) -> S1 (gallery)")
+                query_embeds = all_s2_embeds[query_indices]
+                gallery_embeds = all_s1_embeds[gallery_indices]
+            else:
+                logger.info("Setting up retrieval direction: S1 (query) -> S2 (gallery)")
+                query_embeds = all_s1_embeds[query_indices]
+                gallery_embeds = all_s2_embeds[gallery_indices]
             
             query_labels = labels[query_indices]
             gallery_labels = labels[gallery_indices]
@@ -135,14 +149,25 @@ class Evaluator:
 
         # Calculate metrics by computing chunked similarities to avoid OOM
         is_multilabel = (self.config.dataset.name.lower() == "ben14k")
-        metrics = compute_retrieval_metrics(
+        metrics5 = compute_retrieval_metrics(
             query_embeds=query_embeds,
             gallery_embeds=gallery_embeds,
             query_labels=query_labels,
             gallery_labels=gallery_labels,
-            top_k=top_k,
+            top_k=5,
             is_multilabel=is_multilabel
         )
+        metrics10 = compute_retrieval_metrics(
+            query_embeds=query_embeds,
+            gallery_embeds=gallery_embeds,
+            query_labels=query_labels,
+            gallery_labels=gallery_labels,
+            top_k=10,
+            is_multilabel=is_multilabel
+        )
+        metrics = {}
+        metrics.update(metrics5)
+        metrics.update(metrics10)
 
         return {
             "metrics": metrics,

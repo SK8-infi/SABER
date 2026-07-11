@@ -32,10 +32,16 @@ def main() -> None:
     parser.add_argument("--modality", type=str, default=None, help="Override dataset modality ('s1', 's2', 'both')")
     parser.add_argument("--size", type=int, default=None, help="Override dataset size")
     parser.add_argument("--batch_size", type=int, default=None, help="Override evaluation batch size")
+    parser.add_argument("--direction", type=str, default="s1_to_s2", choices=["s1_to_s2", "s2_to_s1"], help="Cross-modal retrieval direction ('s1_to_s2' or 's2_to_s1')")
     args = parser.parse_args()
 
     # Load configuration
     config = load_config(args.config)
+    
+    # Initialize retrieval config section if missing
+    if not hasattr(config, "retrieval"):
+        config.retrieval = {}
+    config.retrieval.direction = args.direction
 
     # CLI Overrides
     if args.architecture is not None:
@@ -123,8 +129,8 @@ def main() -> None:
         try:
             logger.info(f"Loading checkpoint parameters from: '{args.checkpoint}'")
             checkpoint_state = load_checkpoint(args.checkpoint, map_location=str(device))
-            model.load_state_dict(checkpoint_state["model_state_dict"])
-            logger.info("Successfully loaded model parameters.")
+            model.load_state_dict(checkpoint_state["model_state_dict"], strict=False)
+            logger.info("Successfully loaded model parameters (strict=False).")
         except Exception as e:
             logger.error(f"Failed to load checkpoint: {e}. Proceeding with initialized weights.")
     else:
@@ -132,10 +138,10 @@ def main() -> None:
 
     # Load separate bridge checkpoint if enabled
     if getattr(model, "bridge", None) is not None:
-        bridge_checkpoint = config.get("bridge", {}).get("checkpoint_path", "checkpoints/bridge_best.pth")
+        bridge_checkpoint = config.get("bridge", {}).get("checkpoint", "checkpoints/bridge_best.pth")
         if os.path.exists(bridge_checkpoint):
             logger.info(f"Loading CFM Latent Bridge checkpoint from: '{bridge_checkpoint}'")
-            model.bridge.cfm_bridge.load_state_dict(torch.load(bridge_checkpoint, map_location=str(device)))
+            model.bridge.cfm_bridge.load_state_dict(torch.load(bridge_checkpoint, map_location=str(device), weights_only=True))
             logger.info("Successfully loaded bridge model parameters.")
         else:
             logger.warning(f"CFM Latent Bridge checkpoint not found at '{bridge_checkpoint}'. Using random bridge weights.")
