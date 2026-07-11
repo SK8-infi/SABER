@@ -146,7 +146,7 @@ def main() -> None:
 
     # Load separate bridge checkpoint if enabled
     if getattr(model, "bridge", None) is not None:
-        bridge_checkpoint = config.get("bridge", {}).get("checkpoint_path", "Saber_bridge/checkpoints/bridge_best.pth")
+        bridge_checkpoint = config.get("bridge", {}).get("checkpoint_path", "checkpoints/bridge_best.pth")
         if os.path.exists(bridge_checkpoint):
             logger.info(f"Loading CFM Latent Bridge checkpoint from: '{bridge_checkpoint}'")
             model.bridge.cfm_bridge.load_state_dict(torch.load(bridge_checkpoint, map_location=str(device)))

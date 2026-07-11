@@ -35,7 +35,7 @@ def integrate_ode(model, z_s1, steps=1, device="cpu"):
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Train CFM Latent Bridge on extracted features")
-    parser.add_argument("--features_dir", type=str, default="Saber_bridge/extracted", help="Directory with extracted features")
+    parser.add_argument("--features_dir", type=str, default="checkpoints/extracted", help="Directory with extracted features")
     parser.add_argument("--epochs", type=int, default=20, help="Number of training epochs")
     parser.add_argument("--batch_size", type=int, default=256, help="Batch size for training")
     parser.add_argument("--lr", type=float, default=1e-3, help="Learning rate")
@@ -165,8 +165,8 @@ def main() -> None:
         if f1_nstep > best_f1:
             best_f1 = f1_nstep
             best_epoch = epoch
-            os.makedirs("Saber_bridge/checkpoints", exist_ok=True)
-            torch.save(model.state_dict(), "Saber_bridge/checkpoints/bridge_best.pth")
+            os.makedirs("checkpoints", exist_ok=True)
+            torch.save(model.state_dict(), "checkpoints/bridge_best.pth")
 
     print(f"\nTraining finished! Best F1@5: {best_f1:.4f} at epoch {best_epoch}")
 
