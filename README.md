@@ -260,12 +260,47 @@ Measure the GPU forward pass and FAISS search times on your hardware:
 python Saber/benchmark.py
 ```
 
-### 3. Evaluate Cross-Modal Retrieval
-Evaluate retrieval metrics (Precision, Recall, F1, mAP) with the CFM Bridge enabled:
-```bash
-python Saber/evaluate.py --architecture saber --dataset_name ben14k --modality both --synthetic false
-```
-For Gaofen-1 DSRSID (enable bridge specifically in `config.yaml`):
-```bash
-python Saber/evaluate.py --architecture saber --checkpoint checkpoints/latest_dsrsid.pth --dataset_name dsrsid --modality both --synthetic false --data_dir /path/to/DSRSID-001.mat
-```
+### 3. Model Training (Fine-Tuning Encoder)
+To train the base encoder (DOFA ViT + trainable LoRA adapters) on Sentinel-1/2 or Gaofen-1 datasets:
+*   **Sentinel-1/2 (BEN-14K)**:
+    ```bash
+    python Saber/train.py --dataset_name ben14k --modality both --data_dir Datasets/benv1_14k --epochs 5 --synthetic false
+    ```
+*   **Gaofen-1 (DSRSID)**:
+    ```bash
+    python Saber/train.py --dataset_name dsrsid --data_dir Datasets/DSRSID/DSRSID-001.mat --epochs 5 --synthetic false
+    ```
+
+### 4. CFM Latent Bridge Training
+To extract the projection embeddings from the trained encoder and train the Conditional Flow Matching (CFM) alignment bridge:
+*   **Sentinel-1/2 (BEN-14K)**:
+    ```bash
+    python Saber/train_bridge.py --dataset_name ben14k --data_dir Datasets/benv1_14k --epochs 5 --synthetic false
+    ```
+*   **Gaofen-1 (DSRSID)**:
+    ```bash
+    python Saber/train_bridge.py --dataset_name dsrsid --data_dir Datasets/DSRSID/DSRSID-001.mat --epochs 5 --synthetic false
+    ```
+
+### 5. Evaluate Retrieval Performance
+Evaluate cross-modal retrieval metrics (Precision@K, Recall@K, F1@K, mAP) using the FAISS index database:
+*   **Sentinel-1 $\rightarrow$ Sentinel-2 (BEN-14K)**:
+    ```bash
+    python Saber/evaluate.py --architecture saber --dataset_name ben14k --modality both --synthetic false --data_dir Datasets/benv1_14k
+    ```
+*   **Gaofen-1 PAN $\rightarrow$ Multispectral (DSRSID)**:
+    ```bash
+    python Saber/evaluate.py --architecture saber --checkpoint checkpoints/latest_dsrsid.pth --dataset_name dsrsid --modality both --synthetic false --data_dir Datasets/DSRSID/DSRSID-001.mat
+    ```
+
+### 6. Visual Query Search Demonstration
+Run a single query image search and save the top-5 retrieved gallery images to a visualization grid:
+*   **Sentinel-1 $\rightarrow$ Sentinel-2 (BEN-14K)**:
+    ```bash
+    python Saber/demo.py --dataset_name ben14k --checkpoint checkpoints/latest_ben14k.pth --query_index 4 --synthetic false --data_dir Datasets/benv1_14k
+    ```
+*   **Gaofen-1 PAN $\rightarrow$ Multispectral (DSRSID)**:
+    ```bash
+    python Saber/demo.py --dataset_name dsrsid --checkpoint checkpoints/latest_dsrsid.pth --query_index 10 --synthetic false --data_dir Datasets/DSRSID/DSRSID-001.mat
+    ```
+
