@@ -120,14 +120,14 @@ To adapt the pre-trained foundation encoder to Earth observation tasks without o
 ### 3. Stochastic Latent Bridge (Conditional Flow Matching)
 To map the representations of a source modality $z_{1}$ (e.g. SAR) to a target modality $z_{2}$ (e.g. MS), we train a generative **Conditional Flow Matching (CFM)** latent bridge. CFM models a vector field $v(z, \tau)$ that defines a probability path transporting the source probability distribution to the target hypersphere:
 
-$$\frac{\text{d}z}{\text{d}\tau} = v(z, \tau; z_{\text{query}}), \quad \tau \in [0, 1]$$
+$$\frac{\text{d}z}{\text{d}\tau} = v(z, \tau; z_{query}), \quad \tau \in [0, 1]$$
 
 At inference, we integrate the vector field using a **5-step Euler ODE solver** on the GPU to generate highly aligned target-like query descriptors.
 
 ### 4. Metric-Aware Embedding Geometry (VICReg + Jaccard Ranking)
 The aligned space is optimized using a joint loss constraint:
 
-$$\mathcal{L} = \mathcal{L}_{\text{bridge}} + \lambda_{\text{vic}} \mathcal{L}_{\text{vic}} + \lambda_{\text{geom}} (\mathcal{L}_{\text{Jaccard}} + \beta \mathcal{L}_{\text{rank}})$$
+$$\mathcal{L} = \mathcal{L}_{bridge} + \lambda_{vic} \mathcal{L}_{vic} + \lambda_{geom} (\mathcal{L}_{Jaccard} + \beta \mathcal{L}_{rank})$$
 
 *   **VICReg Regularization**: Enforces Variance, Invariance, and Covariance constraints to prevent representation collapse.
 *   **Soft Jaccard Regression**: Regresses cosine similarity values directly against multi-label class Jaccard overlap targets.
@@ -140,30 +140,35 @@ $$\mathcal{L} = \mathcal{L}_{\text{bridge}} + \lambda_{\text{vic}} \mathcal{L}_{
 To ensure scientific accuracy and reproducibility, the mathematical definitions of the core objectives are defined below:
 
 ### 1. Conditional Flow Matching (CFM) Objective
-The probability path $p_t(z)$ interpolates between the query distribution $p_0(z)$ and the target distribution $p_1(z)$. The vector field $v_\theta(z, \tau; z_{\text{query}})$ is trained via least-squares regression:
+The probability path $p_t(z)$ interpolates between the query distribution $p_0(z)$ and the target distribution $p_1(z)$. The vector field $v_\theta(z, \tau; z_{query})$ is trained via least-squares regression:
 
-$$\mathcal{L}_{\text{CFM}}(\theta) = \mathbb{E}_{\tau, z_0, z_1, \epsilon} \left[ \| v_\theta(z_\tau, \tau; z_{\text{query}}) - (z_1 - z_0) \|^2 \right]$$
+$$\mathcal{L}_{CFM}(\theta) = \mathbb{E}_{\tau, z_0, z_1, \epsilon} \left[ \| v_\theta(z_\tau, \tau; z_{query}) - (z_1 - z_0) \|^2 \right]$$
 
 where $z_\tau = \tau z_1 + (1 - \tau) z_0 + \sigma \epsilon$, and $\tau \sim U(0, 1)$, $\epsilon \sim \mathcal{N}(0, I_d)$.
 
 ### 2. VICReg Regularization Constraints
 To guarantee that the projection head embeddings do not suffer from informational collapse:
 *   **Invariance Loss (L_inv)**: Enforces alignment between matched pairs.
-    $$\mathcal{L}_{\text{inv}} = \frac{1}{N} \sum_{i=1}^N \| z_{1i} - z_{2i} \|^2$$
+
+$$\mathcal{L}_{inv} = \frac{1}{N} \sum_{i=1}^N \| z_{1i} - z_{2i} \|^2$$
+
 *   **Variance Regularization (L_var)**: Forces embedding dimensions to have a standard deviation above a threshold $\gamma = 1$.
-    $$\mathcal{L}_{\text{var}} = \frac{1}{d} \sum_{j=1}^d \max\left(0, \gamma - \sqrt{\text{Var}(z_{., j}) + \epsilon}\right)$$
+
+$$\mathcal{L}_{var} = \frac{1}{d} \sum_{j=1}^d \max\left(0, \gamma - \sqrt{\text{Var}(z_{., j}) + \epsilon}\right)$$
+
 *   **Covariance Regularization (L_cov)**: Penalizes off-diagonal elements in the covariance matrix $C(Z)$ to decorrelate embedding dimensions.
-    $$\mathcal{L}_{\text{cov}} = \frac{1}{d} \sum_{j \neq k} [C(Z)]_{j,k}^2, \quad C(Z) = \frac{1}{N-1} \sum_{i=1}^N (z_i - \bar{z})(z_i - \bar{z})^T$$
+
+$$\mathcal{L}_{cov} = \frac{1}{d} \sum_{j \neq k} [C(Z)]_{j,k}^2, \quad C(Z) = \frac{1}{N-1} \sum_{i=1}^N (z_i - \bar{z})(z_i - \bar{z})^T$$
 
 ### 3. Soft Jaccard Overlap Loss
 Designed specifically for multi-labeled datasets (BEN-14K), this regression objective aligns embedding cosine similarities with label-based Jaccard overlap indices:
 
-$$\mathcal{L}_{\text{Jaccard}} = \frac{1}{N} \sum_{i=1}^N \left( \frac{z_{1i} \cdot z_{2i}}{\|z_{1i}\| \|z_{2i}\|} - \frac{|y_{1i} \cap y_{2i}|}{|y_{1i} \cup y_{2i}|} \right)^2$$
+$$\mathcal{L}_{Jaccard} = \frac{1}{N} \sum_{i=1}^N \left( \frac{z_{1i} \cdot z_{2i}}{\|z_{1i}\| \|z_{2i}\|} - \frac{|y_{1i} \cap y_{2i}|}{|y_{1i} \cup y_{2i}|} \right)^2$$
 
 ### 4. Listwise Neighborhood Ranking Loss
 Penalizes ranking inconsistencies within local neighborhoods by minimizing the Kullback-Leibler (KL) divergence between label-based distribution $P_{ij}$ and embedding-based probability distribution $\hat{P}_{ij}$:
 
-$$\mathcal{L}_{\text{rank}} = -\sum_{i=1}^N \sum_{j \neq i} P_{ij} \log \hat{P}_{ij}, \quad \hat{P}_{ij} = \frac{\exp(-\|z_i - z_j\|^2 / \tau)}{\sum_{k \neq i} \exp(-\|z_i - z_k\|^2 / \tau)}$$
+$$\mathcal{L}_{rank} = -\sum_{i=1}^N \sum_{j \neq i} P_{ij} \log \hat{P}_{ij}, \quad \hat{P}_{ij} = \frac{\exp(-\|z_i - z_j\|^2 / \tau)}{\sum_{k \neq i} \exp(-\|z_i - z_k\|^2 / \tau)}$$
 
 ---
 
