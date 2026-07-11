@@ -27,12 +27,12 @@ class SABER(nn.Module):
         self.config = config
         self.in_channels = in_channels
 
-        if self.in_channels == 14:
+        if self.in_channels in [14, 12, 2]:
             self.s1_channels = 2
             self.s2_channels = 12
             self.s1_wvs = [5.405, 5.405]
             self.s2_wvs = [0.443, 0.490, 0.560, 0.665, 0.705, 0.740, 0.783, 0.842, 0.865, 0.945, 1.610, 2.190]
-        elif self.in_channels == 5:
+        elif self.in_channels in [5, 4, 1]:
             self.s1_channels = 1
             self.s2_channels = 4
             self.s1_wvs = [0.675]
