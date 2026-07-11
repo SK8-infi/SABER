@@ -69,8 +69,10 @@ SABER introduces several structural modules that overcome standard baseline limi
 ## 5. Computational Latency & Resources
 * **Peak GPU VRAM Allocated**: **505.00 MB** (Batch size = 16)
 * **Embedding Extraction Throughput**: **106.14 images / second**
-* **FAISS Cosine Query Search Latency**: **0.1542 ms per query** (exact match against 11,866 database gallery items)
-* **FAISS Index Build Time**: **1.20 seconds**
+* **FAISS Index Build Time**: **1.20 seconds** (10,000 gallery items)
+* **Average Retrieval Time per Query (End-to-End)**:
+  * **BEN-14K (Sentinel-1/2)**: **31.03 ms** per query (29.42 ms model forward pass + 1.61 ms FAISS index lookup)
+  * **DSRSID (Gaofen-1)**: **29.07 ms** per query (27.75 ms model forward pass + 1.32 ms FAISS index lookup)
 
 ---
 
