@@ -15,20 +15,90 @@ Satellite remote sensing systems capture Earth observation data across highly he
 
 SABER is built upon four foundational mathematical and deep learning components:
 
-```
-[Query Image] ──> [DOFA Foundation Backbone + LoRA] (Wavelength Conditioned)
-                       │
-                       ▼
-                 [384-d Embedding Space (z1)]
-                       │
-                       ▼
-                 [CFM Latent Bridge (ODE Solver)] (S1 ──> S2 / PAN ──> MS)
-                       │
-                       ▼
-                 [Aligned Hyper-Hypersphere (z2)]
-                       │
-                       ▼
-                 [FAISS Indexing & Inner-Product Search]
+```mermaid
+graph TD
+    %% Define Styles
+    classDef query fill:#1f77b4,stroke:#333,stroke-width:2px,color:#fff;
+    classDef gallery fill:#2ca02c,stroke:#333,stroke-width:2px,color:#fff;
+    classDef process fill:#f7f7f7,stroke:#666,stroke-dasharray: 5 5,color:#000;
+    classDef loss fill:#d62728,stroke:#333,stroke-width:2px,color:#fff;
+    classDef index fill:#9467bd,stroke:#333,stroke-width:2px,color:#fff;
+
+    %% Nodes
+    subgraph Input ["Multi-Sensor Input Data"]
+        Q_Img["Query Image (e.g., S1 SAR or PAN)"]:::query
+        G_Img["Gallery Scene (e.g., S2 MS or MS)"]:::gallery
+        Q_Wav["Query Wavelengths (λ_q)"]
+        G_Wav["Gallery Wavelengths (λ_g)"]
+    end
+
+    subgraph Encoder ["Foundation Encoder Architecture (DOFA + LoRA)"]
+        Hyper_Q["Wavelength Hypernetwork"]:::process
+        Hyper_G["Wavelength Hypernetwork"]:::process
+        Proj_Q["Patch Projection Layer"]
+        Proj_G["Patch Projection Layer"]
+        ViT_Q["Frozen DOFA ViT blocks"]
+        ViT_G["Frozen DOFA ViT blocks"]
+        LoRA_Q["Trainable LoRA Adapters (r=8, α=16)"]:::process
+        LoRA_G["Trainable LoRA Adapters (r=8, α=16)"]:::process
+        ProjHead_Q["3-Layer Projection Head (MLP)"]
+        ProjHead_G["3-Layer Projection Head (MLP)"]
+    end
+
+    subgraph LatentSpace ["Latent Space Mapping"]
+        Z1["Source Latent Space (z1)"]:::query
+        Z2["Target Latent Space (z2)"]:::gallery
+    end
+
+    subgraph Alignment ["Stochastic Latent Bridge (Flow Matching)"]
+        CFM["Conditional Flow Matching (CFM) Bridge"]
+        Euler["5-Step Euler ODE Solver"]:::process
+        Z1_to_Z2["Mapped Embeddings (z1 -> z2)"]:::query
+    end
+
+    subgraph Retrieval ["FAISS Vector Search Backend"]
+        DB["Gallery Index Database (10,000+ scenes)"]:::index
+        FAISS["FAISS IndexFlatIP (Cosine Search)"]:::index
+        Results["Top-5 & Top-10 Ranked Results"]:::query
+    end
+
+    subgraph LossFunctions ["Training Phase Loss Library"]
+        L_Inv["Invariance Loss (L2 Distance)"]:::loss
+        L_Var["Variance Regularization (stdev >= 1)"]:::loss
+        L_Cov["Covariance Regularization (decorrelation)"]:::loss
+        L_Jac["Soft Jaccard Regression Loss"]:::loss
+        L_Rank["Listwise Neighborhood Ranking Loss"]:::loss
+    end
+
+    %% Query Path Flow
+    Q_Img --> Proj_Q
+    Q_Wav --> Hyper_Q
+    Hyper_Q --> Proj_Q
+    Proj_Q --> ViT_Q
+    LoRA_Q -.-> ViT_Q
+    ViT_Q --> ProjHead_Q
+    ProjHead_Q --> Z1
+    Z1 --> Euler
+    Euler --> CFM
+    CFM --> Z1_to_Z2
+    Z1_to_Z2 --> FAISS
+
+    %% Gallery Path Flow
+    G_Img --> Proj_G
+    G_Wav --> Hyper_G
+    Hyper_G --> Proj_G
+    Proj_G --> ViT_G
+    LoRA_G -.-> ViT_G
+    ViT_G --> ProjHead_G
+    ProjHead_G --> Z2
+    Z2 --> DB
+    DB --> FAISS
+    FAISS --> Results
+
+    %% Training Optimization Loss Flow
+    Z1 -- Contrastive Alignment -- Z2
+    Z1 -.-> LossFunctions
+    Z2 -.-> LossFunctions
 ```
 
 ### 1. Wavelength-Conditioned Foundation Encoder (DOFA)
@@ -56,6 +126,34 @@ $$\mathcal{L} = \mathcal{L}_{\text{bridge}} + \lambda_{\text{vic}} \mathcal{L}_{
 *   **VICReg Regularization**: Enforces Variance, Invariance, and Covariance constraints to prevent representation collapse.
 *   **Soft Jaccard Regression**: Regresses cosine similarity values directly against multi-label class Jaccard overlap targets.
 *   **Listwise Neighborhood Ranking**: Penalizes deviations in relative rankings of query-gallery pairs based on neighborhood similarity.
+
+---
+
+## 📈 Detailed Mathematical Formulations
+
+To ensure scientific accuracy and reproducibility, the mathematical definitions of the core objectives are defined below:
+
+### 1. Conditional Flow Matching (CFM) Objective
+The probability path $p_t(z)$ interpolates between the query distribution $p_0(z)$ and the target distribution $p_1(z)$. The vector field $v_\theta(z, \tau; z_{\text{query}})$ is trained via least-squares regression:
+$$\mathcal{L}_{\text{CFM}}(\theta) = \mathbb{E}_{\tau, z_0, z_1, \epsilon} \left[ \| v_\theta(z_\tau, \tau; z_{\text{query}}) - (z_1 - z_0) \|^2 \right]$$
+where $z_\tau = \tau z_1 + (1 - \tau) z_0 + \sigma \epsilon$, and $\tau \sim U(0, 1)$, $\epsilon \sim \mathcal{N}(0, I_d)$.
+
+### 2. VICReg Regularization Constraints
+To guarantee that the projection head embeddings do not suffer from informational collapse:
+*   **Invariance Loss ($\mathcal{L}_{\text{inv}}$)**: Enforces alignment between matched pairs.
+    $$\mathcal{L}_{\text{inv}} = \frac{1}{N} \sum_{i=1}^N \| z_{1,i} - z_{2,i} \|^2$$
+*   **Variance Regularization ($\mathcal{L}_{\text{var}}$)**: Forces embedding dimensions to have a standard deviation above a threshold $\gamma = 1$.
+    $$\mathcal{L}_{\text{var}} = \frac{1}{d} \sum_{j=1}^d \max\left(0, \gamma - \sqrt{\text{Var}(z_{., j}) + \epsilon}\right)$$
+*   **Covariance Regularization ($\mathcal{L}_{\text{cov}}$)**: Penalizes off-diagonal elements in the covariance matrix $C(Z)$ to decorrelate embedding dimensions.
+    $$\mathcal{L}_{\text{cov}} = \frac{1}{d} \sum_{j \neq k} [C(Z)]_{j,k}^2, \quad C(Z) = \frac{1}{N-1} \sum_{i=1}^N (z_i - \bar{z})(z_i - \bar{z})^T$$
+
+### 3. Soft Jaccard Overlap Loss
+Designed specifically for multi-labeled datasets (BEN-14K), this regression objective aligns embedding cosine similarities with label-based Jaccard overlap indices:
+$$\mathcal{L}_{\text{Jaccard}} = \frac{1}{N} \sum_{i=1}^N \left( \frac{z_{1,i} \cdot z_{2,i}}{\|z_{1,i}\| \|z_{2,i}\|} - \frac{|y_{1,i} \cap y_{2,i}|}{|y_{1,i} \cup y_{2,i}|} \right)^2$$
+
+### 4. Listwise Neighborhood Ranking Loss
+Penalizes ranking inconsistencies within local neighborhoods by minimizing the Kullback-Leibler (KL) divergence between label-based distribution $P_{ij}$ and embedding-based probability distribution $\hat{P}_{ij}$:
+$$\mathcal{L}_{\text{rank}} = -\sum_{i=1}^N \sum_{j \neq i} P_{ij} \log \hat{P}_{ij}, \quad \hat{P}_{ij} = \frac{\exp(-\|z_i - z_j\|^2 / \tau)}{\sum_{k \neq i} \exp(-\|z_i - z_k\|^2 / \tau)}$$
 
 ---
 
