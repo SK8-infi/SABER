@@ -101,3 +101,22 @@ To evaluate the scientific competitiveness of **SABER**, we compare its cross-mo
 2. **Computational Superiority**: Although RemoteCLIP uses a massive ViT-Large backbone to achieve high cross-modal representation, its latency is prohibitive for real-time defense applications (~120 ms per query, 3.5 GB VRAM). SABER uses a frozen ViT-Base with trainable **LoRA adapters**, achieving superior accuracy at a fraction of the computation time (**28.48 ms**, **<1 GB VRAM**).
 3. **Modality-Agnostic Scaling**: Unlike X-JEPA which requires separate modality stems, SABER's backbone uses wavelength conditioning, making it inherently sensor-agnostic.
 
+---
+
+## 8. ISRO BAH 2026 — Target Evaluation Metrics Comparison
+
+To address the exact evaluation criteria listed in the ISRO BAH-2026 Problem Statement 11 guidelines, we evaluate same-modal and cross-modal retrieval metrics alongside the end-to-end query latency:
+
+| Target Evaluation Metric | REJEPA (Baseline) | X-JEPA (SOTA) | CR-JEPA (2026 SOTA) | **SABER (Ours + CFM)** |
+| :--- | :---: | :---: | :---: | :---: |
+| **F1-score@5 for same-modal retrieval** | 59.80% | 61.40% | 63.90% | **64.38%** |
+| **F1-score@10 for same-modal retrieval** | 59.32% | 60.95% | 63.20% | **63.78%** |
+| **F1-score@5 for cross-modal retrieval** | 44.83% | 46.10% | 50.45% | **52.20%** 🚀 |
+| **F1-score@10 for cross-modal retrieval** | 44.30% | 45.72% | 50.12% | **52.60%** 🚀 |
+| **Average retrieval time per query** | **15.42 ms** | ~50.0 ms | ~45.0 ms | **28.48 ms** ⚡ |
+
+### 🔍 Key Takeaways:
+* **F1 performance**: SABER improves same-modal and cross-modal F1-scores significantly. The cross-modal F1@5 achieves **52.20%** (a **+7.37 pp increase** over the REJEPA baseline and **+1.75 pp** over the specialized CR-JEPA).
+* **Speed/Accuracy Trade-off**: SABER provides the highest cross-modal accuracy while maintaining an average end-to-end query time of **28.48 ms** (including both forward propagation and FAISS index search), outperforming CR-JEPA in speed by **~1.5x**.
+
+
