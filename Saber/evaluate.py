@@ -87,6 +87,7 @@ def main() -> None:
             size=config.dataset.get("size", 1000),
             image_size=config.dataset.image_size,
             transform=eval_transform,
+            modality=config.dataset.get("modality", "ms"),
             is_train=False
         )
         in_channels = eval_dataset.num_channels

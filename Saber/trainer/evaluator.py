@@ -76,7 +76,7 @@ class Evaluator:
         query_indices = np.sort(shuffled_indices[:query_size])
         gallery_indices = np.sort(shuffled_indices[query_size:])
 
-        is_cross_modal = (self.config.dataset.name.lower() == "ben14k" and self.config.dataset.get("modality", "s2").lower() == "both")
+        is_cross_modal = (self.config.dataset.get("modality", "s2").lower() == "both")
 
         if not is_cross_modal:
             # Same-modal path
@@ -87,7 +87,7 @@ class Evaluator:
             gallery_embeds = embeddings[gallery_indices]
             gallery_labels = labels[gallery_indices]
         else:
-            # Cross-modal path (SAR S1 -> Optical S2)
+            # Cross-modal path (SAR S1/PAN -> Optical S2/MS)
             logger.info("Extracting bimodal embeddings for cross-modal evaluation (S1 query, S2 gallery)...")
             self.model.eval()
             
@@ -96,14 +96,16 @@ class Evaluator:
             labels_list = []
             filenames_list = []
             
+            s1_channels = getattr(self.model, "s1_channels", 2)
+            
             with torch.no_grad():
                 for batch in self.dataloader:
-                    images = batch["image"].to(self.device)  # shape: (B, 14, 224, 224)
+                    images = batch["image"].to(self.device)
                     labels = batch["label"]
                     names = batch["name"]
                     
-                    x_s1 = images[:, :2, :, :]
-                    x_s2 = images[:, 2:, :, :]
+                    x_s1 = images[:, :s1_channels, :, :]
+                    x_s2 = images[:, s1_channels:, :, :]
                     
                     embed_s1 = self.model.get_retrieval_embedding(x_s1)
                     embed_s2 = self.model.get_retrieval_embedding(x_s2)

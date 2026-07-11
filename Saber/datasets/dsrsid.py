@@ -30,6 +30,8 @@ class DSRSIDDataset(BaseDataset):
         
         if self.modality == "pan":
             self.num_channels = 1
+        elif self.modality == "both":
+            self.num_channels = 5
         else:
             self.num_channels = 4
             
@@ -106,6 +108,25 @@ class DSRSIDDataset(BaseDataset):
             img = np.array(self.f_handle["PAN_IMAGES"][idx], dtype=np.uint8)
             # Rearrange to HWC (256, 256, 1) for Albumentations augmentations
             img = np.moveaxis(img, 0, -1)
+        elif self.modality == "both":
+            # PAN images shape is (1, 256, 256)
+            img_pan = np.array(self.f_handle["PAN_IMAGES"][idx], dtype=np.uint8)
+            img_pan = np.moveaxis(img_pan, 0, -1)
+            # MS images shape is (4, 64, 64)
+            img_ms = np.array(self.f_handle["MUL_IMAGES"][idx], dtype=np.uint8)
+            img_ms = np.moveaxis(img_ms, 0, -1)
+            
+            # Resize using PIL to make them spatially compatible
+            from PIL import Image
+            pil_pan = Image.fromarray(img_pan[:, :, 0])
+            pil_ms = [Image.fromarray(img_ms[:, :, c]) for c in range(4)]
+            
+            pil_pan = pil_pan.resize((self.image_size, self.image_size), Image.BILINEAR)
+            pil_ms = [im.resize((self.image_size, self.image_size), Image.BILINEAR) for im in pil_ms]
+            
+            pan_resized = np.expand_dims(np.array(pil_pan), axis=-1)
+            ms_resized = np.stack([np.array(im) for im in pil_ms], axis=-1)
+            img = np.concatenate([pan_resized, ms_resized], axis=-1)
         else:
             # MS images shape is (4, 64, 64)
             img = np.array(self.f_handle["MUL_IMAGES"][idx], dtype=np.uint8)
@@ -123,22 +144,32 @@ class DSRSIDDataset(BaseDataset):
             else:
                 img_tensor1 = torch.tensor(img, dtype=torch.float32).permute(2, 0, 1)
                 img_tensor2 = torch.tensor(img, dtype=torch.float32).permute(2, 0, 1)
-            return {
+            out = {
                 "image1": img_tensor1,
                 "image2": img_tensor2,
                 "label": torch.tensor(label, dtype=torch.long),
                 "name": name
             }
+            if self.modality == "both":
+                out["image1_s1"] = img_tensor1[:1]
+                out["image1_s2"] = img_tensor1[1:]
+                out["image2_s1"] = img_tensor2[:1]
+                out["image2_s2"] = img_tensor2[1:]
+            return out
         else:
             if self.transform:
                 img_tensor = self.transform(image=img.astype(np.float32))["image"]
             else:
                 img_tensor = torch.tensor(img, dtype=torch.float32).permute(2, 0, 1)
-            return {
+            out = {
                 "image": img_tensor,
                 "label": torch.tensor(label, dtype=torch.long),
                 "name": name
             }
+            if self.modality == "both":
+                out["image_s1"] = img_tensor[:1]
+                out["image_s2"] = img_tensor[1:]
+            return out
 
     def get_synthetic_item(self, idx: int) -> Dict[str, Any]:
         # Fallback generator
@@ -152,22 +183,32 @@ class DSRSIDDataset(BaseDataset):
             else:
                 img_tensor1 = torch.tensor(img, dtype=torch.float32).permute(2, 0, 1)
                 img_tensor2 = torch.tensor(img, dtype=torch.float32).permute(2, 0, 1)
-            return {
+            out = {
                 "image1": img_tensor1,
                 "image2": img_tensor2,
                 "label": torch.tensor(label, dtype=torch.long),
                 "name": f"DSRSID_synthetic_{idx}.png"
             }
+            if self.modality == "both":
+                out["image1_s1"] = img_tensor1[:1]
+                out["image1_s2"] = img_tensor1[1:]
+                out["image2_s1"] = img_tensor2[:1]
+                out["image2_s2"] = img_tensor2[1:]
+            return out
         else:
             if self.transform:
                 img_tensor = self.transform(image=img)["image"]
             else:
                 img_tensor = torch.tensor(img, dtype=torch.float32).permute(2, 0, 1)
-            return {
+            out = {
                 "image": img_tensor,
                 "label": torch.tensor(label, dtype=torch.long),
                 "name": f"DSRSID_synthetic_{idx}.png"
             }
+            if self.modality == "both":
+                out["image_s1"] = img_tensor[:1]
+                out["image_s2"] = img_tensor[1:]
+            return out
 
     def __del__(self) -> None:
         # Gracefully release HDF5 handle on object destruction

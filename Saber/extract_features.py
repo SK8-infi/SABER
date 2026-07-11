@@ -76,8 +76,19 @@ def main() -> None:
             is_train=False
         )
         in_channels = eval_dataset.num_channels
+    elif dataset_name == "dsrsid":
+        eval_dataset = DSRSIDDataset(
+            data_dir=config.dataset.data_dir,
+            use_synthetic=config.dataset.use_synthetic,
+            size=config.dataset.get("size", 1000),
+            image_size=config.dataset.image_size,
+            transform=eval_transform,
+            modality="both",
+            is_train=False
+        )
+        in_channels = eval_dataset.num_channels
     else:
-        raise ValueError(f"Feature extraction only supported for bimodal BEN-14K currently. Dataset is '{config.dataset.name}'")
+        raise ValueError(f"Feature extraction only supported for bimodal BEN-14K and DSRSID. Dataset is '{config.dataset.name}'")
 
     logger.info(f"Dataset Loaded: {config.dataset.name.upper()} (Synthetic={eval_dataset.use_synthetic})")
     logger.info(f"Total samples: {len(eval_dataset)}")

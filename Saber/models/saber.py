@@ -27,10 +27,21 @@ class SABER(nn.Module):
         self.config = config
         self.in_channels = in_channels
 
-        # Wavelengths in micrometers (Sentinel-1 Radar uses C-band 5.405 GHz frequency representation in DOFA)
-        self.s1_wvs = [5.405, 5.405]
-        # Sentinel-2: B1 (0.443), B2 (0.490), B3 (0.560), B4 (0.665), B5 (0.705), B6 (0.740), B7 (0.783), B8 (0.842), B8A (0.865), B9 (0.945), B11 (1.610), B12 (2.190)
-        self.s2_wvs = [0.443, 0.490, 0.560, 0.665, 0.705, 0.740, 0.783, 0.842, 0.865, 0.945, 1.610, 2.190]
+        if self.in_channels == 14:
+            self.s1_channels = 2
+            self.s2_channels = 12
+            self.s1_wvs = [5.405, 5.405]
+            self.s2_wvs = [0.443, 0.490, 0.560, 0.665, 0.705, 0.740, 0.783, 0.842, 0.865, 0.945, 1.610, 2.190]
+        elif self.in_channels == 5:
+            self.s1_channels = 1
+            self.s2_channels = 4
+            self.s1_wvs = [0.675]
+            self.s2_wvs = [0.485, 0.555, 0.660, 0.830]
+        else:
+            self.s1_channels = 0
+            self.s2_channels = 0
+            self.s1_wvs = []
+            self.s2_wvs = []
 
         # 1. Wavelength-Conditioned Foundation Backbone
         self.backbone = FrozenDOFABackbone(pretrained=config.model.pretrained)
@@ -121,23 +132,23 @@ class SABER(nn.Module):
         Forward pass.
         In training, x1 is context view, x2 is target view.
         """
-        if self.in_channels == 14:
-            # Split concatenated 14 channels into S1 context (first 2) and S2 target (remaining 12)
-            if x1.shape[1] == 14:
-                x_s1 = x1[:, :2, :, :]
+        if self.in_channels in [14, 5]:
+            # Split concatenated channels into S1 context and S2 target
+            if x1.shape[1] == self.in_channels:
+                x_s1 = x1[:, :self.s1_channels, :, :]
                 target_tensor = x2 if x2 is not None else x1
-                x_s2 = target_tensor[:, 2:, :, :]
+                x_s2 = target_tensor[:, self.s1_channels:, :, :]
             else:
                 x_s1 = x1
                 x_s2 = x2
                 
-            # Embed SAR S1
+            # Embed context S1
             feats1 = self.backbone(x_s1, self.s1_wvs)
             z1 = self.projection_head(feats1)
             z1_pred = self.predictor(z1)
             
             if x_s2 is not None:
-                # Embed Optical S2
+                # Embed target S2
                 feats2 = self.backbone(x_s2, self.s2_wvs)
                 z2 = self.projection_head(feats2)
                 
@@ -173,14 +184,14 @@ class SABER(nn.Module):
         """
         self.eval()
         with torch.no_grad():
-            if self.in_channels == 14:
-                if x.shape[1] == 14:
+            if self.in_channels in [14, 5]:
+                if x.shape[1] == self.in_channels:
                     # Default: extract target S2 features for gallery
-                    x_target = x[:, 2:, :, :]
+                    x_target = x[:, self.s1_channels:, :, :]
                     feats = self.backbone(x_target, self.s2_wvs)
-                elif x.shape[1] == 12:
+                elif x.shape[1] == self.s2_channels:
                     feats = self.backbone(x, self.s2_wvs)
-                elif x.shape[1] == 2:
+                elif x.shape[1] == self.s1_channels:
                     # For S1 query, project it and run predictor/bridge to align with target space
                     feats = self.backbone(x, self.s1_wvs)
                     z = self.projection_head(feats)

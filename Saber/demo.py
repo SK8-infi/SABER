@@ -26,6 +26,9 @@ def main() -> None:
     parser.add_argument("--query_index", type=int, default=0, help="Index of sample in validation set to use as query")
     parser.add_argument("--query_path", type=str, default=None, help="Path to external query image file")
     parser.add_argument("--synthetic", type=str, default=None, help="Force synthetic dataset mode ('true' or 'false')")
+    parser.add_argument("--dataset_name", type=str, default=None, help="Override dataset name ('ben14k' or 'dsrsid')")
+    parser.add_argument("--data_dir", type=str, default=None, help="Override path to dataset directory")
+    parser.add_argument("--modality", type=str, default=None, help="Override dataset modality ('s1', 's2', 'both')")
     args = parser.parse_args()
 
     # Load configuration
@@ -34,6 +37,12 @@ def main() -> None:
     # CLI Overrides
     if args.synthetic is not None:
         config.dataset.use_synthetic = (args.synthetic.lower() == "true")
+    if args.dataset_name is not None:
+        config.dataset.name = args.dataset_name
+    if args.data_dir is not None:
+        config.dataset.data_dir = args.data_dir
+    if args.modality is not None:
+        config.dataset.modality = args.modality
 
     # Set up Logger
     from Saber.utils.logger import setup_logger
@@ -66,6 +75,7 @@ def main() -> None:
             use_synthetic=config.dataset.use_synthetic,
             image_size=config.dataset.image_size,
             transform=eval_transform,
+            modality=config.dataset.get("modality", "ms"),
             is_train=False
         )
         in_channels = dataset.num_channels

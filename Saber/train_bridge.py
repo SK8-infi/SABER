@@ -133,6 +133,8 @@ def main() -> None:
             
             val_s2_norm = F.normalize(val_s2, dim=-1).numpy()
             
+            is_multilabel = (val_lbl.ndim == 2)
+            
             # Compute evaluation retrieval metrics (1-step vs N-step)
             metrics_1step = compute_retrieval_metrics(
                 query_embeds=pred_val_s2_1step_norm,
@@ -140,7 +142,7 @@ def main() -> None:
                 query_labels=val_lbl,
                 gallery_labels=val_lbl,
                 top_k=5,
-                is_multilabel=True
+                is_multilabel=is_multilabel
             )
             
             metrics_nstep = compute_retrieval_metrics(
@@ -149,7 +151,7 @@ def main() -> None:
                 query_labels=val_lbl,
                 gallery_labels=val_lbl,
                 top_k=5,
-                is_multilabel=True
+                is_multilabel=is_multilabel
             )
 
         f1_1step = metrics_1step["f1@5"]
