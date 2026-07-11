@@ -100,8 +100,20 @@ class Trainer:
                 
                 # Forward to loss criterion (with labels if supported)
                 if labels is not None:
+                    # Check for cached soft codes in case of hashing head
+                    soft1 = getattr(self.model, "soft_codes1", None)
+                    soft2 = getattr(self.model, "soft_codes2", None)
+                    
+                    # If using EMA, compute target soft codes from target projection
+                    if self.use_ema and self.target_model is not None:
+                        if getattr(self.target_model, "hashing_head", None) is not None:
+                            soft2 = self.target_model.hashing_head(z2)
+                    
                     try:
-                        loss_dict = self.criterion(z1, z2, z1_pred, labels)
+                        if soft1 is not None:
+                            loss_dict = self.criterion(z1, z2, z1_pred, labels, soft1, soft2)
+                        else:
+                            loss_dict = self.criterion(z1, z2, z1_pred, labels)
                     except TypeError:
                         # Fallback if loss function doesn't accept labels
                         loss_dict = self.criterion(z1, z2, z1_pred)

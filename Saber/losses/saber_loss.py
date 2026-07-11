@@ -1,8 +1,9 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from typing import Dict
+from typing import Dict, Optional
 from Saber.losses.vicreg_loss import VICRegLoss
+from Saber.models.hashing_head import similarity_preserving_hash_loss
 
 class SaberCombinedLoss(nn.Module):
     """
@@ -11,6 +12,7 @@ class SaberCombinedLoss(nn.Module):
     - Jaccard Soft Targets Regression Loss (L_rel)
     - Listwise Neighborhood Ranking Loss (L_rank)
     - VICReg Loss (regularization: invariance, variance, covariance)
+    - Optional Similarity-Preserving Hashing Loss (L_hash)
     """
     def __init__(
         self,
@@ -21,13 +23,15 @@ class SaberCombinedLoss(nn.Module):
         invariance_weight: float = 25.0,
         variance_weight: float = 25.0,
         covariance_weight: float = 1.0,
-        epsilon: float = 1e-4
+        epsilon: float = 1e-4,
+        hashing_weight: float = 0.1
     ) -> None:
         super().__init__()
         self.jaccard_weight = jaccard_weight
         self.ranking_weight = ranking_weight
         self.ranking_temp_s = ranking_temp_s
         self.ranking_temp_p = ranking_temp_p
+        self.hashing_weight = hashing_weight
         
         self.vicreg_loss_fn = VICRegLoss(
             invariance_weight=invariance_weight,
@@ -41,7 +45,9 @@ class SaberCombinedLoss(nn.Module):
         z1: torch.Tensor,
         z2: torch.Tensor,
         z1_pred: torch.Tensor,
-        targets: torch.Tensor
+        targets: torch.Tensor,
+        soft_codes1: Optional[torch.Tensor] = None,
+        soft_codes2: Optional[torch.Tensor] = None
     ) -> Dict[str, torch.Tensor]:
         """
         Args:
@@ -49,6 +55,8 @@ class SaberCombinedLoss(nn.Module):
             z2: Target projection embeddings of shape (B, D).
             z1_pred: Predicted target representations of shape (B, D).
             targets: Label targets of shape (B, C) for multi-label or (B,) for single-label.
+            soft_codes1: Optional soft hashing codes for context.
+            soft_codes2: Optional soft hashing codes for target.
             
         Returns:
             Dictionary with aggregated total loss and sub-components.
@@ -110,10 +118,28 @@ class SaberCombinedLoss(nn.Module):
         # 2. VICReg regularizations
         vicreg_metrics = self.vicreg_loss_fn(z1, z2)
 
+        # C. Optional Hashing Loss
+        hash_loss = torch.tensor(0.0, device=device)
+        sim_hash_loss = torch.tensor(0.0, device=device)
+        quant_loss = torch.tensor(0.0, device=device)
+        
+        if soft_codes1 is not None:
+            h_loss1, s_loss1, q_loss1 = similarity_preserving_hash_loss(soft_codes1, targets, quantization_weight=0.01)
+            if soft_codes2 is not None:
+                h_loss2, s_loss2, q_loss2 = similarity_preserving_hash_loss(soft_codes2, targets, quantization_weight=0.01)
+                hash_loss = 0.5 * (h_loss1 + h_loss2)
+                sim_hash_loss = 0.5 * (s_loss1 + s_loss2)
+                quant_loss = 0.5 * (q_loss1 + q_loss2)
+            else:
+                hash_loss = h_loss1
+                sim_hash_loss = s_loss1
+                quant_loss = q_loss1
+
         # 3. Combined total loss
         total_loss = (
             (self.jaccard_weight * jaccard_loss) +
             (self.ranking_weight * ranking_loss) +
+            (self.hashing_weight * hash_loss) +
             vicreg_metrics["loss"]
         )
 
@@ -121,6 +147,9 @@ class SaberCombinedLoss(nn.Module):
             "loss": total_loss,
             "jaccard_loss": jaccard_loss,
             "ranking_loss": ranking_loss,
+            "hash_loss": hash_loss,
+            "sim_hash_loss": sim_hash_loss,
+            "quant_loss": quant_loss,
             "invariance_loss": vicreg_metrics["invariance_loss"],
             "variance_loss": vicreg_metrics["variance_loss"],
             "covariance_loss": vicreg_metrics["covariance_loss"]

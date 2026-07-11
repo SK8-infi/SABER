@@ -16,14 +16,17 @@ from Saber.datasets.ben14k import BEN14KDataset
 from Saber.datasets.dsrsid import DSRSIDDataset
 from Saber.datasets.transforms import get_transforms
 from Saber.models.rejepa import REJEPA
+from Saber.models.saber import SABER
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Extract S1 and S2 latent features from trained REJEPA")
+    parser = argparse.ArgumentParser(description="Extract S1 and S2 latent features from trained REJEPA/SABER")
     parser.add_argument("--config", type=str, default="Saber/configs/config.yaml", help="Path to config file")
-    parser.add_argument("--checkpoint", type=str, default="checkpoints/crossmodal/latest.pth", help="Path to trained model checkpoint file (.pth)")
+    parser.add_argument("--checkpoint", type=str, default="checkpoints/latest.pth", help="Path to trained model checkpoint file (.pth)")
+    parser.add_argument("--architecture", type=str, default=None, help="Override model architecture ('saber' or 'rejepa')")
     parser.add_argument("--synthetic", type=str, default=None, help="Force synthetic dataset mode ('true' or 'false')")
     parser.add_argument("--dataset_name", type=str, default=None, help="Override dataset name ('ben14k' or 'dsrsid')")
     parser.add_argument("--data_dir", type=str, default=None, help="Override path to dataset directory")
+    parser.add_argument("--size", type=int, default=None, help="Override dataset size")
     parser.add_argument("--output_dir", type=str, default="Saber/extracted", help="Directory to save extracted features")
     args = parser.parse_args()
 
@@ -31,17 +34,22 @@ def main() -> None:
     config = load_config(args.config)
 
     # CLI Overrides
+    if args.architecture is not None:
+        config.model.architecture = args.architecture.lower()
     if args.synthetic is not None:
         config.dataset.use_synthetic = (args.synthetic.lower() == "true")
     if args.dataset_name is not None:
         config.dataset.name = args.dataset_name
     if args.data_dir is not None:
         config.dataset.data_dir = args.data_dir
+    if args.size is not None:
+        config.dataset.size = args.size
 
     # Set config modality to "both" for cross-modal feature extraction
     config.dataset.modality = "both"
 
     # Set up Logger
+    from Saber.utils.logger import setup_logger
     logger = setup_logger(name="saber", log_dir=config.log_dir)
     logger.info("Initializing Feature Extraction runner...")
 
@@ -82,8 +90,14 @@ def main() -> None:
         num_workers=config.dataset.num_workers
     )
 
-    # Create REJEPA model instance
-    model = REJEPA(config=config, in_channels=in_channels).to(device)
+    # Create model instance
+    arch = config.model.get("architecture", "saber").lower()
+    if arch == "saber":
+        logger.info("Instantiating SABER model (DOFA + LoRA)...")
+        model = SABER(config=config, in_channels=in_channels).to(device)
+    else:
+        logger.info("Instantiating REJEPA model...")
+        model = REJEPA(config=config, in_channels=in_channels).to(device)
 
     # Load checkpoint
     if args.checkpoint and os.path.exists(args.checkpoint):
@@ -111,11 +125,18 @@ def main() -> None:
             names = batch["name"]
 
             # Compute projection head outputs
-            feats_s1 = model.backbone(model.adapter_s1(img_s1))
-            z_s1 = model.projection_head(feats_s1)
+            if arch == "saber":
+                feats_s1 = model.backbone(img_s1, model.s1_wvs)
+                z_s1 = model.projection_head(feats_s1)
 
-            feats_s2 = model.backbone(model.adapter_s2(img_s2))
-            z_s2 = model.projection_head(feats_s2)
+                feats_s2 = model.backbone(img_s2, model.s2_wvs)
+                z_s2 = model.projection_head(feats_s2)
+            else:
+                feats_s1 = model.backbone(model.adapter_s1(img_s1))
+                z_s1 = model.projection_head(feats_s1)
+
+                feats_s2 = model.backbone(model.adapter_s2(img_s2))
+                z_s2 = model.projection_head(feats_s2)
 
             s1_feats_list.append(z_s1.cpu().numpy())
             s2_feats_list.append(z_s2.cpu().numpy())

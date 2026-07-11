@@ -13,6 +13,7 @@ from datasets.ben14k import BEN14KDataset
 from datasets.dsrsid import DSRSIDDataset
 from datasets.transforms import get_transforms
 from Saber.models.rejepa import REJEPA
+from Saber.models.saber import SABER
 from Saber.retrieval.faiss_index import FAISSIndex
 from Saber.retrieval.retriever import Retriever
 from Saber.visualization.similarity import plot_retrieval_grid
@@ -97,17 +98,29 @@ def main() -> None:
         metadata = torch.load(metadata_path, map_location="cpu")
     gallery_names = metadata["names"]
     gallery_labels = metadata["labels"]
-    logger.info(f"Loaded gallery metadata containing {len(gallery_names)} records.")
+    gallery_embeddings = metadata.get("embeddings")
 
     # Instantiate Retriever
     retriever = Retriever(
         index=faiss_index,
         gallery_names=gallery_names,
-        gallery_labels=gallery_labels
+        gallery_labels=gallery_labels,
+        gallery_embeddings=gallery_embeddings,
+        rerank_enabled=config.retrieval.get("rerank_enabled", False),
+        rerank_shortlist_k=config.retrieval.get("rerank_shortlist_k", 100),
+        rerank_neighbor_k=config.retrieval.get("rerank_neighbor_k", 10),
+        reciprocal_weight=float(config.retrieval.get("reciprocal_weight", 0.15)),
+        label_weight=float(config.retrieval.get("label_weight", 0.05))
     )
 
-    # Create REJEPA model instance
-    model = REJEPA(config=config, in_channels=in_channels).to(device)
+    # Create model instance based on architecture config
+    arch = config.model.get("architecture", "saber").lower()
+    if arch == "saber":
+        logger.info("Instantiating SABER model (DOFA + LoRA)...")
+        model = SABER(config=config, in_channels=in_channels).to(device)
+    else:
+        logger.info("Instantiating REJEPA model...")
+        model = REJEPA(config=config, in_channels=in_channels).to(device)
 
     # Load model checkpoint
     if args.checkpoint and os.path.exists(args.checkpoint):
@@ -120,6 +133,16 @@ def main() -> None:
             logger.error(f"Failed to load checkpoint: {e}. Running with initialized model weights.")
     else:
         logger.warning("No model checkpoint loaded. Running query with initialized model weights.")
+
+    # Load separate bridge checkpoint if enabled
+    if getattr(model, "bridge", None) is not None:
+        bridge_checkpoint = config.get("bridge", {}).get("checkpoint_path", "Saber_bridge/checkpoints/bridge_best.pth")
+        if os.path.exists(bridge_checkpoint):
+            logger.info(f"Loading CFM Latent Bridge checkpoint from: '{bridge_checkpoint}'")
+            model.bridge.cfm_bridge.load_state_dict(torch.load(bridge_checkpoint, map_location=str(device)))
+            logger.info("Successfully loaded bridge model parameters.")
+        else:
+            logger.warning(f"CFM Latent Bridge checkpoint not found at '{bridge_checkpoint}'. Using random bridge weights.")
 
     # Determine query image
     query_name = ""
@@ -150,7 +173,16 @@ def main() -> None:
         # Load from dataset
         logger.info(f"Fetching query sample at dataset index {args.query_index}...")
         sample = dataset[args.query_index]
-        query_tensor = sample["image"]
+        
+        # If cross-modal, extract the 2-channel S1 (radar) view as query image
+        if dataset_name == "ben14k" and config.dataset.get("modality", "s2").lower() == "both":
+            if "image_s1" in sample:
+                query_tensor = sample["image_s1"]
+            else:
+                query_tensor = sample["image"][:2, :, :]
+        else:
+            query_tensor = sample["image"]
+            
         query_gt_label = sample["label"].numpy()
         query_name = sample["name"]
 

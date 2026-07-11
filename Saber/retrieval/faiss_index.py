@@ -201,3 +201,7 @@ class AdvancedFAISSIndex:
             self.index = faiss.read_index_binary(path)
         else:
             self.index = faiss.read_index(path)
+
+
+# Backward compatibility alias
+FAISSIndex = AdvancedFAISSIndex

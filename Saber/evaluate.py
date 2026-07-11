@@ -129,6 +129,16 @@ def main() -> None:
     else:
         logger.warning("No valid model checkpoint specified or found. Running evaluation with initialized model weights.")
 
+    # Load separate bridge checkpoint if enabled
+    if getattr(model, "bridge", None) is not None:
+        bridge_checkpoint = config.get("bridge", {}).get("checkpoint_path", "Saber_bridge/checkpoints/bridge_best.pth")
+        if os.path.exists(bridge_checkpoint):
+            logger.info(f"Loading CFM Latent Bridge checkpoint from: '{bridge_checkpoint}'")
+            model.bridge.cfm_bridge.load_state_dict(torch.load(bridge_checkpoint, map_location=str(device)))
+            logger.info("Successfully loaded bridge model parameters.")
+        else:
+            logger.warning(f"CFM Latent Bridge checkpoint not found at '{bridge_checkpoint}'. Using random bridge weights.")
+
     # Initialize Evaluator
     evaluator = Evaluator(
         model=model,
@@ -174,24 +184,31 @@ def main() -> None:
     # Compute binary codes if hashing is requested
     binary_codes = None
     if index_type == "binary_hnsw" or config.hashing.get("enabled", False):
-        from Saber.models.hashing_head import HashingHead
-        hashing_head = HashingHead(
-            in_dim=config.model.projection_head.out_dim,
-            num_bits=config.hashing.get("num_bits", 256),
-            hidden_dim=config.hashing.get("hidden_dim", 512)
-        ).to(device)
-        
-        # Load hashing head weights from checkpoint if available
-        if checkpoint_state and "hashing_head_state_dict" in checkpoint_state:
-            hashing_head.load_state_dict(checkpoint_state["hashing_head_state_dict"])
-            logger.info("Successfully loaded HashingHead parameters from checkpoint.")
+        if getattr(model, "hashing_head", None) is not None:
+            model.eval()
+            with torch.no_grad():
+                gallery_embeddings_tensor = torch.tensor(gallery_embeddings, device=device)
+                binary_codes = model.hashing_head.hard_codes(gallery_embeddings_tensor).cpu().numpy()
+            logger.info("Generated binary codes using trained model HashingHead.")
         else:
-            logger.warning("No pre-trained HashingHead weights found. Using initialized hashing projections.")
+            from Saber.models.hashing_head import HashingHead
+            hashing_head = HashingHead(
+                in_dim=config.model.projection_head.out_dim,
+                num_bits=config.hashing.get("num_bits", 256),
+                hidden_dim=config.hashing.get("hidden_dim", 512)
+            ).to(device)
+            
+            # Load hashing head weights from checkpoint if available
+            if checkpoint_state and "hashing_head_state_dict" in checkpoint_state:
+                hashing_head.load_state_dict(checkpoint_state["hashing_head_state_dict"])
+                logger.info("Successfully loaded HashingHead parameters from checkpoint.")
+            else:
+                logger.warning("No pre-trained HashingHead weights found. Using initialized hashing projections.")
 
-        hashing_head.eval()
-        with torch.no_grad():
-            gallery_embeddings_tensor = torch.tensor(gallery_embeddings, device=device)
-            binary_codes = hashing_head.hard_codes(gallery_embeddings_tensor).cpu().numpy()
+            hashing_head.eval()
+            with torch.no_grad():
+                gallery_embeddings_tensor = torch.tensor(gallery_embeddings, device=device)
+                binary_codes = hashing_head.hard_codes(gallery_embeddings_tensor).cpu().numpy()
 
     faiss_index.build_index(gallery_embeddings, binary_codes=binary_codes)
     

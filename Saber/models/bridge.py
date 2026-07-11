@@ -64,3 +64,27 @@ class CFMBridge(nn.Module):
         logvar = torch.clamp(logvar, min=-10.0, max=5.0)
         
         return v, logvar
+
+
+class CFMBridgeWrapper(nn.Module):
+    def __init__(self, cfm_bridge: nn.Module, ode_steps: int = 5) -> None:
+        super().__init__()
+        self.cfm_bridge = cfm_bridge
+        self.ode_steps = ode_steps
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        # x is the projection latent of the source modality (S1 projection z1).
+        # We integrate the ODE dz/d_tau = v(z, tau, x) to map to S2 target latent z2.
+        z = x.clone()
+        device = x.device
+        if self.ode_steps == 1:
+            tau = torch.zeros(z.shape[0], 1, device=device)
+            v, _ = self.cfm_bridge(z, tau, x)
+            z = z + v
+        else:
+            dt = 1.0 / self.ode_steps
+            for step in range(self.ode_steps):
+                tau = torch.ones(z.shape[0], 1, device=device) * (step * dt)
+                v, _ = self.cfm_bridge(z, tau, x)
+                z = z + v * dt
+        return z

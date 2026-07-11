@@ -7,6 +7,8 @@ from Saber.models.backbone import FrozenDOFABackbone
 from Saber.models.projection_head import ProjectionHead
 from Saber.models.predictor import Predictor
 from Saber.models.retrieval_head import RetrievalHead
+from Saber.models.bridge import CFMBridge, CFMBridgeWrapper
+from Saber.models.hashing_head import HashingHead
 
 logger = logging.getLogger("saber")
 
@@ -73,6 +75,33 @@ class SABER(nn.Module):
             normalize=True
         )
 
+        # 6. Optional CFM Latent Bridge (Dev 2)
+        if config.get("bridge", {}).get("enabled", False):
+            bridge_net = CFMBridge(
+                dim=config.model.projection_head.out_dim,
+                hidden_dim=config.bridge.get("hidden_dim", 512),
+                num_blocks=config.bridge.get("num_blocks", 3)
+            )
+            self.bridge = CFMBridgeWrapper(bridge_net, ode_steps=config.bridge.get("ode_steps", 5))
+            logger.info("Successfully instantiated CFM Latent Bridge wrapper inside SABER.")
+        else:
+            self.bridge = None
+
+        # 7. Optional Hashing Head (Dev 4)
+        if config.get("hashing", {}).get("enabled", False):
+            self.hashing_head = HashingHead(
+                in_dim=config.model.projection_head.out_dim,
+                num_bits=config.hashing.get("num_bits", 256),
+                hidden_dim=config.hashing.get("hidden_dim", 512)
+            )
+            logger.info(f"Successfully instantiated HashingHead ({config.hashing.num_bits}-bit) inside SABER.")
+        else:
+            self.hashing_head = None
+
+        # Attributes to cache soft codes during forward pass (for joint hashing loss)
+        self.soft_codes1 = None
+        self.soft_codes2 = None
+
     def _get_wvs_for_channels(self, num_channels: int) -> List[float]:
         if num_channels == 1:
             return [0.675] # Gaofen-1 Panchromatic central wavelength
@@ -111,6 +140,12 @@ class SABER(nn.Module):
                 # Embed Optical S2
                 feats2 = self.backbone(x_s2, self.s2_wvs)
                 z2 = self.projection_head(feats2)
+                
+                # Cache soft codes if hashing head is present
+                if self.hashing_head is not None:
+                    self.soft_codes1 = self.hashing_head(z1)
+                    self.soft_codes2 = self.hashing_head(z2)
+                    
                 return z1, z2, z1_pred
             return z1_pred
         else:
@@ -123,6 +158,12 @@ class SABER(nn.Module):
             if x2 is not None:
                 feats2 = self.backbone(x2, wvs)
                 z2 = self.projection_head(feats2)
+                
+                # Cache soft codes if hashing head is present
+                if self.hashing_head is not None:
+                    self.soft_codes1 = self.hashing_head(z1)
+                    self.soft_codes2 = self.hashing_head(z2)
+                    
                 return z1, z2, z1_pred
             return z1_pred
 
@@ -140,19 +181,29 @@ class SABER(nn.Module):
                 elif x.shape[1] == 12:
                     feats = self.backbone(x, self.s2_wvs)
                 elif x.shape[1] == 2:
-                    # For S1 query, project it and run predictor to align with target space
+                    # For S1 query, project it and run predictor/bridge to align with target space
                     feats = self.backbone(x, self.s1_wvs)
                     z = self.projection_head(feats)
-                    z_pred = self.predictor(z)
+                    if self.bridge is not None:
+                        z_pred = self.bridge(z)
+                    else:
+                        z_pred = self.predictor(z)
+                        
+                    if self.hashing_head is not None:
+                        return self.hashing_head.hard_codes(z_pred)
                     return self.retrieval_head(z_pred)
                 else:
                     raise ValueError(f"Unexpected channel dimension in cross-modal retrieval: {x.shape}")
                 
                 z = self.projection_head(feats)
+                if self.hashing_head is not None:
+                    return self.hashing_head.hard_codes(z)
                 embeddings = self.retrieval_head(z)
             else:
                 wvs = self._get_wvs_for_channels(self.in_channels)
                 feats = self.backbone(x, wvs)
                 z = self.projection_head(feats)
+                if self.hashing_head is not None:
+                    return self.hashing_head.hard_codes(z)
                 embeddings = self.retrieval_head(z)
         return embeddings
