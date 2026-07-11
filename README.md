@@ -96,9 +96,11 @@ graph TD
     FAISS --> Results
 
     %% Training Optimization Loss Flow
-    Z1 -- Contrastive Alignment -- Z2
-    Z1 -.-> LossFunctions
-    Z2 -.-> LossFunctions
+    Z1 <--> |Contrastive Alignment| Z2
+    Z1 -.-> L_Inv
+    Z2 -.-> L_Inv
+    Z1 -.-> L_Jac
+    Z2 -.-> L_Jac
 ```
 
 ### 1. Wavelength-Conditioned Foundation Encoder (DOFA)
@@ -116,13 +118,17 @@ To adapt the pre-trained foundation encoder to Earth observation tasks without o
 *   **Parameter Profile**: **99.74%** of the ViT backbone parameters remain completely frozen (`111.3M` frozen, `294.9K` trainable). This ensures training stability and a low memory footprint (VRAM $< 1\,\text{GB}$).
 
 ### 3. Stochastic Latent Bridge (Conditional Flow Matching)
-To map the representations of a source modality $z_1$ (e.g. SAR) to a target modality $z_2$ (e.g. MS), we train a generative **Conditional Flow Matching (CFM)** latent bridge. CFM models a vector field $v(z, \tau)$ that defines a probability path transporting the source probability distribution to the target hypersphere:
+To map the representations of a source modality $z_{1}$ (e.g. SAR) to a target modality $z_{2}$ (e.g. MS), we train a generative **Conditional Flow Matching (CFM)** latent bridge. CFM models a vector field $v(z, \tau)$ that defines a probability path transporting the source probability distribution to the target hypersphere:
+
 $$\frac{\text{d}z}{\text{d}\tau} = v(z, \tau; z_{\text{query}}), \quad \tau \in [0, 1]$$
+
 At inference, we integrate the vector field using a **5-step Euler ODE solver** on the GPU to generate highly aligned target-like query descriptors.
 
 ### 4. Metric-Aware Embedding Geometry (VICReg + Jaccard Ranking)
 The aligned space is optimized using a joint loss constraint:
+
 $$\mathcal{L} = \mathcal{L}_{\text{bridge}} + \lambda_{\text{vic}} \mathcal{L}_{\text{vic}} + \lambda_{\text{geom}} (\mathcal{L}_{\text{Jaccard}} + \beta \mathcal{L}_{\text{rank}})$$
+
 *   **VICReg Regularization**: Enforces Variance, Invariance, and Covariance constraints to prevent representation collapse.
 *   **Soft Jaccard Regression**: Regresses cosine similarity values directly against multi-label class Jaccard overlap targets.
 *   **Listwise Neighborhood Ranking**: Penalizes deviations in relative rankings of query-gallery pairs based on neighborhood similarity.
@@ -135,24 +141,28 @@ To ensure scientific accuracy and reproducibility, the mathematical definitions 
 
 ### 1. Conditional Flow Matching (CFM) Objective
 The probability path $p_t(z)$ interpolates between the query distribution $p_0(z)$ and the target distribution $p_1(z)$. The vector field $v_\theta(z, \tau; z_{\text{query}})$ is trained via least-squares regression:
+
 $$\mathcal{L}_{\text{CFM}}(\theta) = \mathbb{E}_{\tau, z_0, z_1, \epsilon} \left[ \| v_\theta(z_\tau, \tau; z_{\text{query}}) - (z_1 - z_0) \|^2 \right]$$
+
 where $z_\tau = \tau z_1 + (1 - \tau) z_0 + \sigma \epsilon$, and $\tau \sim U(0, 1)$, $\epsilon \sim \mathcal{N}(0, I_d)$.
 
 ### 2. VICReg Regularization Constraints
 To guarantee that the projection head embeddings do not suffer from informational collapse:
-*   **Invariance Loss ($\mathcal{L}_{\text{inv}}$)**: Enforces alignment between matched pairs.
-    $$\mathcal{L}_{\text{inv}} = \frac{1}{N} \sum_{i=1}^N \| z_{1,i} - z_{2,i} \|^2$$
-*   **Variance Regularization ($\mathcal{L}_{\text{var}}$)**: Forces embedding dimensions to have a standard deviation above a threshold $\gamma = 1$.
+*   **Invariance Loss (L_inv)**: Enforces alignment between matched pairs.
+    $$\mathcal{L}_{\text{inv}} = \frac{1}{N} \sum_{i=1}^N \| z_{1i} - z_{2i} \|^2$$
+*   **Variance Regularization (L_var)**: Forces embedding dimensions to have a standard deviation above a threshold $\gamma = 1$.
     $$\mathcal{L}_{\text{var}} = \frac{1}{d} \sum_{j=1}^d \max\left(0, \gamma - \sqrt{\text{Var}(z_{., j}) + \epsilon}\right)$$
-*   **Covariance Regularization ($\mathcal{L}_{\text{cov}}$)**: Penalizes off-diagonal elements in the covariance matrix $C(Z)$ to decorrelate embedding dimensions.
+*   **Covariance Regularization (L_cov)**: Penalizes off-diagonal elements in the covariance matrix $C(Z)$ to decorrelate embedding dimensions.
     $$\mathcal{L}_{\text{cov}} = \frac{1}{d} \sum_{j \neq k} [C(Z)]_{j,k}^2, \quad C(Z) = \frac{1}{N-1} \sum_{i=1}^N (z_i - \bar{z})(z_i - \bar{z})^T$$
 
 ### 3. Soft Jaccard Overlap Loss
 Designed specifically for multi-labeled datasets (BEN-14K), this regression objective aligns embedding cosine similarities with label-based Jaccard overlap indices:
-$$\mathcal{L}_{\text{Jaccard}} = \frac{1}{N} \sum_{i=1}^N \left( \frac{z_{1,i} \cdot z_{2,i}}{\|z_{1,i}\| \|z_{2,i}\|} - \frac{|y_{1,i} \cap y_{2,i}|}{|y_{1,i} \cup y_{2,i}|} \right)^2$$
+
+$$\mathcal{L}_{\text{Jaccard}} = \frac{1}{N} \sum_{i=1}^N \left( \frac{z_{1i} \cdot z_{2i}}{\|z_{1i}\| \|z_{2i}\|} - \frac{|y_{1i} \cap y_{2i}|}{|y_{1i} \cup y_{2i}|} \right)^2$$
 
 ### 4. Listwise Neighborhood Ranking Loss
 Penalizes ranking inconsistencies within local neighborhoods by minimizing the Kullback-Leibler (KL) divergence between label-based distribution $P_{ij}$ and embedding-based probability distribution $\hat{P}_{ij}$:
+
 $$\mathcal{L}_{\text{rank}} = -\sum_{i=1}^N \sum_{j \neq i} P_{ij} \log \hat{P}_{ij}, \quad \hat{P}_{ij} = \frac{\exp(-\|z_i - z_j\|^2 / \tau)}{\sum_{k \neq i} \exp(-\|z_i - z_k\|^2 / \tau)}$$
 
 ---
