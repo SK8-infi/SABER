@@ -50,7 +50,7 @@ bridge:
   hidden_dim: 512
   num_blocks: 3
   ode_steps: 5
-  checkpoint: "checkpoints/bridge_best_dsrsid.pth"
+  checkpoint: "checkpoints/bridge_best.pth"
 
 # Embedding Geometry Optimization (Dev 3)
 geometry:
