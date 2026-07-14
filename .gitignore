@@ -50,3 +50,13 @@ Saber_bridge/data/
 
 # Local prep files
 prep/
+Datasets
+
+# Large archives
+*.zip
+
+# Intermediate extracted features and lock files
+Saber/extracted_temp*/
+~$*.docx
+~$*.pptx
+

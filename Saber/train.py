@@ -97,6 +97,7 @@ def main() -> None:
 
     logger.info(f"Dataset Loaded: {config.dataset.name.upper()} (Synthetic={train_dataset.use_synthetic})")
     logger.info(f"Training samples: {len(train_dataset)}, Input channels: {in_channels}")
+    logger.info(f"Active Training Configuration -> Batch Size: {config.dataset.batch_size}, Learning Rate: {config.train.learning_rate}")
 
     # Build Dataloader
     num_workers = 0 if dataset_name == "dsrsid" else config.dataset.num_workers
@@ -149,11 +150,18 @@ def main() -> None:
         weight_decay=float(config.train.weight_decay)
     )
 
-    # Cosine Scheduler
-    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+    # Warmup + Cosine Scheduler
+    warmup_epochs = config.train.get("warmup_epochs", 3)
+    warmup_scheduler = torch.optim.lr_scheduler.LinearLR(
+        optimizer, start_factor=0.01, total_iters=warmup_epochs
+    )
+    cosine_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+        optimizer, T_max=max(1, config.train.epochs - warmup_epochs), eta_min=1e-6
+    )
+    scheduler = torch.optim.lr_scheduler.SequentialLR(
         optimizer,
-        T_max=config.train.epochs,
-        eta_min=1e-6
+        schedulers=[warmup_scheduler, cosine_scheduler],
+        milestones=[warmup_epochs]
     )
 
     # Initialize trainer

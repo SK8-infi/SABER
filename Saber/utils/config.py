@@ -28,6 +28,7 @@ class DotDict(dict):
 def load_config(config_path: str) -> DotDict:
     """
     Load a YAML configuration file and return a DotDict object.
+    Automatically scales batch size and learning rate on high-VRAM GPUs (e.g., T4/15GB).
     
     Args:
         config_path: Path to the YAML configuration file.
@@ -37,4 +38,23 @@ def load_config(config_path: str) -> DotDict:
     """
     with open(config_path, "r") as f:
         config_dict = yaml.safe_load(f)
-    return DotDict(config_dict)
+    config = DotDict(config_dict)
+    
+    # Auto-scale batch size and learning rate on high-VRAM GPUs
+    try:
+        import torch
+        if torch.cuda.is_available():
+            total_vram = torch.cuda.get_device_properties(0).total_memory / (1024**3)
+            # If GPU has > 12 GB VRAM (e.g., T4, L4, A100)
+            if total_vram > 12.0:
+                # Default batch size in config is 16; auto-upgrade to 64
+                if "dataset" in config and config.dataset.get("batch_size", 16) == 16:
+                    config.dataset.batch_size = 64
+                # Scale learning rate proportionally (0.001 -> 0.002)
+                if "train" in config and config.train.get("learning_rate", 0.001) == 0.001:
+                    config.train.learning_rate = 0.002
+    except Exception:
+        pass
+        
+    return config
+

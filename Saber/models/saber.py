@@ -51,16 +51,16 @@ class SABER(nn.Module):
         for p in self.backbone.parameters():
             p.requires_grad = False
 
-        # Apply LoRA specifically to timm ViT attention projection blocks
+        # Apply LoRA specifically to timm ViT attention projection blocks and MLP blocks
         lora_config = LoraConfig(
-            r=8,
-            lora_alpha=16,
-            target_modules=["qkv"],  # Applies to attention weights in vit blocks
-            lora_dropout=0.1,
+            r=16,
+            lora_alpha=32,
+            target_modules=["qkv", "fc1", "fc2"],  # Applies to attention and MLP weights in vit blocks
+            lora_dropout=0.05,
             bias="none"
         )
         self.backbone.model = get_peft_model(self.backbone.model, lora_config)
-        logger.info("Successfully wrapped DOFA ViT blocks with LoRA adapters.")
+        logger.info("Successfully wrapped DOFA ViT blocks with LoRA adapters (Rank 16, Target: qkv, fc1, fc2).")
         self.backbone.model.print_trainable_parameters()
 
         # 3. Projection Head

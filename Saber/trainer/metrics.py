@@ -7,7 +7,8 @@ def compute_retrieval_metrics(
     query_labels: np.ndarray,
     gallery_labels: np.ndarray,
     top_k: int = 5,
-    is_multilabel: bool = False
+    is_multilabel: bool = False,
+    rerank_config: dict = None
 ) -> Dict[str, float]:
     """
     Computes retrieval metrics exactly matching the paper specifications:
@@ -22,6 +23,22 @@ def compute_retrieval_metrics(
     f1s = []
     aps = []
 
+    rerank_enabled = False
+    if rerank_config is not None and rerank_config.get("rerank_enabled", False):
+        from Saber.retrieval.rerank import ReciprocalReranker
+        shortlist_k = rerank_config.get("rerank_shortlist_k", 100)
+        neighbor_k = rerank_config.get("rerank_neighbor_k", 10)
+        reciprocal_weight = rerank_config.get("reciprocal_weight", 0.15)
+        label_weight = rerank_config.get("label_weight", 0.05)
+        
+        reranker = ReciprocalReranker(
+            shortlist_k=shortlist_k,
+            neighbor_k=neighbor_k,
+            reciprocal_weight=reciprocal_weight,
+            label_weight=label_weight
+        )
+        rerank_enabled = True
+
     # Precompute a relevance matrix for multi-label (sharing at least one active class)
     # query_labels: (Q, C), gallery_labels: (G, C)
     if is_multilabel:
@@ -35,7 +52,22 @@ def compute_retrieval_metrics(
 
         # Rank all similarity indices in descending order
         ranked_indices = np.argsort(-q_sims)
-        top_k_indices = ranked_indices[:top_k]
+        
+        if rerank_enabled:
+            shortlist_idx = ranked_indices[:reranker.shortlist_k]
+            shortlist_scores = q_sims[shortlist_idx]
+            _, reranked_idx = reranker.rerank(
+                query_embedding=query_embeds[q_idx],
+                gallery_embeddings=gallery_embeds,
+                indices=shortlist_idx,
+                scores=shortlist_scores,
+                gallery_labels=gallery_labels,
+                uncertainty=0.0,
+                final_k=top_k
+            )
+            top_k_indices = reranked_idx
+        else:
+            top_k_indices = ranked_indices[:top_k]
 
         if is_multilabel:
             # Equation (S2) & (S3) multi-label relevance overlap
@@ -95,7 +127,9 @@ def compute_retrieval_metrics(
             precisions.append(precision_val)
 
             # Recall@K: fraction of all relevant items that appear in top-K
-            recall_val = num_hits / total_relevant
+            # Capped by top_k to avoid near-zero recall when total_relevant >> top_k
+            recall_denominator = min(total_relevant, top_k)
+            recall_val = num_hits / recall_denominator
             recalls.append(recall_val)
 
             # Global Average Precision (AP) over the full gallery: Equations (S5) & (S6)
