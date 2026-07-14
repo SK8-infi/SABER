@@ -115,8 +115,10 @@ def main() -> None:
     if args.checkpoint and os.path.exists(args.checkpoint):
         logger.info(f"Loading checkpoint parameters from: '{args.checkpoint}'")
         checkpoint_state = load_checkpoint(args.checkpoint, map_location=str(device))
-        model.load_state_dict(checkpoint_state["model_state_dict"], strict=False)
-        logger.info("Successfully loaded model parameters (strict=False).")
+        state_dict = checkpoint_state["model_state_dict"]
+        state_dict = {k: v for k, v in state_dict.items() if not k.startswith("bridge.")}
+        model.load_state_dict(state_dict, strict=False)
+        logger.info("Successfully loaded encoder and projection parameters (strict=False).")
     else:
         logger.error(f"Checkpoint not found at: '{args.checkpoint}'")
         sys.exit(1)
