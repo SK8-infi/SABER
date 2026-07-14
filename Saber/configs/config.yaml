@@ -47,9 +47,10 @@ model:
 # Stochastic Latent Bridge (Dev 2)
 bridge:
   enabled: true
-  hidden_dim: 512
-  num_blocks: 3
-  ode_steps: 5
+  hidden_dim: 768
+  num_blocks: 5
+  ode_steps: 10
+  dropout: 0.1
   checkpoint: "checkpoints/bridge_best.pth"
 
 # Embedding Geometry Optimization (Dev 3)

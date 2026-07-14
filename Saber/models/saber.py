@@ -90,10 +90,11 @@ class SABER(nn.Module):
         if config.get("bridge", {}).get("enabled", False):
             bridge_net = CFMBridge(
                 dim=config.model.projection_head.out_dim,
-                hidden_dim=config.bridge.get("hidden_dim", 512),
-                num_blocks=config.bridge.get("num_blocks", 3)
+                hidden_dim=config.bridge.get("hidden_dim", 768),
+                num_blocks=config.bridge.get("num_blocks", 5),
+                dropout=config.bridge.get("dropout", 0.1)
             )
-            self.bridge = CFMBridgeWrapper(bridge_net, ode_steps=config.bridge.get("ode_steps", 5))
+            self.bridge = CFMBridgeWrapper(bridge_net, ode_steps=config.bridge.get("ode_steps", 10))
             logger.info("Successfully instantiated CFM Latent Bridge wrapper inside SABER.")
         else:
             self.bridge = None

@@ -36,12 +36,13 @@ def integrate_ode(model, z_s1, steps=1, device="cpu"):
 def main() -> None:
     parser = argparse.ArgumentParser(description="Train CFM Latent Bridge on extracted features")
     parser.add_argument("--features_dir", type=str, default="checkpoints/extracted", help="Directory with extracted features")
-    parser.add_argument("--epochs", type=int, default=20, help="Number of training epochs")
+    parser.add_argument("--epochs", type=int, default=80, help="Number of training epochs")
+    parser.add_argument("--warmup_epochs", type=int, default=5, help="Warmup epochs")
     parser.add_argument("--batch_size", type=int, default=256, help="Batch size for training")
     parser.add_argument("--lr", type=float, default=1e-3, help="Learning rate")
     parser.add_argument("--weight_decay", type=float, default=1e-4, help="Weight decay")
     parser.add_argument("--seed", type=int, default=42, help="Random seed")
-    parser.add_argument("--ode_steps", type=int, default=5, help="ODE solver integration steps for evaluation")
+    parser.add_argument("--ode_steps", type=int, default=10, help="ODE solver integration steps for evaluation")
     args = parser.parse_args()
 
     set_seed(args.seed)
@@ -81,9 +82,20 @@ def main() -> None:
     train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True)
 
     # Initialize model, loss and optimization
-    model = CFMBridge(dim=384, hidden_dim=512, num_blocks=3).to(device)
+    model = CFMBridge(dim=384, hidden_dim=768, num_blocks=5, dropout=0.1).to(device)
     optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
-    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=args.epochs, eta_min=1e-6)
+    
+    warmup_scheduler = torch.optim.lr_scheduler.LinearLR(
+        optimizer, start_factor=0.01, total_iters=args.warmup_epochs
+    )
+    cosine_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+        optimizer, T_max=max(1, args.epochs - args.warmup_epochs), eta_min=1e-6
+    )
+    scheduler = torch.optim.lr_scheduler.SequentialLR(
+        optimizer,
+        schedulers=[warmup_scheduler, cosine_scheduler],
+        milestones=[args.warmup_epochs]
+    )
 
     loss_fn = CFMLoss()
 
