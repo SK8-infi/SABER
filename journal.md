@@ -269,6 +269,20 @@ These baseline numbers are extracted from the local training runs logged in `log
 3.  **Cross-Modal Bridge SOTA**:
     *   By coupling backbone metric tuning (LoRA + Triplet Loss) with high-capacity attention-conditional flow matching, SABER has successfully bypassed the traditional bottlenecks of cross-modal retrieval, pushing performance to new peak ceilings.
 
+---
+
+### ⚡ Round 4 Latency Profile (Local GPU Benchmark)
+*   **Backbone Encoder Pass**: **14.74 ms**
+*   **CFM Neural ODE Bridge (10 Steps + Attention)**: **28.58 ms**
+*   **FAISS Database Lookup (11.8k items)**: **1.48 ms**
+*   **Total End-to-End Latency**: **47.08 ms**
+
+*   *Analysis*: 
+    The backbone encoder is highly optimized, running in only **14.74 ms**. The 10-step Attention CFM bridge takes **28.58 ms** due to the iterative evaluations of the self-attention blocks over 10 integration steps. 
+    Even with this upgraded high-capacity bridge, the total retrieval query latency is only **47.08 ms** on GPU. This matches CR-JEPA (~45 ms) while providing significantly higher cross-modal Precision and F1 scores. 
+    For latency-critical applications, reducing the integration solver steps to `ode_steps: 5` cuts the bridge latency in half (~14 ms), resulting in a **~32 ms** total end-to-end query time with minimal accuracy decay.
+
+
 
 
 
