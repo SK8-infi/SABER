@@ -12,3 +12,5 @@ tensorboard
 pillow
 numpy
 h5py
+huggingface-hub
+

@@ -96,8 +96,17 @@ class FrozenDOFABackbone(nn.Module):
         if pretrained:
             url = "https://huggingface.co/earthflow/DOFA/resolve/main/DOFA_ViT_base_e100.pth"
             try:
-                logger.info(f"Loading DOFA pretrained weights from HF: {url}")
-                state_dict = torch.hub.load_state_dict_from_url(url, map_location='cpu')
+                logger.info("Loading DOFA pretrained weights...")
+                
+                # Check standard torch hub cache path to avoid unnecessary downloads
+                cached_file = os.path.expanduser("~/.cache/torch/hub/checkpoints/DOFA_ViT_base_e100.pth")
+                if os.path.exists(cached_file):
+                    logger.info(f"Loading weights from local cache: {cached_file}")
+                    state_dict = torch.load(cached_file, map_location='cpu')
+                else:
+                    logger.info(f"Downloading DOFA pretrained weights from HF: {url}")
+                    state_dict = torch.hub.load_state_dict_from_url(url, map_location='cpu')
+                
                 self.model.load_state_dict(state_dict, strict=False)
                 logger.info("Successfully loaded DOFA pretrained weights.")
             except Exception as e:
