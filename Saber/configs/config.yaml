@@ -55,10 +55,10 @@ bridge:
 # Embedding Geometry Optimization (Dev 3)
 geometry:
   enabled: true
-  jaccard_weight: 1.0
-  ranking_weight: 1.0
-  ranking_temp_s: 0.1
-  ranking_temp_p: 0.07
+  jaccard_weight: 2.0
+  ranking_weight: 1.5
+  ranking_temp_s: 0.07
+  ranking_temp_p: 0.05
 
 # Hashing Configuration (Dev 4)
 hashing:
@@ -70,20 +70,21 @@ hashing:
 # Loss Configurations (Baseline REJEPA weights)
 loss:
   prediction_weight: 1.0
-  vicreg_invariance_weight: 25.0
+  vicreg_invariance_weight: 15.0
   vicreg_variance_weight: 25.0
-  vicreg_covariance_weight: 1.0
+  vicreg_covariance_weight: 2.0
   vicreg_epsilon: 0.0001
 
 # Training Details
 train:
-  learning_rate: 0.0005
-  weight_decay: 0.0001
-  epochs: 10
+  learning_rate: 0.001
+  weight_decay: 0.01
+  epochs: 20
   grad_clip: 1.0
   amp: true              # Automated Mixed Precision
-  use_ema: false         # EMA target model copy
-  ema_decay: 0.99
+  use_ema: true          # EMA target model copy
+  ema_decay: 0.996
+  warmup_epochs: 3
 
 # Retrieval Details
 retrieval:
@@ -97,8 +98,8 @@ retrieval:
   hnsw_m: 32
   nprobe: 8
   fast_scan: false
-  rerank_enabled: false
-  rerank_shortlist_k: 100
+  rerank_enabled: true
+  rerank_shortlist_k: 50
   rerank_neighbor_k: 10
 
 # Visualizations

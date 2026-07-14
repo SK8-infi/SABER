@@ -155,7 +155,8 @@ class Evaluator:
             query_labels=query_labels,
             gallery_labels=gallery_labels,
             top_k=5,
-            is_multilabel=is_multilabel
+            is_multilabel=is_multilabel,
+            rerank_config=self.config.get("retrieval", None)
         )
         metrics10 = compute_retrieval_metrics(
             query_embeds=query_embeds,
@@ -163,7 +164,8 @@ class Evaluator:
             query_labels=query_labels,
             gallery_labels=gallery_labels,
             top_k=10,
-            is_multilabel=is_multilabel
+            is_multilabel=is_multilabel,
+            rerank_config=self.config.get("retrieval", None)
         )
         metrics = {}
         metrics.update(metrics5)

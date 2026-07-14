@@ -117,9 +117,14 @@ class FrozenDOFABackbone(nn.Module):
         Returns:
             Pooled feature representation of shape (B, 768).
         """
-        # Always run in eval mode for frozen backbone
-        self.model.eval()
-        with torch.no_grad():
+        has_trainable = any(p.requires_grad for p in self.model.parameters())
+        if self.training and has_trainable:
             features = self.model.forward_features(x, wave_list)
+        else:
+            prev_mode = self.model.training
+            self.model.eval()
+            with torch.no_grad():
+                features = self.model.forward_features(x, wave_list)
+            self.model.train(prev_mode)
         return features
 
