@@ -78,6 +78,13 @@ class Trainer:
             # Move images and labels to target device
             x1 = batch["image1"].to(self.device)
             x2 = batch["image2"].to(self.device)
+            
+            # Auto-resize on GPU to prevent CPU resize bottleneck
+            if x1.shape[-1] != 224 or x1.shape[-2] != 224:
+                import torch.nn.functional as F
+                x1 = F.interpolate(x1, size=(224, 224), mode="bilinear", align_corners=False)
+                x2 = F.interpolate(x2, size=(224, 224), mode="bilinear", align_corners=False)
+                
             labels = batch.get("label", None)
             if labels is not None:
                 labels = labels.to(self.device)

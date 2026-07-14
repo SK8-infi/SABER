@@ -46,6 +46,12 @@ class Evaluator:
         with torch.no_grad():
             for batch_idx, batch in enumerate(self.dataloader):
                 images = batch["image"].to(self.device)
+                
+                # Auto-resize on GPU to prevent CPU resize bottleneck
+                if images.shape[-1] != 224 or images.shape[-2] != 224:
+                    import torch.nn.functional as F
+                    images = F.interpolate(images, size=(224, 224), mode="bilinear", align_corners=False)
+                    
                 labels = batch["label"]
                 names = batch["name"]
 
@@ -105,6 +111,12 @@ class Evaluator:
             with torch.no_grad():
                 for batch_idx, batch in enumerate(self.dataloader):
                     images = batch["image"].to(self.device)
+                    
+                    # Auto-resize on GPU to prevent CPU resize bottleneck
+                    if images.shape[-1] != 224 or images.shape[-2] != 224:
+                        import torch.nn.functional as F
+                        images = F.interpolate(images, size=(224, 224), mode="bilinear", align_corners=False)
+                        
                     labels = batch["label"]
                     names = batch["name"]
                     
