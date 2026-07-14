@@ -113,8 +113,7 @@ CORINE_TO_19_MAP = {
     "Sea and ocean": "Water bodies",
     
     # 19. Coastal wetlands
-    "Intertidal flats": "Coastal wetlands",
-    "Salt marshes": "Coastal wetlands"
+    "Intertidal flats": "Coastal wetlands"
 }
 
 class BEN14KDataset(BaseDataset):
