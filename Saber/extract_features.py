@@ -133,6 +133,13 @@ def main() -> None:
         for batch in tqdm(eval_loader):
             img_s1 = batch["image_s1"].to(device)
             img_s2 = batch["image_s2"].to(device)
+
+            # Auto-resize on GPU to prevent CPU resize bottleneck and shape mismatch in ViT
+            if img_s1.shape[-1] != 224 or img_s1.shape[-2] != 224:
+                import torch.nn.functional as F
+                img_s1 = F.interpolate(img_s1, size=(224, 224), mode="bilinear", align_corners=False)
+                img_s2 = F.interpolate(img_s2, size=(224, 224), mode="bilinear", align_corners=False)
+
             labels = batch["label"]
             names = batch["name"]
 
