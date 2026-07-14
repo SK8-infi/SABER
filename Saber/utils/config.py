@@ -50,9 +50,9 @@ def load_config(config_path: str) -> DotDict:
                 # Default batch size in config is 16; auto-upgrade to 64
                 if "dataset" in config and config.dataset.get("batch_size", 16) == 16:
                     config.dataset.batch_size = 64
-                # Scale learning rate proportionally (0.001 -> 0.002)
-                if "train" in config and config.train.get("learning_rate", 0.001) == 0.001:
-                    config.train.learning_rate = 0.002
+                # Scale learning rate proportionally (0.0005 -> 0.001)
+                if "train" in config and config.train.get("learning_rate", 0.0005) == 0.0005:
+                    config.train.learning_rate = 0.001
     except Exception:
         pass
         

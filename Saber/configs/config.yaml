@@ -77,7 +77,7 @@ loss:
 
 # Training Details
 train:
-  learning_rate: 0.001
+  learning_rate: 0.0005
   weight_decay: 0.01
   epochs: 20
   grad_clip: 1.0

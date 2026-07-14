@@ -80,8 +80,8 @@ class SaberCombinedLoss(nn.Module):
         mask = ~torch.eye(B, dtype=torch.bool, device=device)
 
         # Normalize predicted and target vectors
-        z1_pred_norm = F.normalize(z1_pred, p=2, dim=1)
-        z2_norm = F.normalize(z2, p=2, dim=1)
+        z1_pred_norm = F.normalize(z1_pred, p=2, dim=1, eps=1e-4)
+        z2_norm = F.normalize(z2, p=2, dim=1, eps=1e-4)
 
         # Pairwise cosine similarities
         cos_sim_pred = torch.matmul(z1_pred_norm, z1_pred_norm.t())

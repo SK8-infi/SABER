@@ -34,5 +34,5 @@ class RetrievalHead(nn.Module):
         x = self.proj(x)
         if self.normalize:
             # Normalize along the last feature dimension
-            x = F.normalize(x, p=2, dim=-1)
+            x = F.normalize(x, p=2, dim=-1, eps=1e-4)
         return x

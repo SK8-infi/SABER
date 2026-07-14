@@ -63,7 +63,7 @@ def similarity_preserving_hash_loss(
     It aligns code cosine similarity with semantic relevance and adds a
     quantization penalty that pushes tanh outputs toward binary values.
     """
-    codes = F.normalize(soft_codes, dim=1)
+    codes = F.normalize(soft_codes, dim=1, eps=1e-4)
     code_similarity = codes @ codes.T
 
     if labels.ndim == 2:
