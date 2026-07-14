@@ -102,7 +102,7 @@ class FrozenDOFABackbone(nn.Module):
                 cached_file = os.path.expanduser("~/.cache/torch/hub/checkpoints/DOFA_ViT_base_e100.pth")
                 if os.path.exists(cached_file):
                     logger.info(f"Loading weights from local cache: {cached_file}")
-                    state_dict = torch.load(cached_file, map_location='cpu')
+                    state_dict = torch.load(cached_file, map_location='cpu', weights_only=False)
                 else:
                     logger.info(f"Downloading DOFA pretrained weights from HF: {url}")
                     state_dict = torch.hub.load_state_dict_from_url(url, map_location='cpu')
