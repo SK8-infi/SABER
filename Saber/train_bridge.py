@@ -39,7 +39,7 @@ def main() -> None:
     parser.add_argument("--epochs", type=int, default=80, help="Number of training epochs")
     parser.add_argument("--warmup_epochs", type=int, default=5, help="Warmup epochs")
     parser.add_argument("--batch_size", type=int, default=256, help="Batch size for training")
-    parser.add_argument("--lr", type=float, default=1e-3, help="Learning rate")
+    parser.add_argument("--lr", type=float, default=3e-4, help="Learning rate")
     parser.add_argument("--weight_decay", type=float, default=1e-4, help="Weight decay")
     parser.add_argument("--seed", type=int, default=42, help="Random seed")
     parser.add_argument("--ode_steps", type=int, default=10, help="ODE solver integration steps for evaluation")
@@ -125,6 +125,7 @@ def main() -> None:
             loss = loss_fn(pred_v, logvar, batch_s1, batch_s2)
             
             loss.backward()
+            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
             optimizer.step()
             
             train_loss += loss.item() * batch_s1.size(0)
