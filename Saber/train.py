@@ -106,7 +106,9 @@ def main() -> None:
         batch_size=config.dataset.batch_size,
         shuffle=True,
         num_workers=num_workers,
-        drop_last=True
+        drop_last=True,
+        pin_memory=True,
+        persistent_workers=(num_workers > 0)
     )
 
     # Create model instance based on architecture config
