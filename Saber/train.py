@@ -127,7 +127,8 @@ def main() -> None:
             variance_weight=float(config.loss.vicreg_variance_weight),
             covariance_weight=float(config.loss.vicreg_covariance_weight),
             epsilon=float(config.loss.vicreg_epsilon),
-            hashing_weight=float(config.get("hashing", {}).get("weight", 0.1))
+            hashing_weight=float(config.get("hashing", {}).get("weight", 0.1)),
+            triplet_weight=float(config.geometry.get("triplet_weight", 0.5))
         )
     elif arch == "rejepa":
         logger.info("Instantiating REJEPA model (timm baseline)...")

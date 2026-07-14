@@ -46,6 +46,7 @@ class Trainer:
         self.checkpoint_dir = config.checkpoint_dir
         self.grad_clip = config.train.grad_clip
         self.amp_enabled = config.train.amp and ("cuda" in str(device))
+        self.accum_steps = config.train.get("grad_accumulation_steps", 1)
 
         os.makedirs(self.checkpoint_dir, exist_ok=True)
         self.tb_writer = SummaryWriter(log_dir=os.path.join(config.log_dir, "tensorboard"))
@@ -69,6 +70,7 @@ class Trainer:
         if self.target_model is not None:
             self.target_model.eval()
         
+        self.optimizer.zero_grad()
         epoch_losses = {}
         num_batches = len(self.train_loader)
         if num_batches == 0:
@@ -88,8 +90,6 @@ class Trainer:
             labels = batch.get("label", None)
             if labels is not None:
                 labels = labels.to(self.device)
-
-            self.optimizer.zero_grad()
 
             # Execute forward pass under autocast for mixed precision
             with torch.cuda.amp.autocast(enabled=self.amp_enabled):
@@ -127,37 +127,40 @@ class Trainer:
                 else:
                     loss_dict = self.criterion(z1, z2, z1_pred)
                 
-                loss = loss_dict["loss"]
+                loss = loss_dict["loss"] / self.accum_steps
 
             # Backward pass using gradient scaling
             self.scaler.scale(loss).backward()
 
-            # Gradient Clipping
-            if self.grad_clip > 0:
-                self.scaler.unscale_(self.optimizer)
-                torch.nn.utils.clip_grad_norm_(
-                    [p for p in self.model.parameters() if p.requires_grad],
-                    self.grad_clip
-                )
+            # Step optimizer every accum_steps batches (or at the last batch)
+            if (batch_idx + 1) % self.accum_steps == 0 or (batch_idx + 1) == num_batches:
+                # Gradient Clipping
+                if self.grad_clip > 0:
+                    self.scaler.unscale_(self.optimizer)
+                    torch.nn.utils.clip_grad_norm_(
+                        [p for p in self.model.parameters() if p.requires_grad],
+                        self.grad_clip
+                    )
 
-            # Step optimizer & learning rate scaler
-            self.scaler.step(self.optimizer)
-            self.scaler.update()
+                # Step optimizer & learning rate scaler
+                self.scaler.step(self.optimizer)
+                self.scaler.update()
+                self.optimizer.zero_grad()
 
-            # Update EMA target model parameters
-            if self.use_ema and self.target_model is not None:
-                with torch.no_grad():
-                    for param, target_param in zip(self.model.parameters(), self.target_model.parameters()):
-                        target_param.data.mul_(self.ema_decay).add_(param.data, alpha=1.0 - self.ema_decay)
+                # Update EMA target model parameters
+                if self.use_ema and self.target_model is not None:
+                    with torch.no_grad():
+                        for param, target_param in zip(self.model.parameters(), self.target_model.parameters()):
+                            target_param.data.mul_(self.ema_decay).add_(param.data, alpha=1.0 - self.ema_decay)
 
-            # Accumulate loss metrics dynamically
+            # Accumulate loss metrics dynamically (using unscaled values)
             for k in loss_dict:
                 if k not in epoch_losses:
                     epoch_losses[k] = 0.0
                 epoch_losses[k] += loss_dict[k].item()
                 
             if batch_idx % 50 == 0:
-                logger.info(f"Epoch [{epoch}] - Batch [{batch_idx}/{num_batches}] - Loss: {loss.item():.4f}")
+                logger.info(f"Epoch [{epoch}] - Batch [{batch_idx}/{num_batches}] - Loss: {loss.item() * self.accum_steps:.4f}")
 
         # Average losses
         for k in epoch_losses:

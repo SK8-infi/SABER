@@ -24,7 +24,8 @@ class SaberCombinedLoss(nn.Module):
         variance_weight: float = 25.0,
         covariance_weight: float = 1.0,
         epsilon: float = 1e-4,
-        hashing_weight: float = 0.1
+        hashing_weight: float = 0.1,
+        triplet_weight: float = 0.5
     ) -> None:
         super().__init__()
         self.jaccard_weight = jaccard_weight
@@ -32,6 +33,7 @@ class SaberCombinedLoss(nn.Module):
         self.ranking_temp_s = ranking_temp_s
         self.ranking_temp_p = ranking_temp_p
         self.hashing_weight = hashing_weight
+        self.triplet_weight = triplet_weight
         
         self.vicreg_loss_fn = VICRegLoss(
             invariance_weight=invariance_weight,
@@ -115,10 +117,28 @@ class SaberCombinedLoss(nn.Module):
         ranking_loss_target = kl_target.sum(dim=1).mean()
         ranking_loss = 0.5 * (ranking_loss_pred + ranking_loss_target)
 
+        # C. Semi-Hard Negative Triplet Loss
+        margin = 0.3
+        # Positive cosine distance (matched pairs on diagonal)
+        pos_dist = 1.0 - torch.sum(z1_pred_norm * z2_norm, dim=1)  # (B,)
+        
+        # All pairwise cosine distances
+        all_dist = 1.0 - torch.matmul(z1_pred_norm, z2_norm.t())  # (B, B)
+        
+        # Semi-hard negatives: harder than positive but within margin
+        neg_mask = mask & (all_dist > pos_dist.unsqueeze(1)) & (all_dist < pos_dist.unsqueeze(1) + margin)
+        
+        triplet_loss = torch.tensor(0.0, device=device)
+        if neg_mask.any():
+            hardest_neg_dist = all_dist.masked_fill(~neg_mask, float('inf')).min(dim=1).values
+            valid = hardest_neg_dist < float('inf')
+            if valid.any():
+                triplet_loss = F.relu(pos_dist[valid] - hardest_neg_dist[valid] + margin).mean()
+
         # 2. VICReg regularizations
         vicreg_metrics = self.vicreg_loss_fn(z1, z2)
 
-        # C. Optional Hashing Loss
+        # D. Optional Hashing Loss
         hash_loss = torch.tensor(0.0, device=device)
         sim_hash_loss = torch.tensor(0.0, device=device)
         quant_loss = torch.tensor(0.0, device=device)
@@ -139,6 +159,7 @@ class SaberCombinedLoss(nn.Module):
         total_loss = (
             (self.jaccard_weight * jaccard_loss) +
             (self.ranking_weight * ranking_loss) +
+            (self.triplet_weight * triplet_loss) +
             (self.hashing_weight * hash_loss) +
             vicreg_metrics["loss"]
         )
@@ -147,6 +168,7 @@ class SaberCombinedLoss(nn.Module):
             "loss": total_loss,
             "jaccard_loss": jaccard_loss,
             "ranking_loss": ranking_loss,
+            "triplet_loss": triplet_loss,
             "hash_loss": hash_loss,
             "sim_hash_loss": sim_hash_loss,
             "quant_loss": quant_loss,

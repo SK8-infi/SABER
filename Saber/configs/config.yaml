@@ -59,6 +59,7 @@ geometry:
   ranking_weight: 1.5
   ranking_temp_s: 0.07
   ranking_temp_p: 0.05
+  triplet_weight: 0.5
 
 # Hashing Configuration (Dev 4)
 hashing:
@@ -81,6 +82,7 @@ train:
   weight_decay: 0.01
   epochs: 20
   grad_clip: 1.0
+  grad_accumulation_steps: 2  # Accumulate gradients to double effective batch size
   amp: true              # Automated Mixed Precision
   use_ema: true          # EMA target model copy
   ema_decay: 0.996
