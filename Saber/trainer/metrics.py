@@ -8,12 +8,16 @@ def compute_retrieval_metrics(
     gallery_labels: np.ndarray,
     top_k: int = 5,
     is_multilabel: bool = False,
-    rerank_config: dict = None
+    rerank_config: dict = None,
+    query_names: np.ndarray = None,
+    gallery_names: np.ndarray = None,
+    exclude_self_matches: bool = False
 ) -> Dict[str, float]:
     """
     Computes retrieval metrics exactly matching the paper specifications:
     - Multi-label (BEN-14K): Item-level precision, recall, and F1 over top-K, averaged.
     - Single-label (DSRSID): Precision@K and global mAP over the full gallery.
+    - Excludes trivial self-matches if same-modal and query/gallery contain same samples.
     """
     num_queries = query_embeds.shape[0]
     num_gallery = gallery_embeds.shape[0]
@@ -50,18 +54,38 @@ def compute_retrieval_metrics(
         # Compute similarity for this specific query to prevent OOM
         q_sims = (query_embeds[q_idx:q_idx+1] @ gallery_embeds.T).flatten()
 
+        # Handle self-match exclusion
+        if exclude_self_matches and query_names is not None and gallery_names is not None:
+            q_name = query_names[q_idx]
+            mask = (gallery_names != q_name)
+            q_sims_filtered = q_sims[mask]
+            gallery_labels_filtered = gallery_labels[mask]
+            if is_multilabel:
+                relevance_filtered = relevance_matrix[q_idx][mask]
+            else:
+                relevance_filtered = (gallery_labels_filtered == q_label).astype(np.float32)
+            gallery_embeds_filtered = gallery_embeds[mask]
+        else:
+            q_sims_filtered = q_sims
+            gallery_labels_filtered = gallery_labels
+            if is_multilabel:
+                relevance_filtered = relevance_matrix[q_idx]
+            else:
+                relevance_filtered = (gallery_labels_filtered == q_label).astype(np.float32)
+            gallery_embeds_filtered = gallery_embeds
+
         # Rank all similarity indices in descending order
-        ranked_indices = np.argsort(-q_sims)
+        ranked_indices = np.argsort(-q_sims_filtered)
         
         if rerank_enabled:
             shortlist_idx = ranked_indices[:reranker.shortlist_k]
-            shortlist_scores = q_sims[shortlist_idx]
+            shortlist_scores = q_sims_filtered[shortlist_idx]
             _, reranked_idx = reranker.rerank(
                 query_embedding=query_embeds[q_idx],
-                gallery_embeddings=gallery_embeds,
+                gallery_embeddings=gallery_embeds_filtered,
                 indices=shortlist_idx,
                 scores=shortlist_scores,
-                gallery_labels=gallery_labels,
+                gallery_labels=gallery_labels_filtered,
                 uncertainty=0.0,
                 final_k=top_k
             )
@@ -81,7 +105,7 @@ def compute_retrieval_metrics(
             q_f1_k = []
 
             for r_idx in top_k_indices:
-                r_label = gallery_labels[r_idx]
+                r_label = gallery_labels_filtered[r_idx]
                 r_active = set(np.where(r_label > 0.5)[0])
                 
                 intersection = q_active.intersection(r_active)
@@ -101,7 +125,7 @@ def compute_retrieval_metrics(
             f1s.append(np.mean(q_f1_k))
 
             # Compute Average Precision (AP) using fast vectorized operations
-            relevance = relevance_matrix[q_idx]
+            relevance = relevance_filtered
             total_relevant = np.sum(relevance)
             if total_relevant > 0:
                 all_relevance = relevance[ranked_indices]
@@ -115,7 +139,7 @@ def compute_retrieval_metrics(
             # Single-label relevance (DSRSID)
             # Relevance defined by single-label class equality
             # query_labels are class index numbers, gallery_labels are class index numbers
-            relevance = (gallery_labels == q_label).astype(np.float32)
+            relevance = relevance_filtered
             total_relevant = np.sum(relevance)
             if total_relevant == 0:
                 continue

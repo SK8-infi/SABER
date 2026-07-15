@@ -93,9 +93,11 @@ class Evaluator:
             embeddings, labels, names = self.extract_all_embeddings()
             query_embeds = embeddings[query_indices]
             query_labels = labels[query_indices]
+            query_names = np.array([names[i] for i in query_indices])
             
             gallery_embeds = embeddings[gallery_indices]
             gallery_labels = labels[gallery_indices]
+            gallery_names = np.array([names[i] for i in gallery_indices])
         else:
             logger.info("Extracting bimodal embeddings for cross-modal evaluation (S1 query, S2 gallery)...")
             self.model.eval()
@@ -151,6 +153,8 @@ class Evaluator:
             
             query_labels = labels[query_indices]
             gallery_labels = labels[gallery_indices]
+            query_names = np.array([names[i] for i in query_indices])
+            gallery_names = np.array([names[i] for i in gallery_indices])
             
             # Synthesize final embeddings array for FAISS building compatibility
             embeddings = np.zeros((num_samples, query_embeds.shape[1]), dtype=np.float32)
@@ -161,6 +165,7 @@ class Evaluator:
 
         # Calculate metrics by computing chunked similarities to avoid OOM
         is_multilabel = (self.config.dataset.name.lower() == "ben14k")
+        exclude_self = not is_cross_modal
         metrics5 = compute_retrieval_metrics(
             query_embeds=query_embeds,
             gallery_embeds=gallery_embeds,
@@ -168,7 +173,10 @@ class Evaluator:
             gallery_labels=gallery_labels,
             top_k=5,
             is_multilabel=is_multilabel,
-            rerank_config=self.config.get("retrieval", None)
+            rerank_config=self.config.get("retrieval", None),
+            query_names=query_names,
+            gallery_names=gallery_names,
+            exclude_self_matches=exclude_self
         )
         metrics10 = compute_retrieval_metrics(
             query_embeds=query_embeds,
@@ -177,7 +185,10 @@ class Evaluator:
             gallery_labels=gallery_labels,
             top_k=10,
             is_multilabel=is_multilabel,
-            rerank_config=self.config.get("retrieval", None)
+            rerank_config=self.config.get("retrieval", None),
+            query_names=query_names,
+            gallery_names=gallery_names,
+            exclude_self_matches=exclude_self
         )
         metrics = {}
         metrics.update(metrics5)
