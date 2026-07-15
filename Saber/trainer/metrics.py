@@ -299,12 +299,12 @@ def _compute_retrieval_metrics_numpy(
 
     mean_precision = float(np.mean(precisions)) if precisions else 0.0
     mean_recall = float(np.mean(recalls)) if recalls else 0.0
-    
-    if is_multilabel:
-        mean_f1 = float(np.mean(f1s)) if f1s else 0.0
-        mean_map = float(np.mean(aps)) if aps else 0.0
-    else:
-        mean_f1 = 2.0 * (mean_precision * mean_recall) / (mean_precision + mean_recall + 1e-8)
-        mean_map = float(np.mean(aps)) if aps else 0.0
+    mean_f1 = float(np.mean(f1s)) if f1s else 0.0
+    mean_map = float(np.mean(aps)) if aps else 0.0
 
-
+    return {
+        f"precision@{top_k}": mean_precision,
+        f"recall@{top_k}": mean_recall,
+        f"f1@{top_k}": mean_f1,
+        f"map@{top_k}": mean_map
+    }
