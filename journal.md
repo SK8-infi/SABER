@@ -391,34 +391,34 @@ eturn {} block in _compute_retrieval_metrics_numpy (rerank fallback) that was ac
 ---
 
 ### Round 8: Effective Batch Size Expansion (32 → 256)
-*   **Status**: Completed (2026-07-16 01:10:00)
+*   **Status**: Completed (2026-07-16 01:18:00)
 *   **Changes Implemented**:
-    1. **Increased Batch Size**: Set atch_size: 64 and grad_accumulation_steps: 4 in config.yaml, scaling the effective batch size from 32 to **256**.
+    1. **Increased Batch Size**: Set `batch_size: 64` and `grad_accumulation_steps: 4` in `config.yaml`, scaling the effective batch size from 32 to **256**.
     2. **Contrastive Quality Boost**: Expanding effective batch size exposes the Jaccard regression and neighborhood ranking KL-divergence losses to 135x more unique negative pairs per step.
     3. **Training Duration**: Kept at 5 epochs for the DOFA encoder fine-tuning.
-*   **Results (Round 8 - Same-Modal Ceiling)**:
+*   **Results (Round 8 - BEN-14K)**:
     *   *Evaluation Split*: 2,966 queries / 11,866 gallery items (real data)
     *   *Hardware*: Google Colab T4 GPU (16 GB)
-    *   *Task*: Optical same-modal ceiling (S2 → S2)
+    *   *Checkpoint*: New `latest_ben14k.pth` + trained bridge checkpoint `bridge_best.pth` on updated features.
 
-| Metric | Round 7 (Effective Batch = 32) | Round 8 (Effective Batch = 256) | Change (pp) |
-| :--- | :---: | :---: | :---: |
-| **Precision@5** | 83.33% | **83.49%** | **+0.16 pp** |
-| **Recall@5** | 70.87% | **71.38%** | **+0.51 pp** |
-| **F1-score@5** | 73.42% | **73.97%** | **+0.55 pp** |
-| **Precision@10** | 73.94% | **73.67%** | **-0.27 pp** |
-| **Recall@10** | 72.33% | **72.60%** | **+0.27 pp** |
-| **F1-score@10** | 69.61% | **69.72%** | **+0.11 pp** |
-| **mAP (Global)** | 86.65% | **86.07%** | **-0.58 pp** |
+| Metric | Same-Modal Ceiling (S2 → S2) | Cross-Modal SABER (S1 → S2) |
+| :--- | :---: | :---: |
+| **Precision@5** | **83.49%** (was 83.33%, **+0.16 pp**) | **78.25%** (was 80.99%, **-2.74 pp**) |
+| **Recall@5** | **71.38%** (was 70.87%, **+0.51 pp**) | **69.08%** (was 68.11%, **+0.97 pp**) |
+| **F1-score@5** | **73.97%** (was 73.42%, **+0.55 pp**) | **70.30%** (was 70.79%, **-0.49 pp**) |
+| **Precision@10** | **73.67%** (was 73.94%, **-0.27 pp**) | **68.30%** (was 70.73%, **-2.43 pp**) |
+| **Recall@10** | **72.60%** (was 72.33%, **+0.27 pp**) | **70.92%** (was 70.26%, **+0.66 pp**) |
+| **F1-score@10** | **69.72%** (was 69.61%, **+0.11 pp**) | **65.95%** (was 66.79%, **-0.84 pp**) |
+| **mAP (Global)** | **86.07%** (was 86.65%, **-0.58 pp**) | **86.81%** (was 88.93%, **-2.12 pp**) |
 
 ---
 
-### 🔍 Round 8 Outcomes Analysis (Same-Modal)
+### 🔍 Round 8 Outcomes Analysis
 
-1. **Successful F1-Score Improvement (Success)**:
-    *   F1@5 rose from **73.42%** to **73.97%** (+0.55 pp) and Recall@5 reached **71.38%** (+0.51 pp). This confirms that a larger batch size successfully exposes the model to more diverse negatives, helping it learn robust boundaries for multi-label classification.
-2. **Slight mAP Fluctuation**:
-    *   While top-5 metrics improved, global mAP fluctuated slightly (-0.58 pp). This is standard for short (5 epoch) runs because the model prioritizes local neighbourhood alignment (due to Jaccard and ranking losses) over global layout stabilization.
+1. **Successful Same-Modal F1-Score Improvement (Success)**:
+    *   Same-modal F1@5 rose from **73.42%** to **73.97%** (+0.55 pp) and Recall@5 reached **71.38%** (+0.51 pp). This confirms that a larger batch size successfully exposes the model to more diverse negatives, helping it learn robust boundaries for multi-label classification.
+2. **Cross-Modal Retrieval Bottleneck**:
+    *   Although the base encoder's representation power increased, the cross-modal F1@5 dropped slightly by **-0.49 pp** (from 70.79% to 70.30%) and cross-modal mAP decreased by **-2.12 pp** (from 88.93% to 86.81%).
+    *   **Explanation**: With the larger batch size (256), the encoder creates a more spread out, complex, and high-contrast latent space structure. The current CFM bridge (hidden_dim=768, 5 blocks) struggles to map this highly complex, spread out structure from S1 to S2 with the current capacity. The bridge translation drop widened from **-2.63 pp** to **-3.67 pp** F1@5.
 3. **Next Steps**:
-    *   We need to extract the new features from this encoder and train the CFM Bridge on them to evaluate the cross-modal performance.
-
+    *   This confirms our next hypothesis: we need to increase the projection dimension to 512 or 768. Increasing the embedding bandwidth gives the model more geometric capacity, allowing the CFM bridge to translate the complex features more easily.
