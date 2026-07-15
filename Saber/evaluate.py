@@ -31,8 +31,9 @@ def main() -> None:
     parser.add_argument("--data_dir", type=str, default=None, help="Override path to dataset directory")
     parser.add_argument("--modality", type=str, default=None, help="Override dataset modality ('s1', 's2', 'both')")
     parser.add_argument("--size", type=int, default=None, help="Override dataset size")
-    parser.add_argument("--batch_size", type=int, default=None, help="Override evaluation batch size")
-    parser.add_argument("--direction", type=str, default="s1_to_s2", choices=["s1_to_s2", "s2_to_s1"], help="Cross-modal retrieval direction ('s1_to_s2' or 's2_to_s1')")
+    parser.add_argument("--batch_size", type=int, default=None, help="Override batch size")
+    parser.add_argument("--direction", type=str, default="s1_to_s2", choices=["s1_to_s2", "s2_to_s1"], help="Cross-modal retrieval direction")
+    parser.add_argument("--viz", action="store_true", help="Generate and save t-SNE and UMAP visualizations")
     args = parser.parse_args()
 
     # Load configuration
@@ -240,37 +241,40 @@ def main() -> None:
     }, metadata_path)
     logger.info(f"Saved gallery metadata to: {metadata_path}")
 
-    # Generate and save projections and similarity heatmaps
-    logger.info("Generating visualization plots...")
-    os.makedirs(config.viz_dir, exist_ok=True)
-    
-    tsne_path = os.path.join(config.viz_dir, "tsne.png")
-    plot_tsne(
-        embeddings=all_embeddings,
-        labels=results["labels"],
-        save_path=tsne_path,
-        perplexity=config.visualization.tsne_perplexity,
-        n_iter=config.visualization.tsne_n_iter
-    )
-    logger.info(f"Saved t-SNE plot to: {tsne_path}")
-
-    umap_path = os.path.join(config.viz_dir, "umap.png")
-    plot_umap(
-        embeddings=all_embeddings,
-        labels=results["labels"],
-        save_path=umap_path,
-        n_neighbors=config.visualization.umap_n_neighbors,
-        min_dist=config.visualization.umap_min_dist
-    )
-    logger.info(f"Saved UMAP plot to: {umap_path}")
-
-    if results.get("similarity_matrix") is not None:
-        sim_path = os.path.join(config.viz_dir, "similarity_heatmap.png")
-        plot_similarity_matrix(
-            similarity_matrix=results["similarity_matrix"],
-            save_path=sim_path
+    # Generate and save projections and similarity heatmaps if --viz is set
+    if args.viz:
+        logger.info("Generating visualization plots...")
+        os.makedirs(config.viz_dir, exist_ok=True)
+        
+        tsne_path = os.path.join(config.viz_dir, "tsne.png")
+        plot_tsne(
+            embeddings=all_embeddings,
+            labels=results["labels"],
+            save_path=tsne_path,
+            perplexity=config.visualization.tsne_perplexity,
+            n_iter=config.visualization.tsne_n_iter
         )
-        logger.info(f"Saved similarity matrix heatmap to: {sim_path}")
+        logger.info(f"Saved t-SNE plot to: {tsne_path}")
+
+        umap_path = os.path.join(config.viz_dir, "umap.png")
+        plot_umap(
+            embeddings=all_embeddings,
+            labels=results["labels"],
+            save_path=umap_path,
+            n_neighbors=config.visualization.umap_n_neighbors,
+            min_dist=config.visualization.umap_min_dist
+        )
+        logger.info(f"Saved UMAP plot to: {umap_path}")
+
+        if results.get("similarity_matrix") is not None:
+            sim_path = os.path.join(config.viz_dir, "similarity_heatmap.png")
+            plot_similarity_matrix(
+                similarity_matrix=results["similarity_matrix"],
+                save_path=sim_path
+            )
+            logger.info(f"Saved similarity matrix heatmap to: {sim_path}")
+    else:
+        logger.info("Visualizations skipped. Pass --viz to generate plots.")
 
     logger.info("Evaluation complete.")
 
