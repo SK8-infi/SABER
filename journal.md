@@ -422,3 +422,40 @@ eturn {} block in _compute_retrieval_metrics_numpy (rerank fallback) that was ac
     *   **Explanation**: With the larger batch size (256), the encoder creates a more spread out, complex, and high-contrast latent space structure. The current CFM bridge (hidden_dim=768, 5 blocks) struggles to map this highly complex, spread out structure from S1 to S2 with the current capacity. The bridge translation drop widened from **-2.63 pp** to **-3.67 pp** F1@5.
 3. **Next Steps**:
     *   This confirms our next hypothesis: we need to increase the projection dimension to 512 or 768. Increasing the embedding bandwidth gives the model more geometric capacity, allowing the CFM bridge to translate the complex features more easily.
+
+---
+
+### Round 9: Embedding Space Bandwidth Expansion (384 → 768)
+*   **Status**: Completed (2026-07-16 04:26:00)
+*   **Changes Implemented**:
+    1. **Increased Projection Dimension**: Set out_dim and hidden_dim to **768** in config.yaml for both the projection head and the predictor head.
+    2. **Removed Bottleneck**: Prevented information loss by matching the original hidden dimension of the DOFA backbone, doubling geometric bandwidth on the hypersphere.
+    3. **Dynamic Bridge Dimensions**: Patched 	rain_bridge.py to dynamically detect feature size rather than hardcoding 384.
+    4. **Finetuning**: Performed a fresh 5-epoch DOFA encoder fine-tuning and 80-epoch bridge training run.
+*   **Results (Round 9 - BEN-14K)**:
+    *   *Evaluation Split*: 2,966 queries / 11,866 gallery items (real data)
+    *   *Checkpoint*: New latest_ben14k.pth + newly trained ridge_best.pth at 768-D.
+
+| Metric | Same-Modal Ceiling (S2 → S2) | Cross-Modal SABER (S1 → S2) |
+| :--- | :---: | :---: |
+| **Precision@5** | **84.87%** (was 83.49%, **+1.38 pp**) | **82.71%** (was 78.25%, **+4.46 pp**!) |
+| **Recall@5** | **70.34%** (was 71.38%, **-1.04 pp**) | **68.46%** (was 69.08%, **-0.62 pp**) |
+| **F1-score@5** | **73.99%** (was 73.97%, **+0.02 pp**) | **71.70%** (was 70.30%, **+1.40 pp**!) |
+| **Precision@10** | **74.18%** (was 73.67%, **+0.51 pp**) | **71.89%** (was 68.30%, **+3.59 pp**!) |
+| **Recall@10** | **72.46%** (was 72.60%, **-0.14 pp**) | **70.35%** (was 70.92%, **-0.57 pp**) |
+| **F1-score@10** | **69.86%** (was 69.72%, **+0.14 pp**) | **67.38%** (was 65.95%, **+1.43 pp**!) |
+| **mAP (Global)** | **85.18%** (was 86.07%, **-0.89 pp**) | **86.40%** (was 86.81%, **-0.41 pp**) |
+
+---
+
+### 🔍 Round 9 Outcomes Analysis
+
+1. **Successful Cross-Modal Precision & F1 Boost (Success)**:
+    *   Cross-modal **Precision@5** jumped from 78.25% to **82.71%** (+4.46 pp), and cross-modal **F1@5** improved to **71.70%** (+1.40 pp).
+    *   **Why**: Squeezing embeddings down to 384 dimensions was a major bottleneck for the multi-label class combinations. Doubling the dimension to 768 gave the model sufficient geometric space to separate classes on the hypersphere, directly lowering false positives and boosting precision.
+2. **CFM Bridge Translation Capacity Restored**:
+    *   The bridge translation loss (Same-Modal Ceiling F1@5 minus Cross-Modal F1@5) was slashed from **-3.67 pp** down to **-2.29 pp**. 
+    *   This confirms that the CFM bridge can now translate S1 representations to S2 space with minimal loss because the input/output representation coordinates are not bottlenecked.
+3. **Next Steps**:
+    *   Now we can proceed to implement SIGReg (Sketched Isotropic Gaussian Regularization) as planned. This will further improve the latent space distribution, helping us cross the 75% accuracy mark.
+
