@@ -133,39 +133,33 @@ def main() -> None:
         train_loss /= len(train_dataset)
         scheduler.step()
 
-        # Evaluation (both 1-step and multi-step ODE solvers)
-        model.eval()
-        with torch.no_grad():
-            # 1-step Euler prediction
-            pred_val_s2_1step = integrate_ode(model, val_s1, steps=1, device=device)
-            pred_val_s2_1step_norm = F.normalize(pred_val_s2_1step, dim=-1).cpu().numpy()
-            
-            # N-step Euler prediction
-            pred_val_s2_nstep = integrate_ode(model, val_s1, steps=args.ode_steps, device=device)
-            pred_val_s2_nstep_norm = F.normalize(pred_val_s2_nstep, dim=-1).cpu().numpy()
-            
-            val_s2_norm = F.normalize(val_s2, dim=-1).numpy()
-            
-            is_multilabel = (val_lbl.ndim == 2)
-            
-            # Compute evaluation retrieval metrics (1-step vs N-step)
-            metrics_1step = compute_retrieval_metrics(
-                query_embeds=pred_val_s2_1step_norm,
-                gallery_embeds=val_s2_norm,
-                query_labels=val_lbl,
-                gallery_labels=val_lbl,
-                top_k=5,
-                is_multilabel=is_multilabel
-            )
-            
-            metrics_nstep = compute_retrieval_metrics(
-                query_embeds=pred_val_s2_nstep_norm,
-                gallery_embeds=val_s2_norm,
-                query_labels=val_lbl,
-                gallery_labels=val_lbl,
-                top_k=5,
-                is_multilabel=is_multilabel
-            )
+        # Perform evaluation (keep tensors on GPU and normalize them)
+        z_1step = integrate_ode(model, val_s1, steps=1, device=device)
+        z_1step_norm = F.normalize(z_1step, dim=-1)
+        
+        z_nstep = integrate_ode(model, val_s1, steps=args.ode_steps, device=device)
+        z_nstep_norm = F.normalize(z_nstep, dim=-1)
+        
+        val_s2_norm = F.normalize(val_s2.to(device), dim=-1)
+        is_multilabel = (val_lbl.ndim == 2)
+        
+        metrics_1step = compute_retrieval_metrics(
+            query_embeds=z_1step_norm,
+            gallery_embeds=val_s2_norm,
+            query_labels=val_lbl,
+            gallery_labels=val_lbl,
+            top_k=5,
+            is_multilabel=is_multilabel
+        )
+        
+        metrics_nstep = compute_retrieval_metrics(
+            query_embeds=z_nstep_norm,
+            gallery_embeds=val_s2_norm,
+            query_labels=val_lbl,
+            gallery_labels=val_lbl,
+            top_k=5,
+            is_multilabel=is_multilabel
+        )
 
         f1_1step = metrics_1step["f1@5"]
         f1_nstep = metrics_nstep["f1@5"]

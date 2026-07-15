@@ -32,8 +32,13 @@ def compute_retrieval_metrics(
     # Accelerated PyTorch path (GPU/CPU)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     
-    q_emb = torch.tensor(query_embeds, dtype=torch.float32, device=device)
-    g_emb = torch.tensor(gallery_embeds, dtype=torch.float32, device=device)
+    def to_tensor(x, dtype, device):
+        if isinstance(x, torch.Tensor):
+            return x.to(device=device, dtype=dtype)
+        return torch.tensor(x, dtype=dtype, device=device)
+    
+    q_emb = to_tensor(query_embeds, torch.float32, device)
+    g_emb = to_tensor(gallery_embeds, torch.float32, device)
     
     # Compute similarity matrix (Q, G)
     sims = torch.matmul(q_emb, g_emb.t())
@@ -51,8 +56,8 @@ def compute_retrieval_metrics(
     top_k_indices = sorted_indices[:, :top_k]
     
     if is_multilabel:
-        q_lbl = torch.tensor(query_labels, dtype=torch.float32, device=device)
-        g_lbl = torch.tensor(gallery_labels, dtype=torch.float32, device=device)
+        q_lbl = to_tensor(query_labels, torch.float32, device=device)
+        g_lbl = to_tensor(gallery_labels, torch.float32, device=device)
         
         q_active_counts = q_lbl.sum(dim=1, keepdim=True)
         valid_queries = (q_active_counts.squeeze(1) > 0)
@@ -108,8 +113,8 @@ def compute_retrieval_metrics(
                     aps.append(ap.item())
         mean_map = float(np.mean(aps)) if aps else 0.0
     else:
-        q_lbl = torch.tensor(query_labels, dtype=torch.long, device=device)
-        g_lbl = torch.tensor(gallery_labels, dtype=torch.long, device=device)
+        q_lbl = to_tensor(query_labels, torch.long, device=device)
+        g_lbl = to_tensor(gallery_labels, torch.long, device=device)
         
         relevance_matrix = (q_lbl.unsqueeze(1) == g_lbl.unsqueeze(0)).float()
         if exclude_self_matches and mask is not None:
