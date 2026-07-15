@@ -224,6 +224,10 @@ class BEN14KDataset(BaseDataset):
             s1_path = os.path.join(self.ben14k_root, "s1", s1_id, f"{s1_id}_all.npy")
             # Loaded shape: (2, 120, 120)
             img_s1 = np.load(s1_path).astype(np.float32)
+            # Channel-wise Z-score normalization
+            s1_mean = np.array([-11.222, -17.305], dtype=np.float32).reshape(2, 1, 1)
+            s1_std = np.array([3.619, 3.765], dtype=np.float32).reshape(2, 1, 1)
+            img_s1 = (img_s1 - s1_mean) / s1_std
             # Rearrange to (120, 120, 2) for augmentations
             img_s1 = np.moveaxis(img_s1, 0, -1)
             
@@ -231,6 +235,10 @@ class BEN14KDataset(BaseDataset):
             s2_path = os.path.join(self.ben14k_root, "s2", s2_id, f"{s2_id}_all.npy")
             # Loaded shape: (12, 120, 120)
             img_s2 = np.load(s2_path).astype(np.float32)
+            # Channel-wise Z-score normalization
+            s2_mean = np.array([337.61, 430.11, 683.00, 629.57, 1090.09, 2366.82, 2846.02, 2958.16, 3094.28, 3070.36, 2246.86, 1377.35], dtype=np.float32).reshape(12, 1, 1)
+            s2_std = np.array([185.52, 227.44, 272.43, 419.15, 379.51, 556.08, 737.91, 804.21, 778.84, 717.39, 653.55, 678.00], dtype=np.float32).reshape(12, 1, 1)
+            img_s2 = (img_s2 - s2_mean) / s2_std
             # Rearrange to (120, 120, 12) for augmentations
             img_s2 = np.moveaxis(img_s2, 0, -1)
 

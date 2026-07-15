@@ -7,6 +7,17 @@ from Saber.datasets.base_dataset import BaseDataset
 
 logger = logging.getLogger("saber")
 
+DSRSID_CLASSES = [
+    "aquafarm",
+    "cloud",
+    "forest",
+    "high building",
+    "low building",
+    "farm land",
+    "river",
+    "water"
+]
+
 class DSRSIDDataset(BaseDataset):
     """
     Dataset class for DSRSID Gaofen-1 satellite remote sensing image pairs.
@@ -123,15 +134,22 @@ class DSRSIDDataset(BaseDataset):
         # 2. Load image array
         if self.modality == "pan":
             # PAN images shape is (1, 256, 256)
-            img = np.array(self.f_handle["PAN_IMAGES"][real_idx], dtype=np.uint8)
+            img = np.array(self.f_handle["PAN_IMAGES"][real_idx], dtype=np.uint8).astype(np.float32)
+            # Z-score normalize PAN
+            img = (img - 73.59) / 22.78
             # Rearrange to HWC (256, 256, 1) for Albumentations augmentations
             img = np.moveaxis(img, 0, -1)
         elif self.modality == "both":
             # PAN images shape is (1, 256, 256)
-            img_pan = np.array(self.f_handle["PAN_IMAGES"][real_idx], dtype=np.uint8)
+            img_pan = np.array(self.f_handle["PAN_IMAGES"][real_idx], dtype=np.uint8).astype(np.float32)
+            img_pan = (img_pan - 73.59) / 22.78
             img_pan = np.moveaxis(img_pan, 0, -1)
+            
             # MS images shape is (4, 64, 64)
-            img_ms = np.array(self.f_handle["MUL_IMAGES"][real_idx], dtype=np.uint8)
+            img_ms = np.array(self.f_handle["MUL_IMAGES"][real_idx], dtype=np.uint8).astype(np.float32)
+            ms_mean = np.array([113.24, 111.79, 84.83, 53.06], dtype=np.float32).reshape(4, 1, 1)
+            ms_std = np.array([22.96, 27.69, 26.16, 21.43], dtype=np.float32).reshape(4, 1, 1)
+            img_ms = (img_ms - ms_mean) / ms_std
             img_ms = np.moveaxis(img_ms, 0, -1)
             
             # Resize MS image (64x64x4) to match PAN spatial dimension (256x256) using cv2 for massive speedup
@@ -140,7 +158,10 @@ class DSRSIDDataset(BaseDataset):
             img = np.concatenate([img_pan, img_ms_resized], axis=-1)
         else:
             # MS images shape is (4, 64, 64)
-            img = np.array(self.f_handle["MUL_IMAGES"][real_idx], dtype=np.uint8)
+            img = np.array(self.f_handle["MUL_IMAGES"][real_idx], dtype=np.uint8).astype(np.float32)
+            ms_mean = np.array([113.24, 111.79, 84.83, 53.06], dtype=np.float32).reshape(4, 1, 1)
+            ms_std = np.array([22.96, 27.69, 26.16, 21.43], dtype=np.float32).reshape(4, 1, 1)
+            img = (img - ms_mean) / ms_std
             # Rearrange to HWC (64, 64, 4) for Albumentations augmentations
             img = np.moveaxis(img, 0, -1)
 
