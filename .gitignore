@@ -60,3 +60,11 @@ Saber/extracted_temp*/
 ~$*.docx
 ~$*.pptx
 
+# User requested excluded files
+run_round1.ps1
+SABER_Presentation_Script.docx
+SABER_Colab_backup.ipynb
+improvement_plan.md
+benchmark_latency.py
+\[Pub\] ISRO BAH 2026 _ Idea Submission Team Sentinel8 Final.pdf
+*Sentinel8 Final.pdf
