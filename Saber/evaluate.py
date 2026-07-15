@@ -101,18 +101,19 @@ def main() -> None:
         raise ValueError(f"Unknown dataset configuration: '{config.dataset.name}'")
 
     logger.info(f"Dataset Loaded: {config.dataset.name.upper()} (Synthetic={eval_dataset.use_synthetic})")
-    logger.info(f"Evaluation samples: {len(eval_dataset)}")
 
     # Build Dataloader
     num_workers = 0 if dataset_name == "dsrsid" else config.dataset.num_workers
+    extraction_batch_size = 256 if torch.cuda.is_available() else config.dataset.batch_size
     eval_loader = DataLoader(
         eval_dataset,
-        batch_size=config.dataset.batch_size,
+        batch_size=extraction_batch_size,
         shuffle=False,
-        num_workers=num_workers
+        num_workers=num_workers,
+        pin_memory=torch.cuda.is_available(),
+        persistent_workers=(num_workers > 0)
     )
 
-    # Create model instance based on architecture config
     arch = config.model.get("architecture", "saber").lower()
     if arch == "saber":
         logger.info("Instantiating SABER model (DOFA + LoRA)...")

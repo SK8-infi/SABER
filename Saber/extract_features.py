@@ -17,7 +17,6 @@ from Saber.datasets.dsrsid import DSRSIDDataset
 from Saber.datasets.transforms import get_transforms
 from Saber.models.rejepa import REJEPA
 from Saber.models.saber import SABER
-
 def main() -> None:
     parser = argparse.ArgumentParser(description="Extract S1 and S2 latent features from trained REJEPA/SABER")
     parser.add_argument("--config", type=str, default="Saber/configs/config.yaml", help="Path to config file")
@@ -95,11 +94,14 @@ def main() -> None:
 
     # Build Dataloader
     num_workers = 0 if dataset_name == "dsrsid" else config.dataset.num_workers
+    extraction_batch_size = 256 if torch.cuda.is_available() else config.dataset.batch_size
     eval_loader = DataLoader(
         eval_dataset,
-        batch_size=config.dataset.batch_size,
+        batch_size=extraction_batch_size,
         shuffle=False,
-        num_workers=num_workers
+        num_workers=num_workers,
+        pin_memory=torch.cuda.is_available(),
+        persistent_workers=(num_workers > 0)
     )
 
     # Create model instance
@@ -110,7 +112,6 @@ def main() -> None:
     else:
         logger.info("Instantiating REJEPA model...")
         model = REJEPA(config=config, in_channels=in_channels).to(device)
-
     # Load checkpoint
     if args.checkpoint and os.path.exists(args.checkpoint):
         logger.info(f"Loading checkpoint parameters from: '{args.checkpoint}'")
