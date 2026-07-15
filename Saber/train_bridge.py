@@ -81,8 +81,8 @@ def main() -> None:
     train_dataset = TensorDataset(train_s1, train_s2)
     train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True)
 
-    # Initialize model, loss and optimization
-    model = CFMBridge(dim=384, hidden_dim=768, num_blocks=5, dropout=0.1).to(device)
+    feat_dim = train_s1.shape[1]
+    model = CFMBridge(dim=feat_dim, hidden_dim=768, num_blocks=5, dropout=0.1).to(device)
     optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
     
     warmup_scheduler = torch.optim.lr_scheduler.LinearLR(
