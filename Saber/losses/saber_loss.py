@@ -3,6 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from typing import Dict, Optional
 from Saber.losses.vicreg_loss import VICRegLoss
+from Saber.losses.sigreg import sigreg_strong_loss
 from Saber.models.hashing_head import similarity_preserving_hash_loss
 
 class SaberCombinedLoss(nn.Module):
@@ -25,7 +26,8 @@ class SaberCombinedLoss(nn.Module):
         covariance_weight: float = 1.0,
         epsilon: float = 1e-4,
         hashing_weight: float = 0.1,
-        triplet_weight: float = 0.5
+        triplet_weight: float = 0.5,
+        sigreg_weight: float = 0.1
     ) -> None:
         super().__init__()
         self.jaccard_weight = jaccard_weight
@@ -34,6 +36,7 @@ class SaberCombinedLoss(nn.Module):
         self.ranking_temp_p = ranking_temp_p
         self.hashing_weight = hashing_weight
         self.triplet_weight = triplet_weight
+        self.sigreg_weight = sigreg_weight
         
         self.vicreg_loss_fn = VICRegLoss(
             invariance_weight=invariance_weight,
@@ -143,6 +146,11 @@ class SaberCombinedLoss(nn.Module):
         sim_hash_loss = torch.tensor(0.0, device=device)
         quant_loss = torch.tensor(0.0, device=device)
         
+        # E. SIGReg Regularization
+        sigreg_loss = torch.tensor(0.0, device=device)
+        if self.sigreg_weight > 0.0:
+            sigreg_loss = 0.5 * (sigreg_strong_loss(z1) + sigreg_strong_loss(z2))
+
         if soft_codes1 is not None:
             h_loss1, s_loss1, q_loss1 = similarity_preserving_hash_loss(soft_codes1, targets, quantization_weight=0.01)
             if soft_codes2 is not None:
@@ -161,6 +169,7 @@ class SaberCombinedLoss(nn.Module):
             (self.ranking_weight * ranking_loss) +
             (self.triplet_weight * triplet_loss) +
             (self.hashing_weight * hash_loss) +
+            (self.sigreg_weight * sigreg_loss) +
             vicreg_metrics["loss"]
         )
 
@@ -172,6 +181,7 @@ class SaberCombinedLoss(nn.Module):
             "hash_loss": hash_loss,
             "sim_hash_loss": sim_hash_loss,
             "quant_loss": quant_loss,
+            "sigreg_loss": sigreg_loss,
             "invariance_loss": vicreg_metrics["invariance_loss"],
             "variance_loss": vicreg_metrics["variance_loss"],
             "covariance_loss": vicreg_metrics["covariance_loss"]

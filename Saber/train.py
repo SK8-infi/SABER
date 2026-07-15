@@ -117,7 +117,7 @@ def main() -> None:
         logger.info("Instantiating SABER model (DOFA + LoRA)...")
         model = SABER(config=config, in_channels=in_channels).to(device)
         
-        # Combined target prediction + Jaccard + Ranking + VICReg regularized loss
+        # Combined target prediction + Jaccard + Ranking + VICReg + SIGReg loss
         criterion = SaberCombinedLoss(
             jaccard_weight=float(config.geometry.get("jaccard_weight", 1.0)),
             ranking_weight=float(config.geometry.get("ranking_weight", 1.0)),
@@ -128,8 +128,11 @@ def main() -> None:
             covariance_weight=float(config.loss.vicreg_covariance_weight),
             epsilon=float(config.loss.vicreg_epsilon),
             hashing_weight=float(config.get("hashing", {}).get("weight", 0.1)),
-            triplet_weight=float(config.geometry.get("triplet_weight", 0.5))
+            triplet_weight=float(config.geometry.get("triplet_weight", 0.5)),
+            sigreg_weight=float(config.geometry.get("sigreg_weight", 0.1))
         )
+        
+
     elif arch == "rejepa":
         logger.info("Instantiating REJEPA model (timm baseline)...")
         model = REJEPA(config=config, in_channels=in_channels).to(device)
