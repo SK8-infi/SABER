@@ -31,16 +31,16 @@ model:
   # Type options: "conv1x1", "cnn"
   input_adapter_type: "conv1x1"
   
-  # Projection Head: 2-layer MLP + LayerNorm + GELU + Residual
+  # Projection Head: 3-layer MLP + LayerNorm + GELU + Residual
   projection_head:
-    hidden_dim: 512
-    out_dim: 384
+    hidden_dim: 768
+    out_dim: 768
     
   # Predictor: predicts targets. Options: "mlp", "transformer"
   predictor:
     type: "mlp"
-    hidden_dim: 512
-    out_dim: 384
+    hidden_dim: 768
+    out_dim: 768
     num_layers: 2         # Only used if predictor is mlp or transformer blocks
     num_heads: 4          # Only used for transformer predictor
 
