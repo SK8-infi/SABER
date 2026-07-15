@@ -180,13 +180,15 @@ Evaluated on real data using a strict **20% Query / 80% Gallery partition** (100
 *   **Task**: Cross-modal retrieval of Sentinel-2 multispectral scenes using Sentinel-1 SAR query images.
 *   **Evaluation Split**: 2,966 query samples, 11,866 gallery database items.
 
-| Evaluation Metric | Same-Modal Ceiling (S2 $\rightarrow$ S2) | Cross-Modal Baseline (No Bridge) | Cross-Modal SABER (**+CFM Bridge**) | Improvement |
+| Evaluation Metric | Same-Modal Ceiling (S2 $\rightarrow$ S2) | Cross-Modal Baseline (No Bridge) | Cross-Modal SABER (**+CFM Bridge**) | Improvement (vs Baseline) |
 | :--- | :---: | :---: | :---: | :---: |
-| **Precision@5** | 69.48% | — | **52.86%** | — |
-| **Recall@5** | 68.25% | — | **61.57%** | — |
-| **F1-score@5** | **64.38%** | 44.83% | **52.20%** | **+7.37 pp** |
-| **F1-score@10** | **63.78%** | 44.30% | **52.60%** | **+8.30 pp** |
-| **mAP (Global)** | **88.80%** | 71.95% | **83.23%** | **+11.28 pp** 🚀 |
+| **Precision@5** | 82.38% | 60.41% | **79.73%** | **+19.32 pp** |
+| **Recall@5** | 70.17% | 53.93% | **68.32%** | **+14.39 pp** |
+| **F1-score@5** | **72.53%** | 52.49% | **70.38%** | **+17.89 pp** |
+| **Precision@10** | 72.75% | 51.72% | **69.16%** | **+17.44 pp** |
+| **Recall@10** | 71.31% | 56.68% | **69.70%** | **+13.02 pp** |
+| **F1-score@10** | **68.43%** | 49.40% | **65.76%** | **+16.36 pp** |
+| **mAP (Global)** | **83.75%** | 77.79% | **85.86%** | **+8.07 pp** 🚀 |
 
 ### B. DSRSID (Gaofen-1 PAN ◄► Gaofen-1 MS)
 *   **Task**: Cross-modal retrieval of Gaofen-1 Multispectral images using Panchromatic query images.
@@ -272,14 +274,16 @@ To train the base encoder (DOFA ViT + trainable LoRA adapters) on Sentinel-1/2 o
     ```
 
 ### 4. CFM Latent Bridge Training
-To extract the projection embeddings from the trained encoder and train the Conditional Flow Matching (CFM) alignment bridge:
+To train the Conditional Flow Matching (CFM) alignment bridge, you must first extract the projection embeddings from the trained encoder:
 *   **Sentinel-1/2 (BEN-14K)**:
     ```bash
-    python Saber/train_bridge.py --dataset_name ben14k --data_dir Datasets/benv1_14k --epochs 5 --synthetic false
+    python Saber/extract_features.py --checkpoint checkpoints/latest_ben14k.pth --output_dir checkpoints/extracted
+    python Saber/train_bridge.py --features_dir checkpoints/extracted --epochs 80
     ```
 *   **Gaofen-1 (DSRSID)**:
     ```bash
-    python Saber/train_bridge.py --dataset_name dsrsid --data_dir Datasets/DSRSID/DSRSID-001.mat --epochs 5 --synthetic false
+    python Saber/extract_features.py --checkpoint checkpoints/latest_dsrsid.pth --output_dir checkpoints/extracted_dsrsid
+    python Saber/train_bridge.py --features_dir checkpoints/extracted_dsrsid --epochs 80
     ```
 
 ### 5. Evaluate Retrieval Performance
