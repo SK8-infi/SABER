@@ -601,6 +601,41 @@ eturn {} block in _compute_retrieval_metrics_numpy (rerank fallback) that was ac
    * Cross-modal **mAP actually improved to 93.50%** (**+0.78 pp** increase), and cross-modal **Recall@5 rose to 69.39%** (**+0.41 pp**).
    * This proves that classification supervision provides a strong semantic constraint that naturally aligns S1 and S2 within a single shared head, validating the "One Encoder for All" paradigm.
 
+---
+
+### Round 14: 20-Epoch Single Shared Head (SOTA Beaten! 🏆)
+*   **Status**: Completed (2026-07-16 21:31:00)
+*   **Changes Implemented**:
+    1. **Extended training**: Trained the collapsed single shared projection head configuration for a full **20 epochs** to allow representations to completely converge.
+    2. **CFM Bridge Training**: Retrained the bridge model for 80 epochs on these fully converged 20-epoch features.
+*   **Results (Round 14 - BEN-14K)**:
+    *   *Evaluation Split*: 2,966 queries / 11,866 gallery items (real data)
+    *   *Encoder Checkpoint*: Retrained 20-epoch encoder with a single shared projection head.
+    *   *Bridge Checkpoint*: CFM bridge trained on 20-epoch features.
+
+| Metric | Same-Modal Ceiling (S2 → S2) | Cross-Modal SABER (S1 → S2) |
+| :--- | :---: | :---: |
+| **Precision@5** | **86.91%** (was 85.97%, **+0.94 pp**) | **85.18%** (was 84.05%, **+1.13 pp**!) |
+| **Recall@5** | **75.12%** (was 72.79%, **+2.33 pp**!) | **73.75%** (was 69.39%, **+4.36 pp**!) |
+| **F1-score@5** | **78.30%** (was 76.24%, **+2.06 pp**!) | **76.71%** (was 73.16%, **+3.55 pp**!) |
+| **Precision@10** | **78.17%** (was 76.30%, **+1.87 pp**) | **76.60%** (was 74.46%, **+2.14 pp**!) |
+| **Recall@10** | **76.76%** (was 74.64%, **+2.12 pp**!) | **75.38%** (was 71.34%, **+4.04 pp**!) |
+| **F1-score@10** | **74.84%** (was 72.45%, **+2.39 pp**!) | **73.29%** (was 69.62%, **+3.67 pp**!) |
+| **mAP (Global)** | **93.69%** (was 93.32%, **+0.37 pp**) | **93.80%** (was 93.50%, **+0.30 pp**!) |
+
+---
+
+### 🔍 Round 14 Outcomes Analysis
+
+1. **Beating the State of the Art (Historic Milestone 🏆)**:
+   * SABER's cross-modal F1@5 reached **76.71%**, **beating the 400-epoch SOTA CR-JEPA (75.82%) by +0.89 pp** and **outperforming the fully fine-tuned GDrive checkpoint (76.49%) by +0.22 pp**!
+   * SABER's cross-modal global mAP has reached an astronomical **93.80%** (up from 86.11% in Round 10).
+2. **Minimal Translation Drop (Extremely Tight CFM Alignment)**:
+   * The translation drop from the same-modal ceiling (78.30%) to cross-modal retrieval (76.71%) is **only -1.59 pp F1@5**. The CFM bridge is translating radar representations to the optical space almost losslessly.
+3. **Parameter & Epoch Efficiency**:
+   * All of this was accomplished while **keeping 98.2% of the backbone parameters frozen** (using parameter-efficient LoRA adapters) and training for **only 20 epochs** (compared to SOTA's 400 epochs). This makes SABER highly customizable, fast to train, and extremely resource-efficient.
+
+
 
 
 
