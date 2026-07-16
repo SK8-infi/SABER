@@ -26,7 +26,6 @@ model:
   backbone_name: "vit_base_patch16_224"
   pretrained: true
   freeze_backbone: true
-  unfreeze_last_n_blocks: 3
   
   # Input Adapter: maps input channels (e.g., 2, 4, 12) to 3 channels for ViT
   # Type options: "conv1x1", "cnn"
@@ -83,7 +82,7 @@ loss:
 train:
   learning_rate: 0.0005
   weight_decay: 0.01
-  epochs: 20
+  epochs: 5
   grad_clip: 1.0
   grad_accumulation_steps: 4  # Effective batch = 64 * 4 = 256 (271x more pairs for Jaccard/ranking losses)
   amp: true              # Automated Mixed Precision
