@@ -94,16 +94,25 @@ class Trainer:
             # Execute forward pass under autocast for mixed precision
             with torch.cuda.amp.autocast(enabled=self.amp_enabled):
                 if self.use_ema and self.target_model is not None:
-                    # 1. Online forward pass (computes z1 and z1_pred)
-                    z1, _, z1_pred = self.model(x1, x2)
-                    
-                    # 2. Target forward pass (using EMA target model with stop-gradient)
-                    with torch.no_grad():
-                        _, z2, _ = self.target_model(x1, x2)
-                        z2 = z2.detach()
+                    outputs = self.model(x1, x2)
+                    if len(outputs) == 5:
+                        z1_a, z1_b, z2_a, z2_b, z1_pred = outputs
+                        with torch.no_grad():
+                            target_outputs = self.target_model(x1, x2)
+                            _, _, _, target_z2_b, _ = target_outputs
+                            target_z2_b = target_z2_b.detach()
+                        z2 = target_z2_b
+                    else:
+                        z1, _, z1_pred = outputs
+                        with torch.no_grad():
+                            _, z2, _ = self.target_model(x1, x2)
+                            z2 = z2.detach()
                 else:
-                    # Standard online dual projection path
-                    z1, z2, z1_pred = self.model(x1, x2)
+                    outputs = self.model(x1, x2)
+                    if len(outputs) == 5:
+                        z1_a, z1_b, z2_a, z2_b, z1_pred = outputs
+                    else:
+                        z1, z2, z1_pred = outputs
                 
                 # Forward to loss criterion (with labels if supported)
                 if labels is not None:
@@ -111,21 +120,41 @@ class Trainer:
                     soft1 = getattr(self.model, "soft_codes1", None)
                     soft2 = getattr(self.model, "soft_codes2", None)
                     
-                    # If using EMA, compute target soft codes from target projection
                     if self.use_ema and self.target_model is not None:
                         if getattr(self.target_model, "hashing_head", None) is not None:
                             soft2 = self.target_model.hashing_head(z2)
                     
-                    try:
-                        if soft1 is not None:
-                            loss_dict = self.criterion(z1, z2, z1_pred, labels, soft1, soft2)
-                        else:
-                            loss_dict = self.criterion(z1, z2, z1_pred, labels)
-                    except TypeError:
-                        # Fallback if loss function doesn't accept labels
-                        loss_dict = self.criterion(z1, z2, z1_pred)
+                    if len(outputs) == 5:
+                        loss_dict = self.criterion(
+                            z1=z1_a,
+                            z2=z2_a,
+                            z1_pred=z1_pred,
+                            targets=labels,
+                            soft_codes1=soft1,
+                            soft_codes2=soft2,
+                            z1_b=z1_b,
+                            z2_b=z2 if self.use_ema else z2_b
+                        )
+                    else:
+                        try:
+                            if soft1 is not None:
+                                loss_dict = self.criterion(z1, z2, z1_pred, labels, soft1, soft2)
+                            else:
+                                loss_dict = self.criterion(z1, z2, z1_pred, labels)
+                        except TypeError:
+                            loss_dict = self.criterion(z1, z2, z1_pred)
                 else:
-                    loss_dict = self.criterion(z1, z2, z1_pred)
+                    if len(outputs) == 5:
+                        loss_dict = self.criterion(
+                            z1=z1_a,
+                            z2=z2_a,
+                            z1_pred=z1_pred,
+                            targets=None,
+                            z1_b=z1_b,
+                            z2_b=z2 if self.use_ema else z2_b
+                        )
+                    else:
+                        loss_dict = self.criterion(z1, z2, z1_pred)
                 
                 loss = loss_dict["loss"] / self.accum_steps
 

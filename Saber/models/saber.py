@@ -64,11 +64,26 @@ class SABER(nn.Module):
         self.backbone.model.print_trainable_parameters()
 
         # 3. Projection Head
-        self.projection_head = ProjectionHead(
-            in_dim=self.backbone.embed_dim,
-            hidden_dim=config.model.projection_head.hidden_dim,
-            out_dim=config.model.projection_head.out_dim
-        )
+        if self.in_channels in [14, 5]:
+            self.s1_projection = ProjectionHead(
+                in_dim=self.backbone.embed_dim,
+                hidden_dim=config.model.projection_head.hidden_dim,
+                out_dim=config.model.projection_head.out_dim
+            )
+            self.s2_projection = ProjectionHead(
+                in_dim=self.backbone.embed_dim,
+                hidden_dim=config.model.projection_head.hidden_dim,
+                out_dim=config.model.projection_head.out_dim
+            )
+            self.projection_head = self.s2_projection  # Fallback reference
+        else:
+            self.projection_head = ProjectionHead(
+                in_dim=self.backbone.embed_dim,
+                hidden_dim=config.model.projection_head.hidden_dim,
+                out_dim=config.model.projection_head.out_dim
+            )
+            self.s1_projection = self.projection_head
+            self.s2_projection = self.projection_head
 
         # 4. Predictor
         self.predictor = Predictor(
@@ -134,32 +149,50 @@ class SABER(nn.Module):
         In training, x1 is context view, x2 is target view.
         """
         if self.in_channels in [14, 5]:
-            # Split concatenated channels into S1 context and S2 target
+            # Cross-modal path (Sentinel-1 and Sentinel-2)
             if x1.shape[1] == self.in_channels:
-                x_s1 = x1[:, :self.s1_channels, :, :]
-                target_tensor = x2 if x2 is not None else x1
-                x_s2 = target_tensor[:, self.s1_channels:, :, :]
+                x_s1_a = x1[:, :self.s1_channels, :, :]
+                x_s2_a = x1[:, self.s1_channels:, :, :]
+                if x2 is not None:
+                    x_s1_b = x2[:, :self.s1_channels, :, :]
+                    x_s2_b = x2[:, self.s1_channels:, :, :]
+                else:
+                    x_s1_b = None
+                    x_s2_b = None
             else:
-                x_s1 = x1
-                x_s2 = x2
+                x_s1_a = x1
+                x_s2_a = x2
+                x_s1_b = None
+                x_s2_b = None
+
+            # 1. Project View A of S1 and S2
+            feats1_a = self.backbone(x_s1_a, self.s1_wvs)
+            z1_a = self.s1_projection(feats1_a)
+            z1_pred = self.predictor(z1_a)
+
+            if x_s2_a is not None:
+                feats2_a = self.backbone(x_s2_a, self.s2_wvs)
+                z2_a = self.s2_projection(feats2_a)
+            else:
+                z2_a = None
+
+            # 2. Project View B of S1 and S2 if available
+            if x_s1_b is not None and x_s2_b is not None:
+                feats1_b = self.backbone(x_s1_b, self.s1_wvs)
+                z1_b = self.s1_projection(feats1_b)
                 
-            # Embed context S1
-            feats1 = self.backbone(x_s1, self.s1_wvs)
-            z1 = self.projection_head(feats1)
-            z1_pred = self.predictor(z1)
-            
-            if x_s2 is not None:
-                # Embed target S2
-                feats2 = self.backbone(x_s2, self.s2_wvs)
-                z2 = self.projection_head(feats2)
+                feats2_b = self.backbone(x_s2_b, self.s2_wvs)
+                z2_b = self.s2_projection(feats2_b)
                 
                 # Cache soft codes if hashing head is present
                 if self.hashing_head is not None:
-                    self.soft_codes1 = self.hashing_head(z1)
-                    self.soft_codes2 = self.hashing_head(z2)
+                    self.soft_codes1 = self.hashing_head(z1_a)
+                    self.soft_codes2 = self.hashing_head(z2_b)
                     
-                return z1, z2, z1_pred
-            return z1_pred
+                return z1_a, z1_b, z2_a, z2_b, z1_pred
+            else:
+                # Return standard 3 elements for single-view or eval
+                return z1_a, z2_a, z1_pred
         else:
             # Same-modality path
             wvs = self._get_wvs_for_channels(self.in_channels)
@@ -190,12 +223,14 @@ class SABER(nn.Module):
                     # Default: extract target S2 features for gallery
                     x_target = x[:, self.s1_channels:, :, :]
                     feats = self.backbone(x_target, self.s2_wvs)
+                    z = self.s2_projection(feats)
                 elif x.shape[1] == self.s2_channels:
                     feats = self.backbone(x, self.s2_wvs)
+                    z = self.s2_projection(feats)
                 elif x.shape[1] == self.s1_channels:
                     # For S1 query, project it and run predictor/bridge to align with target space
                     feats = self.backbone(x, self.s1_wvs)
-                    z = self.projection_head(feats)
+                    z = self.s1_projection(feats)
                     if self.bridge is not None:
                         z_pred = self.bridge(z)
                     else:
@@ -207,7 +242,6 @@ class SABER(nn.Module):
                 else:
                     raise ValueError(f"Unexpected channel dimension in cross-modal retrieval: {x.shape}")
                 
-                z = self.projection_head(feats)
                 if self.hashing_head is not None:
                     return self.hashing_head.hard_codes(z)
                 embeddings = self.retrieval_head(z)
