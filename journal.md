@@ -544,30 +544,31 @@ eturn {} block in _compute_retrieval_metrics_numpy (rerank fallback) that was ac
 *   **Results (Round 12 - BEN-14K)**:
     *   *Evaluation Split*: 2,966 queries / 11,866 gallery items (real data)
     *   *Encoder Checkpoint*: Retrained 5-epoch encoder with joint BCE loss.
-    *   *Bridge Checkpoint*: Old `bridge_best.pth` (untrained on new features; needs retraining!).
+    *   *Bridge Checkpoint*: Newly trained `bridge_best.pth` after fixing S1 feature extraction routing.
 
 | Metric | Same-Modal Ceiling (S2 → S2) | Cross-Modal SABER (S1 → S2) |
 | :--- | :---: | :---: |
-| **Precision@5** | **86.18%** (was 83.83%, **+2.35 pp**) | **63.16%** (using old bridge) |
-| **Recall@5** | **74.76%** (was 68.68%, **+6.08 pp**) | **65.01%** (using old bridge) |
-| **F1-score@5** | **77.72%** (was 72.40%, **+5.32 pp**) | **60.24%** (using old bridge) |
-| **Precision@10** | **76.92%** (was 72.75%, **+4.17 pp**) | **55.27%** (using old bridge) |
-| **Recall@10** | **76.20%** (was 70.55%, **+5.65 pp**) | **65.70%** (using old bridge) |
-| **F1-score@10** | **73.84%** (was 68.05%, **+5.79 pp**) | **56.15%** (using old bridge) |
-| **mAP (Global)** | **93.83%** (was 83.90%, **+9.93 pp**!) | **85.64%** (using old bridge) |
+| **Precision@5** | **86.18%** (was 83.83%, **+2.35 pp**) | **84.78%** (was 81.82%, **+2.96 pp**!) |
+| **Recall@5** | **74.76%** (was 68.68%, **+6.08 pp**) | **68.98%** (was 68.39%, **+0.59 pp**) |
+| **F1-score@5** | **77.72%** (was 72.40%, **+5.32 pp**) | **73.24%** (was 71.47%, **+1.77 pp**!) |
+| **Precision@10** | **76.92%** (was 72.75%, **+4.17 pp**) | **77.20%** (was 71.00%, **+6.20 pp**!) |
+| **Recall@10** | **76.20%** (was 70.55%, **+5.65 pp**) | **70.83%** (was 70.75%, **+0.08 pp**) |
+| **F1-score@10** | **73.84%** (was 68.05%, **+5.79 pp**) | **70.81%** (was 67.25%, **+3.56 pp**!) |
+| **mAP (Global)** | **93.83%** (was 83.90%, **+9.93 pp**!) | **92.72%** (was 86.11%, **+6.61 pp**!) |
 
 ---
 
 ### 🔍 Round 12 Outcomes Analysis
 
-1. **Massive Same-Modal Ceiling Breakthrough (Huge Success 🎉)**:
-   * Same-modal optical retrieval **F1@5 skyrocketed by +5.32 pp to 77.72%**, and **Precision@5 reached 86.18%**! 
-   * **Global mAP jumped to an all-time high of 93.83%** (up from 83.90%, a **+9.93 pp** increase!).
+1. **Massive Same-Modal Ceiling & Cross-Modal Breakthrough (Huge Success 🎉)**:
+   * Same-modal optical retrieval **F1@5 skyrocketed by +5.32 pp to 77.72%**, and **Precision@5 reached 86.18%**!
+   * **Global mAP reached 93.83%** for same-modal, and **92.72% for cross-modal** (+6.61 pp increase).
    * This proves that direct multi-label classification supervision is the single most powerful driver for remote sensing retrieval representation, organizing the latent space around distinct land-cover classes.
 
-2. **Cross-Modal Retrieval Mismatch (Temporary)**:
-   * The cross-modal F1@5 score dropped to **60.24%** because the evaluation script loaded the **old CFM bridge checkpoint** (`bridge_best.pth`). 
-   * Since the encoder was trained with the new classification loss, the feature distribution of the projection heads completely shifted. The old bridge is still attempting to map S1 to S2 using the old coordinate space.
-   * **Fix**: Run `python Saber/train_bridge.py` to train the CFM bridge on these newly learned joint features. Once the bridge is trained, cross-modal performance is expected to align closely with the same-modal ceiling.
+2. **Flow-Matching Bridge Alignment works (Success)**:
+   * With the corrected `extract_features.py` routing, the bridge trained successfully.
+   * Cross-modal F1@5 reached **73.24%** (an all-time project-best cross-modal score) and Precision@5 reached **84.78%**!
+   * The translation drop from the ceiling is now only **-4.48 pp**, validating the flow-matching alignment capability.
+
 
 
