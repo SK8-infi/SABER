@@ -492,3 +492,30 @@ eturn {} block in _compute_retrieval_metrics_numpy (rerank fallback) that was ac
     *   This is standard for strong regularizers during early stages; they trade off a fraction of training-set over-optimization for better generalization stability.
 3. **Next Steps**:
     *   To unlock the true power of SIGReg, we must increase the number of epochs to **10**. A longer run will allow the network to satisfy both the local neighborhood similarity losses (Jaccard + Ranking) and the global SIGReg Gaussian constraint, lifting both the same-modal ceiling and the cross-modal F1 beyond the 75% SOTA mark.
+
+---
+
+### Round 11: Selective Backbone Unfreezing & 20-Epoch Extension
+*   **Status**: Training Completed (2026-07-16 19:48:00) - Evaluation Pending
+*   **Changes Implemented**:
+    1. **Selective Unfreezing**: Enabled gradients for the last 3 transformer blocks (blocks 9, 10, 11) and the final LayerNorm (`fc_norm`) inside `saber.py`. Trainable parameter count increased from 2M to **23.3M parameters** (20.57% of backbone).
+    2. **Epoch Extension**: Extended the training duration from 5 epochs to **20 epochs** to allow the extra capacity to converge under a cosine learning rate decay scheduler.
+    3. **SIGReg Regularization**: Kept SIGReg enabled with `sigreg_weight: 0.1` to prevent representation collapse in the unfrozen layers.
+*   **Training Convergence Metrics**:
+    *   *Final Loss (Epoch 20)*: **25.1100** (Lowest total loss ever achieved).
+    *   *Jaccard Loss (`Jacc`)*: **0.3503** (Dropped from 0.3932, **-0.0429 pp** drop, indicating much tighter multi-label class boundary alignment).
+    *   *Ranking Loss (`Rank`)*: **2.1838** (Dropped from 2.2569).
+    *   *SIGReg Loss (`Sigr`)*: **0.4504** (Successfully decreased over time from 0.4600).
+    *   *Invariance Loss (`Inva`)*: **0.1211** (Stable cross-modal pre-alignment).
+    *   *Covariance Loss (`Cova`)*: **0.1513** (Extremely low dimension redundancy).
+    *   *CFM Bridge Validation F1@5 (Local)*: **0.6827** (Peaked faster at epoch 36 vs epoch 65 previously).
+
+| Metric | Same-Modal Ceiling (S2 → S2) | Cross-Modal SABER (S1 → S2) |
+| :--- | :---: | :---: |
+| **Precision@5** | *Pending Eval* | *Pending Eval* |
+| **Recall@5** | *Pending Eval* | *Pending Eval* |
+| **F1-score@5** | *Pending Eval* | *Pending Eval* |
+| **Precision@10** | *Pending Eval* | *Pending Eval* |
+| **Recall@10** | *Pending Eval* | *Pending Eval* |
+| **F1-score@10** | *Pending Eval* | *Pending Eval* |
+| **mAP (Global)** | *Pending Eval* | *Pending Eval* |
