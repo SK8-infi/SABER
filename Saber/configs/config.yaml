@@ -26,6 +26,7 @@ model:
   backbone_name: "vit_base_patch16_224"
   pretrained: true
   freeze_backbone: true
+  unfreeze_last_n_blocks: 3
   
   # Input Adapter: maps input channels (e.g., 2, 4, 12) to 3 channels for ViT
   # Type options: "conv1x1", "cnn"

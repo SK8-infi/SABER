@@ -61,6 +61,19 @@ class SABER(nn.Module):
         )
         self.backbone.model = get_peft_model(self.backbone.model, lora_config)
         logger.info("Successfully wrapped DOFA ViT blocks with LoRA adapters (Rank 16, Target: qkv, fc1, fc2).")
+        
+        # 2b. Selectively Unfreeze last N blocks and final LayerNorm
+        num_unfreeze = config.model.get("unfreeze_last_n_blocks", 0)
+        if num_unfreeze > 0:
+            blocks = list(self.backbone.model.blocks)
+            for block in blocks[-num_unfreeze:]:
+                for p in block.parameters():
+                    p.requires_grad = True
+            if hasattr(self.backbone.model, "fc_norm"):
+                for p in self.backbone.model.fc_norm.parameters():
+                    p.requires_grad = True
+            logger.info(f"Successfully unfrozen the last {num_unfreeze} ViT blocks and final LayerNorm (fc_norm).")
+            
         self.backbone.model.print_trainable_parameters()
 
         # 3. Projection Head
