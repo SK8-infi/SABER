@@ -35,6 +35,7 @@ model:
   projection_head:
     hidden_dim: 768
     out_dim: 768
+  decoupled_heads: false
     
   # Predictor: predicts targets. Options: "mlp", "transformer"
   predictor:

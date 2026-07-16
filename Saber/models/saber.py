@@ -64,7 +64,7 @@ class SABER(nn.Module):
         self.backbone.model.print_trainable_parameters()
 
         # 3. Projection Head
-        if self.in_channels in [14, 5]:
+        if self.in_channels in [14, 5] and config.model.get("decoupled_heads", False):
             self.s1_projection = ProjectionHead(
                 in_dim=self.backbone.embed_dim,
                 hidden_dim=config.model.projection_head.hidden_dim,
