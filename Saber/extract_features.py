@@ -149,16 +149,16 @@ def main() -> None:
             # Compute projection head outputs
             if arch == "saber":
                 feats_s1 = model.backbone(img_s1, model.s1_wvs)
-                z_s1 = model.projection_head(feats_s1)
+                z_s1 = model.s1_projection(feats_s1)
 
                 feats_s2 = model.backbone(img_s2, model.s2_wvs)
-                z_s2 = model.projection_head(feats_s2)
+                z_s2 = model.s2_projection(feats_s2)
             else:
                 feats_s1 = model.backbone(model.adapter_s1(img_s1))
-                z_s1 = model.projection_head(feats_s1)
+                z_s1 = model.s1_projection(feats_s1)
 
                 feats_s2 = model.backbone(model.adapter_s2(img_s2))
-                z_s2 = model.projection_head(feats_s2)
+                z_s2 = model.s2_projection(feats_s2)
 
             s1_feats_list.append(z_s1.cpu().numpy())
             s2_feats_list.append(z_s2.cpu().numpy())
