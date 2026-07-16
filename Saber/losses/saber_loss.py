@@ -27,7 +27,8 @@ class SaberCombinedLoss(nn.Module):
         epsilon: float = 1e-4,
         hashing_weight: float = 0.1,
         triplet_weight: float = 0.5,
-        sigreg_weight: float = 0.1
+        sigreg_weight: float = 0.1,
+        classification_weight: float = 1.0
     ) -> None:
         super().__init__()
         self.jaccard_weight = jaccard_weight
@@ -37,6 +38,7 @@ class SaberCombinedLoss(nn.Module):
         self.hashing_weight = hashing_weight
         self.triplet_weight = triplet_weight
         self.sigreg_weight = sigreg_weight
+        self.classification_weight = classification_weight
         
         self.vicreg_loss_fn = VICRegLoss(
             invariance_weight=invariance_weight,
@@ -54,7 +56,9 @@ class SaberCombinedLoss(nn.Module):
         soft_codes1: Optional[torch.Tensor] = None,
         soft_codes2: Optional[torch.Tensor] = None,
         z1_b: Optional[torch.Tensor] = None,
-        z2_b: Optional[torch.Tensor] = None
+        z2_b: Optional[torch.Tensor] = None,
+        logits_s1: Optional[torch.Tensor] = None,
+        logits_s2: Optional[torch.Tensor] = None
     ) -> Dict[str, torch.Tensor]:
         """
         Args:
@@ -268,6 +272,16 @@ class SaberCombinedLoss(nn.Module):
             if self.sigreg_weight > 0.0:
                 sigreg_loss = 0.5 * (sigreg_strong_loss(z1) + sigreg_strong_loss(z2))
 
+        # 2.5 Compute Multi-Label Classification Loss
+        classification_loss = torch.tensor(0.0, device=device)
+        if logits_s1 is not None and targets is not None:
+            bce_s1 = F.binary_cross_entropy_with_logits(logits_s1, targets)
+            if logits_s2 is not None:
+                bce_s2 = F.binary_cross_entropy_with_logits(logits_s2, targets)
+                classification_loss = 0.5 * (bce_s1 + bce_s2)
+            else:
+                classification_loss = bce_s1
+
         # 3. Combined total loss
         total_loss = (
             (self.jaccard_weight * jaccard_loss) +
@@ -275,6 +289,7 @@ class SaberCombinedLoss(nn.Module):
             (self.triplet_weight * triplet_loss) +
             (self.hashing_weight * hash_loss) +
             (self.sigreg_weight * sigreg_loss) +
+            (self.classification_weight * classification_loss) +
             vicreg_loss
         )
 
@@ -287,6 +302,7 @@ class SaberCombinedLoss(nn.Module):
             "sim_hash_loss": sim_hash_loss,
             "quant_loss": quant_loss,
             "sigreg_loss": sigreg_loss,
+            "classification_loss": classification_loss,
             "invariance_loss": invariance_loss,
             "variance_loss": variance_loss,
             "covariance_loss": covariance_loss

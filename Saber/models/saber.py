@@ -101,6 +101,9 @@ class SABER(nn.Module):
             normalize=True
         )
 
+        # 5b. Multi-Label Classification Head
+        self.classifier = nn.Linear(config.model.projection_head.out_dim, 19)
+
         # 6. Optional CFM Latent Bridge (Dev 2)
         if config.get("bridge", {}).get("enabled", False):
             bridge_net = CFMBridge(
@@ -151,48 +154,35 @@ class SABER(nn.Module):
         if self.in_channels in [14, 5]:
             # Cross-modal path (Sentinel-1 and Sentinel-2)
             if x1.shape[1] == self.in_channels:
-                x_s1_a = x1[:, :self.s1_channels, :, :]
-                x_s2_a = x1[:, self.s1_channels:, :, :]
-                if x2 is not None:
-                    x_s1_b = x2[:, :self.s1_channels, :, :]
-                    x_s2_b = x2[:, self.s1_channels:, :, :]
-                else:
-                    x_s1_b = None
-                    x_s2_b = None
+                x_s1 = x1[:, :self.s1_channels, :, :]
+                target_tensor = x2 if x2 is not None else x1
+                x_s2 = target_tensor[:, self.s1_channels:, :, :]
             else:
-                x_s1_a = x1
-                x_s2_a = x2
-                x_s1_b = None
-                x_s2_b = None
+                x_s1 = x1
+                x_s2 = x2
 
-            # 1. Project View A of S1 and S2
-            feats1_a = self.backbone(x_s1_a, self.s1_wvs)
-            z1_a = self.s1_projection(feats1_a)
-            z1_pred = self.predictor(z1_a)
+            # 1. Project context S1
+            feats1 = self.backbone(x_s1, self.s1_wvs)
+            z1 = self.s1_projection(feats1)
+            z1_pred = self.predictor(z1)
+            
+            # Classification logits
+            logits_s1 = self.classifier(z1)
 
-            if x_s2_a is not None:
-                feats2_a = self.backbone(x_s2_a, self.s2_wvs)
-                z2_a = self.s2_projection(feats2_a)
-            else:
-                z2_a = None
-
-            # 2. Project View B of S1 and S2 if available
-            if x_s1_b is not None and x_s2_b is not None:
-                feats1_b = self.backbone(x_s1_b, self.s1_wvs)
-                z1_b = self.s1_projection(feats1_b)
+            if x_s2 is not None:
+                # 2. Project target S2
+                feats2 = self.backbone(x_s2, self.s2_wvs)
+                z2 = self.s2_projection(feats2)
                 
-                feats2_b = self.backbone(x_s2_b, self.s2_wvs)
-                z2_b = self.s2_projection(feats2_b)
+                logits_s2 = self.classifier(z2)
                 
                 # Cache soft codes if hashing head is present
                 if self.hashing_head is not None:
-                    self.soft_codes1 = self.hashing_head(z1_a)
-                    self.soft_codes2 = self.hashing_head(z2_b)
+                    self.soft_codes1 = self.hashing_head(z1)
+                    self.soft_codes2 = self.hashing_head(z2)
                     
-                return z1_a, z1_b, z2_a, z2_b, z1_pred
-            else:
-                # Return standard 3 elements for single-view or eval
-                return z1_a, z2_a, z1_pred
+                return z1, z2, z1_pred, logits_s1, logits_s2
+            return z1_pred, logits_s1
         else:
             # Same-modality path
             wvs = self._get_wvs_for_channels(self.in_channels)
@@ -200,17 +190,21 @@ class SABER(nn.Module):
             z1 = self.projection_head(feats1)
             z1_pred = self.predictor(z1)
             
+            logits_s1 = self.classifier(z1)
+            
             if x2 is not None:
                 feats2 = self.backbone(x2, wvs)
                 z2 = self.projection_head(feats2)
+                
+                logits_s2 = self.classifier(z2)
                 
                 # Cache soft codes if hashing head is present
                 if self.hashing_head is not None:
                     self.soft_codes1 = self.hashing_head(z1)
                     self.soft_codes2 = self.hashing_head(z2)
                     
-                return z1, z2, z1_pred
-            return z1_pred
+                return z1, z2, z1_pred, logits_s1, logits_s2
+            return z1_pred, logits_s1
 
     def get_retrieval_embedding(self, x: torch.Tensor) -> torch.Tensor:
         """

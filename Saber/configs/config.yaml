@@ -15,7 +15,7 @@ dataset:
   use_synthetic: false            # Set to false to train on real data
   size: 14832                     # Dataset size (e.g. 14832 for full ben14k, 80000 for dsrsid)
   modality: "s2"                  # "s2" (optical), "s1" (SAR), or "both" (cross-modal)
-  batch_size: 64
+  batch_size: 32
   num_workers: 2                  # Set to 2 for optimal loading on 2-core VM
   image_size: 120
 
@@ -62,6 +62,7 @@ geometry:
   ranking_temp_p: 0.05
   triplet_weight: 0.5
   sigreg_weight: 0.1
+  classification_weight: 1.0
 
 # Hashing Configuration (Dev 4)
 hashing:
@@ -84,7 +85,7 @@ train:
   weight_decay: 0.01
   epochs: 5
   grad_clip: 1.0
-  grad_accumulation_steps: 4  # Effective batch = 64 * 4 = 256 (271x more pairs for Jaccard/ranking losses)
+  grad_accumulation_steps: 8  # Effective batch = 32 * 8 = 256
   amp: true              # Automated Mixed Precision
   use_ema: true          # EMA target model copy
   ema_decay: 0.996

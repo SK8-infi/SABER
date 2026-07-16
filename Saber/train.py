@@ -129,7 +129,8 @@ def main() -> None:
             epsilon=float(config.loss.vicreg_epsilon),
             hashing_weight=float(config.get("hashing", {}).get("weight", 0.1)),
             triplet_weight=float(config.geometry.get("triplet_weight", 0.5)),
-            sigreg_weight=float(config.geometry.get("sigreg_weight", 0.1))
+            sigreg_weight=float(config.geometry.get("sigreg_weight", 0.1)),
+            classification_weight=float(config.geometry.get("classification_weight", 1.0))
         )
         
 

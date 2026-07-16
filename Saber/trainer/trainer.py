@@ -96,12 +96,11 @@ class Trainer:
                 if self.use_ema and self.target_model is not None:
                     outputs = self.model(x1, x2)
                     if len(outputs) == 5:
-                        z1_a, z1_b, z2_a, z2_b, z1_pred = outputs
+                        z1, z2_online, z1_pred, logits_s1, logits_s2 = outputs
                         with torch.no_grad():
                             target_outputs = self.target_model(x1, x2)
-                            _, _, _, target_z2_b, _ = target_outputs
-                            target_z2_b = target_z2_b.detach()
-                        z2 = target_z2_b
+                            _, target_z2, _, _, _ = target_outputs
+                            z2 = target_z2.detach()
                     else:
                         z1, _, z1_pred = outputs
                         with torch.no_grad():
@@ -110,7 +109,7 @@ class Trainer:
                 else:
                     outputs = self.model(x1, x2)
                     if len(outputs) == 5:
-                        z1_a, z1_b, z2_a, z2_b, z1_pred = outputs
+                        z1, z2, z1_pred, logits_s1, logits_s2 = outputs
                     else:
                         z1, z2, z1_pred = outputs
                 
@@ -126,14 +125,14 @@ class Trainer:
                     
                     if len(outputs) == 5:
                         loss_dict = self.criterion(
-                            z1=z1_a,
-                            z2=z2_a,
+                            z1=z1,
+                            z2=z2 if self.use_ema else z2_online,
                             z1_pred=z1_pred,
                             targets=labels,
                             soft_codes1=soft1,
                             soft_codes2=soft2,
-                            z1_b=z1_b,
-                            z2_b=z2 if self.use_ema else z2_b
+                            logits_s1=logits_s1,
+                            logits_s2=logits_s2
                         )
                     else:
                         try:
@@ -146,12 +145,12 @@ class Trainer:
                 else:
                     if len(outputs) == 5:
                         loss_dict = self.criterion(
-                            z1=z1_a,
-                            z2=z2_a,
+                            z1=z1,
+                            z2=z2 if self.use_ema else z2_online,
                             z1_pred=z1_pred,
                             targets=None,
-                            z1_b=z1_b,
-                            z2_b=z2 if self.use_ema else z2_b
+                            logits_s1=logits_s1,
+                            logits_s2=logits_s2
                         )
                     else:
                         loss_dict = self.criterion(z1, z2, z1_pred)
