@@ -130,11 +130,13 @@ class BEN14KDataset(BaseDataset):
         transform: Optional[Any] = None,
         modality: str = "s2",  # "s1", "s2", or "both"
         num_classes: int = 19,
-        is_train: bool = True
+        is_train: bool = True,
+        split: str = "train"  # "train", "val", "test", or "all"
     ) -> None:
         self.modality = modality.lower()
         self.num_classes = num_classes
         self.is_train = is_train
+        self.split = split.lower()
         
         if self.modality == "s1":
             self.num_channels = 2
@@ -153,6 +155,17 @@ class BEN14KDataset(BaseDataset):
         
         self.csv_path = None
         self.df = None
+
+        if self.use_synthetic:
+            total_n = self.size
+            train_end = int(0.70 * total_n)
+            val_end = int(0.80 * total_n)
+            if self.split == "train":
+                self.size = train_end
+            elif self.split == "val":
+                self.size = val_end - train_end
+            elif self.split == "test":
+                self.size = total_n - val_end
 
         # Build class-to-index mapping
         self.class_to_idx = {name: idx for idx, name in enumerate(BIGEARTHNET_19_CLASSES)}
@@ -184,11 +197,30 @@ class BEN14KDataset(BaseDataset):
                 self.use_synthetic = True
             else:
                 try:
-                    self.df = pd.read_csv(self.csv_path)
-                    self.size = min(self.size, len(self.df))
-                    # Adjust parent path to root of extracted benv1_14k directory
+                    full_df = pd.read_csv(self.csv_path)
+                    total_n = len(full_df)
+                    
+                    # Deterministic split partitioning (Seed 42)
+                    # 70% Train (10,382) | 10% Val (1,483) | 20% Test (2,967)
+                    rng = np.random.RandomState(42)
+                    shuffled_idx = rng.permutation(total_n)
+                    
+                    train_end = int(0.70 * total_n)
+                    val_end = int(0.80 * total_n)
+                    
+                    if self.split == "train":
+                        split_idx = shuffled_idx[:train_end]
+                    elif self.split == "val":
+                        split_idx = shuffled_idx[train_end:val_end]
+                    elif self.split == "test":
+                        split_idx = shuffled_idx[val_end:]
+                    else: # "all"
+                        split_idx = shuffled_idx
+                        
+                    self.df = full_df.iloc[split_idx].reset_index(drop=True)
+                    self.size = len(self.df)
                     self.ben14k_root = os.path.dirname(self.csv_path)
-                    logger.info(f"Loaded BEN-14K metadata CSV from '{self.csv_path}'. Using {self.size} samples.")
+                    logger.info(f"Loaded BEN-14K [{self.split.upper()} SPLIT] metadata CSV from '{self.csv_path}'. Using {self.size} samples.")
                 except Exception as e:
                     logger.error(f"Error loading BEN-14K metadata CSV: {e}. Falling back to synthetic.")
                     self.use_synthetic = True

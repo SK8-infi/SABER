@@ -31,20 +31,22 @@ class DSRSIDDataset(BaseDataset):
         size: int = 1000,
         image_size: int = 224,
         transform: Optional[Any] = None,
-        modality: str = "ms",  # "pan" or "ms"
-        num_classes: int = 8,  # Categorized into 8 classes
-        is_train: bool = True
+        modality: str = "ms",  # "pan", "ms", or "both"
+        num_classes: int = 8,
+        is_train: bool = True,
+        split: str = "train"  # "train", "val", "test", or "all"
     ) -> None:
         self.modality = modality.lower()
         self.num_classes = num_classes
         self.is_train = is_train
-        
+        self.split = split.lower()
+
         if self.modality == "pan":
             self.num_channels = 1
-        elif self.modality == "both":
-            self.num_channels = 5
-        else:
+        elif self.modality == "ms":
             self.num_channels = 4
+        else:
+            self.num_channels = 5
             
         super().__init__(
             data_dir=data_dir,
@@ -56,6 +58,17 @@ class DSRSIDDataset(BaseDataset):
 
         self.mat_path = None
         self.f_handle = None  # Lazy-opened HDF5 file handle
+
+        if self.use_synthetic:
+            total_n = self.size
+            train_end = int(0.70 * total_n)
+            val_end = int(0.80 * total_n)
+            if self.split == "train":
+                self.size = train_end
+            elif self.split == "val":
+                self.size = val_end - train_end
+            elif self.split == "test":
+                self.size = total_n - val_end
 
         if not self.use_synthetic:
             # Detect where DSRSID.mat is located
@@ -90,16 +103,14 @@ class DSRSIDDataset(BaseDataset):
                 try:
                     with h5py.File(self.mat_path, "r") as f:
                         self.total_samples = f["MUL_IMAGES"].shape[0]
-                        # Read all labels to build stratified sample indices
-                        # LAND_COVER_TYPES shape is (1, N) with float64 values 1.0–8.0
-                        all_labels = f["LAND_COVER_TYPES"][0, :].astype(int)  # shape (N,)
+                        all_labels = f["LAND_COVER_TYPES"][0, :].astype(int)
 
                     self.size = min(self.size, self.total_samples)
 
                     # Build stratified indices: sample equally from each class
                     unique_classes = np.unique(all_labels)
-                    num_classes = len(unique_classes)
-                    per_class = max(1, self.size // num_classes)
+                    num_classes_found = len(unique_classes)
+                    per_class = max(1, self.size // num_classes_found)
                     rng = np.random.RandomState(42)
                     selected = []
                     for cls in unique_classes:
@@ -107,10 +118,25 @@ class DSRSIDDataset(BaseDataset):
                         n_take = min(per_class, len(cls_indices))
                         chosen = rng.choice(cls_indices, size=n_take, replace=False)
                         selected.append(chosen)
-                    self.sample_indices = np.sort(np.concatenate(selected))[:self.size]
+                    all_stratified = np.sort(np.concatenate(selected))[:self.size]
+                    
+                    # Split partitioning (Seed 42): 70% Train | 10% Val | 20% Test
+                    total_n = len(all_stratified)
+                    train_end = int(0.70 * total_n)
+                    val_end = int(0.80 * total_n)
+                    
+                    if self.split == "train":
+                        self.sample_indices = all_stratified[:train_end]
+                    elif self.split == "val":
+                        self.sample_indices = all_stratified[train_end:val_end]
+                    elif self.split == "test":
+                        self.sample_indices = all_stratified[val_end:]
+                    else: # "all"
+                        self.sample_indices = all_stratified
+
                     self.size = len(self.sample_indices)
 
-                    logger.info(f"Connected to DSRSID.mat at '{self.mat_path}'. Using {self.size} samples (stratified across {num_classes} classes).")
+                    logger.info(f"Connected to DSRSID.mat at '{self.mat_path}'. Using {self.size} samples [{self.split.upper()} SPLIT].")
                 except Exception as e:
                     logger.error(f"Error reading DSRSID.mat: {e}. Falling back to synthetic mode.")
                     self.use_synthetic = True

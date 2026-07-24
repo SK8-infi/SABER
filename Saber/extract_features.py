@@ -26,6 +26,7 @@ def main() -> None:
     parser.add_argument("--dataset_name", type=str, default=None, help="Override dataset name ('ben14k' or 'dsrsid')")
     parser.add_argument("--data_dir", type=str, default=None, help="Override path to dataset directory")
     parser.add_argument("--size", type=int, default=None, help="Override dataset size")
+    parser.add_argument("--split", type=str, default="train", choices=["train", "val", "test", "all"], help="Split to extract features from ('train', 'val', 'test', 'all')")
     parser.add_argument("--output_dir", type=str, default="Saber/extracted", help="Directory to save extracted features")
     args = parser.parse_args()
 
@@ -62,8 +63,9 @@ def main() -> None:
     # Load spatial transforms (is_train=False)
     eval_transform = get_transforms(image_size=config.dataset.image_size, is_train=False)
 
-    # Initialize Dataset loader (is_train=False)
+    # Initialize Dataset loader (is_train=False, split=args.split)
     dataset_name = config.dataset.name.lower()
+    extract_split = args.split.lower()
     if dataset_name == "ben14k":
         eval_dataset = BEN14KDataset(
             data_dir=config.dataset.data_dir,
@@ -72,7 +74,8 @@ def main() -> None:
             image_size=config.dataset.image_size,
             transform=eval_transform,
             modality="both",
-            is_train=False
+            is_train=False,
+            split=extract_split
         )
         in_channels = eval_dataset.num_channels
     elif dataset_name == "dsrsid":
@@ -83,7 +86,8 @@ def main() -> None:
             image_size=config.dataset.image_size,
             transform=eval_transform,
             modality="both",
-            is_train=False
+            is_train=False,
+            split=extract_split
         )
         in_channels = eval_dataset.num_channels
     else:

@@ -33,6 +33,7 @@ def main() -> None:
     parser.add_argument("--size", type=int, default=None, help="Override dataset size")
     parser.add_argument("--batch_size", type=int, default=None, help="Override batch size")
     parser.add_argument("--direction", type=str, default="s1_to_s2", choices=["s1_to_s2", "s2_to_s1"], help="Cross-modal retrieval direction")
+    parser.add_argument("--split", type=str, default="test", choices=["train", "val", "test", "all"], help="Dataset split partition for evaluation ('test', 'val', 'train', 'all')")
     parser.add_argument("--viz", action="store_true", help="Generate and save t-SNE and UMAP visualizations")
     args = parser.parse_args()
 
@@ -74,8 +75,9 @@ def main() -> None:
     # Load val/test spatial transforms (is_train=False)
     eval_transform = get_transforms(image_size=config.dataset.image_size, is_train=False)
 
-    # Initialize Dataset loaders (is_train=False)
+    # Initialize Dataset loaders (is_train=False, split=args.split)
     dataset_name = config.dataset.name.lower()
+    eval_split = args.split.lower()
     if dataset_name == "ben14k":
         eval_dataset = BEN14KDataset(
             data_dir=config.dataset.data_dir,
@@ -84,7 +86,8 @@ def main() -> None:
             image_size=config.dataset.image_size,
             transform=eval_transform,
             modality=config.dataset.get("modality", "s2"),
-            is_train=False
+            is_train=False,
+            split=eval_split
         )
         in_channels = eval_dataset.num_channels
     elif dataset_name == "dsrsid":
@@ -95,13 +98,14 @@ def main() -> None:
             image_size=config.dataset.image_size,
             transform=eval_transform,
             modality=config.dataset.get("modality", "ms"),
-            is_train=False
+            is_train=False,
+            split=eval_split
         )
         in_channels = eval_dataset.num_channels
     else:
         raise ValueError(f"Unknown dataset configuration: '{config.dataset.name}'")
 
-    logger.info(f"Dataset Loaded: {config.dataset.name.upper()} (Synthetic={eval_dataset.use_synthetic})")
+    logger.info(f"Dataset Loaded: {config.dataset.name.upper()} [{eval_split.upper()} HELD-OUT PARTITION] (Synthetic={eval_dataset.use_synthetic})")
 
     # Build Dataloader
     num_workers = 0 if dataset_name == "dsrsid" else config.dataset.num_workers

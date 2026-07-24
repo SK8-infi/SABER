@@ -78,7 +78,8 @@ def main() -> None:
             image_size=config.dataset.image_size,
             transform=train_transform,
             modality=config.dataset.get("modality", "s2"),
-            is_train=True
+            is_train=True,
+            split="train"
         )
         in_channels = train_dataset.num_channels
     elif dataset_name == "dsrsid":
@@ -89,7 +90,8 @@ def main() -> None:
             image_size=config.dataset.image_size,
             transform=train_transform,
             modality=config.dataset.get("modality", "ms"),
-            is_train=True
+            is_train=True,
+            split="train"
         )
         in_channels = train_dataset.num_channels
     else:
