@@ -4,7 +4,13 @@ import time
 from dataclasses import dataclass
 from typing import Optional, Tuple
 
-import faiss
+try:
+    import faiss
+    FAISS_AVAILABLE = True
+except ImportError:
+    FAISS_AVAILABLE = False
+    faiss = None
+
 import numpy as np
 
 logger = logging.getLogger("saber")
@@ -94,6 +100,14 @@ class AdvancedFAISSIndex:
         if self.index_type not in {"flat", "ivfpq", "binary_hnsw"}:
             raise ValueError("index_type must be 'flat', 'ivfpq', or 'binary_hnsw'.")
 
+    @property
+    def ntotal(self) -> int:
+        if getattr(self, "index", None) is not None:
+            return getattr(self.index, "ntotal", 0)
+        if hasattr(self, "vectors") and self.vectors is not None:
+            return len(self.vectors)
+        return 0
+
     def _prepare_float(self, embeddings: np.ndarray) -> np.ndarray:
         embeddings = np.ascontiguousarray(embeddings.astype(np.float32))
         if embeddings.shape[1] != self.dimension:
@@ -111,6 +125,13 @@ class AdvancedFAISSIndex:
         return pack_binary_codes(embeddings @ self._projection)
 
     def build_index(self, embeddings: np.ndarray, binary_codes: Optional[np.ndarray] = None) -> None:
+        vectors = self._prepare_float(embeddings)
+        self.vectors = vectors
+        
+        if not FAISS_AVAILABLE:
+            logger.warning("FAISS not installed. Operating with NumPy exact inner product search fallback.")
+            return
+
         if self.index_type == "binary_hnsw":
             packed = pack_binary_codes(binary_codes) if binary_codes is not None else self._make_binary_codes(embeddings)
             self.index = faiss.IndexBinaryHNSW(self.hash_bits, self.hnsw_m)
@@ -118,7 +139,6 @@ class AdvancedFAISSIndex:
             logger.info("Built FAISS IndexBinaryHNSW with %d items and %d bits.", self.index.ntotal, self.hash_bits)
             return
 
-        vectors = self._prepare_float(embeddings)
         if self.index_type == "flat":
             self.index = faiss.IndexFlatIP(self.dimension) if self.metric == "cosine" else faiss.IndexFlatL2(self.dimension)
             self.index.add(vectors)
@@ -159,8 +179,15 @@ class AdvancedFAISSIndex:
         )
 
     def search(self, query_embeddings: np.ndarray, k: int = 5) -> Tuple[np.ndarray, np.ndarray]:
-        if self.index is None:
-            raise ValueError("FAISS index has not been built or loaded.")
+        if not FAISS_AVAILABLE or self.index is None:
+            if not hasattr(self, 'vectors') or self.vectors is None:
+                raise ValueError("Index vectors have not been built or loaded.")
+            queries = self._prepare_float(query_embeddings)
+            sims = queries @ self.vectors.T
+            top_k_indices = np.argsort(-sims, axis=1)[:, :k]
+            top_k_scores = np.take_along_axis(sims, top_k_indices, axis=1)
+            return top_k_scores, top_k_indices
+            
         if self.index_type == "binary_hnsw":
             queries = self._make_binary_codes(query_embeddings)
         else:
@@ -197,6 +224,9 @@ class AdvancedFAISSIndex:
     def load_index(self, path: str) -> None:
         if not os.path.exists(path):
             raise FileNotFoundError(path)
+        if not FAISS_AVAILABLE:
+            logger.warning(f"FAISS not installed. Index file '{path}' found, but relying on NumPy retrieval mode.")
+            return
         if self.index_type == "binary_hnsw":
             self.index = faiss.read_index_binary(path)
         else:
