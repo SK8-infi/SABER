@@ -41,8 +41,8 @@ export default function OverviewSection({ onStartDemo }) {
           </div>
           <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', lineHeight: '1.6', marginBottom: '12px' }}>
             Satellite Earth observation relies on heterogeneous sensors. <strong>Sentinel-1 SAR</strong> uses active C-band microwave radar 
-            ($\lambda = 5.405\,\mu\text{m}$) measuring dielectric roughness, while <strong>Sentinel-2 Optical</strong> captures 12-band passive 
-            solar reflectance ($\lambda \in [0.443, 2.190]\,\mu\text{m}$).
+            (λ = 5.405 µm) measuring dielectric roughness, while <strong>Sentinel-2 Optical</strong> captures 12-band passive 
+            solar reflectance (λ ∈ [0.443, 2.190] µm).
           </p>
           <div style={{ backgroundColor: 'var(--bg-dark)', padding: '10px', borderRadius: '6px', fontSize: '0.75rem', fontFamily: 'var(--font-mono)', color: 'var(--text-muted)' }}>
             x_SAR in R^[2 x H x W]  vs  x_MS in R^[12 x H x W]
@@ -100,7 +100,7 @@ export default function OverviewSection({ onStartDemo }) {
               1. DOFA ViT Backbone
             </div>
             <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
-              Wavelength Hypernetwork dynamically conditions patch weights using central wavelengths ($\lambda_c$) of active bands.
+              Wavelength Hypernetwork dynamically conditions patch weights using central wavelengths (λc) of active bands.
             </p>
           </div>
 
@@ -109,7 +109,7 @@ export default function OverviewSection({ onStartDemo }) {
               2. PEFT LoRA Adapters
             </div>
             <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
-              Adapts QKV & MLP projections ($r=16, \alpha=32$). Freezes 99.74% of ViT parameters for ultra-low memory training.
+              Adapts QKV & MLP projections (r=16, α=32). Freezes 99.74% of ViT parameters for ultra-low memory training.
             </p>
           </div>
 
@@ -118,7 +118,7 @@ export default function OverviewSection({ onStartDemo }) {
               3. CFM Latent Bridge
             </div>
             <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
-              Solves continuous ODE $\text{d}z/\text{d}\tau = v(z, \tau)$ in 5 GPU Euler steps to map source $z_1$ to target hypersphere $z_2$.
+              Solves continuous ODE dz/dτ = v(z, τ) in 5 GPU Euler steps to map source z1 to target hypersphere z2.
             </p>
           </div>
 
