@@ -439,12 +439,62 @@ label.field-label {
   background: rgba(0,0,0,0.85); border: 1px solid var(--border-2);
   color: var(--text-0); font-family: var(--mono); font-size: 0.62rem;
   font-weight: 700; padding: 2px 7px; border-radius: 3px;
+  z-index: 2;
 }
 .cand-score {
   position: absolute; top: 7px; right: 7px;
   color: #000; font-family: var(--mono); font-size: 0.65rem;
   font-weight: 700; padding: 2px 7px; border-radius: 3px;
+  z-index: 2;
 }
+
+/* Match Tick / Cross Badge Overlay */
+.cand-match-badge {
+  position: absolute; top: 32px; left: 7px;
+  width: 22px; height: 22px;
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  backdrop-filter: blur(8px);
+  z-index: 2;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.5);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+.cand-match-badge--yes {
+  background: rgba(16, 185, 129, 0.88);
+  color: #ffffff;
+  border: 1px solid rgba(52, 211, 153, 0.6);
+  box-shadow: 0 0 10px rgba(16, 185, 129, 0.4);
+}
+.cand-match-badge--no {
+  background: rgba(239, 68, 68, 0.85);
+  color: #ffffff;
+  border: 1px solid rgba(248, 113, 113, 0.6);
+}
+
+.cand-status-tag {
+  display: inline-flex; align-items: center; gap: 2px;
+  font-size: 0.6rem; font-weight: 700; font-family: var(--mono);
+  padding: 1px 5px; border-radius: 3px; text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+.cand-status-tag--yes {
+  background: rgba(16, 185, 129, 0.15);
+  color: #10B981;
+  border: 1px solid rgba(16, 185, 129, 0.35);
+}
+.cand-status-tag--no {
+  background: rgba(239, 68, 68, 0.15);
+  color: #EF4444;
+  border: 1px solid rgba(239, 68, 68, 0.35);
+}
+
+.chip--matched {
+  background: rgba(16, 185, 129, 0.18) !important;
+  color: #34D399 !important;
+  border-color: rgba(16, 185, 129, 0.4) !important;
+  font-weight: 600;
+}
+
 
 /* ── SIMILARITY BAR ──────────────────────────────────── */
 .sim-bar-track { height: 4px; background: var(--border-0); border-radius: 2px; overflow: hidden; }

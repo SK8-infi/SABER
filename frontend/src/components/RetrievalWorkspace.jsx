@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
-  Search, RefreshCw, ChevronDown, ChevronUp, Eye,
+  Search, RefreshCw, ChevronDown, ChevronUp, Eye, Check, X,
   GitCompare, Zap, AlertCircle, ShieldCheck, ArrowRight,
 } from 'lucide-react';
 
@@ -36,13 +36,27 @@ function SimilarityBar({ pct, color = 'var(--saffron)' }) {
 }
 
 function CandidateCard({ c, query, onCompare, rank }) {
+  const hasOverlap = c.jaccard_overlap > 0 || (
+    query && query.active_classes && c.active_classes &&
+    c.active_classes.some(cl => query.active_classes.includes(cl))
+  );
+
   const hue = c.similarity_score >= 80 ? 'var(--green)'
     : c.similarity_score >= 60 ? 'var(--saffron)'
     : 'var(--red)';
 
   return (
-    <div className="cand-card">
+    <div className={`cand-card${hasOverlap ? ' cand-card--match' : ' cand-card--no-match'}`}>
       <span className="cand-rank">#{rank}</span>
+
+      {/* Match Tick / Cross Badge on Thumbnail */}
+      <div
+        className={`cand-match-badge ${hasOverlap ? 'cand-match-badge--yes' : 'cand-match-badge--no'}`}
+        title={hasOverlap ? 'Ground-Truth Label Overlap (Match)' : 'No Ground-Truth Label Overlap'}
+      >
+        {hasOverlap ? <Check size={11} strokeWidth={3} /> : <X size={11} strokeWidth={3} />}
+      </div>
+
       <span className="cand-score" style={{ background: hue === 'var(--green)' ? 'var(--green)' : hue === 'var(--saffron)' ? 'var(--saffron)' : 'var(--red)' }}>
         {c.similarity_score}%
       </span>
@@ -51,13 +65,26 @@ function CandidateCard({ c, query, onCompare, rank }) {
         <div className="cand-name">{c.name}</div>
         <SimilarityBar pct={c.similarity_score} color={hue} />
         <div className="list-row" style={{ marginTop: 2 }}>
-          <span className="text-dim" style={{ fontSize: '0.7rem' }}>Jaccard</span>
+          <span className="text-dim" style={{ fontSize: '0.7rem', display: 'flex', alignItems: 'center', gap: '4px' }}>
+            Jaccard
+            {hasOverlap ? (
+              <span className="cand-status-tag cand-status-tag--yes"><Check size={8} strokeWidth={3} /> Match</span>
+            ) : (
+              <span className="cand-status-tag cand-status-tag--no"><X size={8} strokeWidth={3} /> No Match</span>
+            )}
+          </span>
           <span className="mono text-cyan" style={{ fontSize: '0.7rem' }}>{c.jaccard_overlap}%</span>
         </div>
         <div className="chips" style={{ marginTop: 2 }}>
-          {c.active_classes.slice(0, 3).map((cl, i) => (
-            <span className="chip" key={i}>{cl}</span>
-          ))}
+          {c.active_classes.slice(0, 3).map((cl, i) => {
+            const isShared = query && query.active_classes && query.active_classes.includes(cl);
+            return (
+              <span className={`chip${isShared ? ' chip--matched' : ''}`} key={i}>
+                {isShared && <Check size={8} strokeWidth={3} style={{ marginRight: 2 }} />}
+                {cl}
+              </span>
+            );
+          })}
         </div>
         <button
           className="btn btn--ghost btn--sm"
