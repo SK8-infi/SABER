@@ -47,6 +47,13 @@ class State:
     eval_transform = None
     ben14k_dataset = None
     dsrsid_dataset = None
+    # Multiple FAISS indexes keyed by (dataset, modality)
+    indexes = {}       # e.g. ("ben14k","s2") -> FAISSIndex
+    metadatas = {}     # e.g. ("ben14k","s2") -> {names, labels, embeddings}
+    retrievers = {}    # e.g. ("ben14k","s2") -> Retriever
+    # Gallery name->dataset-index lookup for thumbnail fetching
+    gallery_name_to_idx = {}  # e.g. ("ben14k","s2") -> {name: int}
+    # Legacy single references kept for backward compat
     faiss_index = None
     metadata = None
     retriever = None
@@ -114,109 +121,210 @@ def calculate_jaccard(labels1: np.ndarray, labels2: np.ndarray) -> float:
         return 1.0
     return float(intersection / union)
 
+def _load_faiss_slot(key: tuple, index_path: str, metadata_path: str, dim: int):
+    """Load a single FAISS index + metadata into state.indexes/metadatas/retrievers."""
+    meta = {"names": [], "labels": np.zeros((0, 19)), "embeddings": None}
+    if os.path.exists(metadata_path):
+        try:
+            meta = torch.load(metadata_path, map_location="cpu", weights_only=False)
+        except TypeError:
+            meta = torch.load(metadata_path, map_location="cpu")
+        print(f"[Init] Metadata loaded: {metadata_path} ({len(meta.get('names', []))} items)")
+
+    if not meta["names"]:
+        meta = {"names": [f"sample_{i}" for i in range(100)], "labels": np.zeros((100, 19)), "embeddings": None}
+
+    # Auto-detect actual embedding dim from saved embeddings (may differ from config dim)
+    emb = meta.get("embeddings")
+    if emb is not None and hasattr(emb, "shape"):
+        if isinstance(emb, np.ndarray):
+            actual_dim = emb.shape[1]
+        else:
+            actual_dim = emb.shape[1]  # torch tensor
+            emb = emb.numpy() if hasattr(emb, "numpy") else np.array(emb)
+    else:
+        actual_dim = dim
+        emb = None
+
+    fi = FAISSIndex(dimension=actual_dim, metric="cosine")
+
+    # Try to load the binary FAISS index (only works when faiss is installed)
+    if os.path.exists(index_path):
+        try:
+            fi.load_index(index_path)
+            print(f"[Init] FAISS index loaded: {index_path}")
+        except Exception as e:
+            print(f"[Init] FAISS load error ({index_path}): {e}")
+
+    # If FAISS unavailable or index empty, build NumPy vectors from saved embeddings
+    if (not hasattr(fi, "vectors") or fi.vectors is None) and emb is not None:
+        emb_np = np.array(emb, dtype=np.float32)
+        fi.build_index(emb_np)
+        print(f"[Init] NumPy fallback index built: {emb_np.shape} vectors from metadata ({key})")
+
+    # Build name→gallery-index lookup for O(1) thumbnail fetch
+    state.gallery_name_to_idx[key] = {name: i for i, name in enumerate(meta["names"])}
+
+    state.indexes[key]   = fi
+    state.metadatas[key] = meta
+    state.retrievers[key] = Retriever(
+        index=fi,
+        gallery_names=meta["names"],
+        gallery_labels=meta["labels"],
+        gallery_embeddings=meta.get("embeddings"),
+        rerank_enabled=False,
+    )
+
+
 @app.on_event("startup")
 def startup_event():
-    """Initialize SABER pipeline, datasets, checkpoints, and FAISS index on server start."""
+    """Initialize SABER pipeline, datasets, checkpoints, and FAISS indexes on server start."""
     print("=========================================================")
     print("   SABER SCIENTIFIC DEMONSTRATION PLATFORM BACKEND API    ")
     print("   ISRO BAH 2026 Grand Finale · Problem Statement 11      ")
     print("=========================================================")
-    
+
     config_path = "Saber/configs/config.yaml"
     state.config = load_config(config_path)
     state.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"[Init] Computation Device: {state.device}")
-    
+
     state.eval_transform = get_transforms(image_size=state.config.dataset.image_size, is_train=False)
-    
-    # Initialize BEN-14K Dataset
+    dim = state.config.model.projection_head.out_dim
+
+    # ── BEN-14K Dataset ──────────────────────────────────────
+    ben14k_path = getattr(state.config.dataset, "data_dir", None) or "datasets/benv1_14k"
     state.ben14k_dataset = BEN14KDataset(
-        data_dir=state.config.dataset.data_dir,
-        use_synthetic=state.config.dataset.use_synthetic,
+        data_dir=ben14k_path,
+        use_synthetic=False,
         image_size=state.config.dataset.image_size,
         transform=state.eval_transform,
         modality="both",
-        is_train=False
+        is_train=False,
+        split="all",
     )
-    print(f"[Init] BEN-14K Dataset Initialized (Size: {len(state.ben14k_dataset)} samples)")
-    
-    # Initialize DSRSID Dataset
+    print(f"[Init] BEN-14K Dataset: {len(state.ben14k_dataset)} samples from {ben14k_path}")
+
+    # Build BEN-14K name→index lookup from the CSV dataframe (zero disk I/O — no .npy loading)
+    state.ben14k_name_to_idx = {}
+    if hasattr(state.ben14k_dataset, "df") and state.ben14k_dataset.df is not None:
+        for i, row in state.ben14k_dataset.df.iterrows():
+            s2_id = row["S2_ID"]
+            paired_name = f"{s2_id}_paired.png"
+            state.ben14k_name_to_idx[paired_name] = i
+            state.ben14k_name_to_idx[f"{s2_id}.png"] = i
+            state.ben14k_name_to_idx[f"{row['S1_ID']}.png"] = i
+        print(f"[Init] BEN-14K name map built: {len(state.ben14k_name_to_idx)} entries (CSV fast path)")
+
+    # ── DSRSID Dataset ────────────────────────────────────────
+    dsrsid_path = getattr(state.config.dataset, "dsrsid_path", None) or "datasets/DSRSID.mat"
     try:
         state.dsrsid_dataset = DSRSIDDataset(
-            data_dir="c:/Github/SABER/Datasets/DSRSID/DSRSID-001.mat",
-            use_synthetic=state.config.dataset.use_synthetic,
+            data_dir=dsrsid_path,
+            use_synthetic=False,
+            size=10000,
             image_size=state.config.dataset.image_size,
             transform=state.eval_transform,
             modality="both",
-            is_train=False
+            is_train=False,
+            split="all",
         )
-    except Exception:
-        state.dsrsid_dataset = None
-    print(f"[Init] DSRSID Dataset Status: {'Loaded' if state.dsrsid_dataset else 'Synthetic Mode Active'}")
-    
-    # Load FAISS Index and Gallery Metadata
-    index_path = "checkpoints/ben14k/faiss_index.bin"
-    metadata_path = "checkpoints/ben14k/faiss_index_metadata.pth"
-    if not os.path.exists(index_path):
-        index_path = "checkpoints/faiss_index.bin"
-        metadata_path = "checkpoints/faiss_index_metadata.pth"
-        
-    state.faiss_index = FAISSIndex(dimension=state.config.model.projection_head.out_dim, metric="cosine")
-    if os.path.exists(index_path):
+        print(f"[Init] DSRSID Dataset: {len(state.dsrsid_dataset)} samples")
+    except Exception as e:
+        print(f"[Init] DSRSID real load failed ({e}), falling back to synthetic")
         try:
-            state.faiss_index.load_index(index_path)
-            print(f"[Init] FAISS Index Loaded from '{index_path}'")
-        except Exception as e:
-            print(f"[Init] Could not load FAISS binary: {e}")
-    else:
-        print(f"[Init] Warning: FAISS Index not found at '{index_path}'")
-        
-    if os.path.exists(metadata_path):
-        try:
-            state.metadata = torch.load(metadata_path, map_location="cpu", weights_only=False)
-        except TypeError:
-            state.metadata = torch.load(metadata_path, map_location="cpu")
-        print(f"[Init] Gallery Metadata Loaded ({len(state.metadata.get('names', []))} items)")
-    else:
-        state.metadata = {"names": [f"sample_{i}.png" for i in range(100)], "labels": np.zeros((100, 19)), "embeddings": None}
+            state.dsrsid_dataset = DSRSIDDataset(
+                data_dir=dsrsid_path,
+                use_synthetic=True,
+                size=10000,
+                image_size=state.config.dataset.image_size,
+                transform=state.eval_transform,
+                modality="both",
+                is_train=False,
+                split="all",
+            )
+            print(f"[Init] DSRSID Dataset (synthetic): {len(state.dsrsid_dataset)} samples")
+        except Exception as e2:
+            state.dsrsid_dataset = None
+            print(f"[Init] DSRSID Dataset unavailable: {e2}")
 
-    # Fallback build index if empty
-    if getattr(state.faiss_index, "index", None) is None and not hasattr(state.faiss_index, "vectors"):
-        dummy_embeds = np.random.randn(len(state.metadata.get("names", [100])), state.config.model.projection_head.out_dim).astype(np.float32)
-        state.faiss_index.build_index(dummy_embeds)
-        print(f"[Init] Built FAISS/NumPy fallback index with {len(dummy_embeds)} items.")
-        
-    # Instantiate Retriever
-    state.retriever = Retriever(
-        index=state.faiss_index,
-        gallery_names=state.metadata["names"],
-        gallery_labels=state.metadata["labels"],
-        gallery_embeddings=state.metadata.get("embeddings"),
-        rerank_enabled=False
-    )
-    
-    # Load SABER Model Architecture & Weights
+    # Build DSRSID name→index lookup
+    state.dsrsid_name_to_idx = {}
+    if state.dsrsid_dataset is not None:
+        for i in range(min(len(state.dsrsid_dataset), 11865)):
+            name_pan = f"DSRSID_pan_{i}.png"
+            name_ms  = f"DSRSID_ms_{i}.png"
+            state.dsrsid_name_to_idx[name_pan] = i
+            state.dsrsid_name_to_idx[name_ms]  = i
+
+    # ── Load all FAISS slots ──────────────────────────────────
+    _load_faiss_slot(("ben14k", "s2"),
+        "checkpoints/ben14k/faiss_index.bin",
+        "checkpoints/ben14k/faiss_index_metadata.pth", dim)
+
+    _load_faiss_slot(("ben14k", "s1"),
+        "checkpoints/sar/faiss_index.bin",
+        "checkpoints/sar/faiss_index_metadata.pth", dim)
+
+    _load_faiss_slot(("dsrsid", "ms"),
+        "checkpoints/dsrsid/faiss_index.bin",
+        "checkpoints/dsrsid/faiss_index_metadata.pth", dim)
+
+    # Crossmodal (both) fallback
+    _load_faiss_slot(("ben14k", "both"),
+        "checkpoints/crossmodal/faiss_index.bin",
+        "checkpoints/crossmodal/faiss_index_metadata.pth", dim)
+
+    # Legacy aliases for old code paths
+    state.faiss_index = state.indexes.get(("ben14k", "s2"))
+    state.metadata    = state.metadatas.get(("ben14k", "s2"))
+    state.retriever   = state.retrievers.get(("ben14k", "s2"))
+
+    # ── SABER Model ───────────────────────────────────────────
     state.saber_model = SABER(config=state.config, in_channels=14).to(state.device)
-    ckpt_path = "checkpoints/ben14k/latest.pth"
-    if not os.path.exists(ckpt_path):
-        ckpt_path = "checkpoints/latest.pth"
-    if os.path.exists(ckpt_path):
-        try:
-            ckpt = load_checkpoint(ckpt_path, map_location=str(state.device))
-            state.saber_model.load_state_dict(ckpt["model_state_dict"], strict=False)
-            print(f"[Init] SABER Model Checkpoint loaded from '{ckpt_path}'")
-        except Exception as e:
-            print(f"[Init] Error loading SABER checkpoint: {e}")
-            
-    # Load Bridge Checkpoint if present
-    bridge_ckpt = "checkpoints/bridge_best.pth"
-    if os.path.exists(bridge_ckpt) and getattr(state.saber_model, "bridge", None) is not None:
-        try:
-            state.saber_model.bridge.cfm_bridge.load_state_dict(torch.load(bridge_ckpt, map_location=str(state.device)))
-            print(f"[Init] CFM Latent Bridge Checkpoint loaded from '{bridge_ckpt}'")
-        except Exception as e:
-            print(f"[Init] Bridge checkpoint load warning: {e}")
-            
+    # Priority: newest named > ben14k subdir > generic latest
+    # NOTE: latest_ben14k.pth (Round 14, 20 epochs) already contains bridge weights
+    # embedded in its state_dict — no need to load bridge separately.
+    for ckpt_path in [
+        "checkpoints/latest_ben14k.pth",
+        "checkpoints/ben14k/latest.pth",
+        "checkpoints/latest.pth",
+    ]:
+        if os.path.exists(ckpt_path):
+            try:
+                ckpt = load_checkpoint(ckpt_path, map_location=str(state.device))
+                missing, unexpected = state.saber_model.load_state_dict(
+                    ckpt["model_state_dict"], strict=False
+                )
+                if missing:
+                    print(f"[Init] Checkpoint missing keys ({len(missing)}): {missing[:3]}")
+                print(f"[Init] SABER+Bridge checkpoint loaded from '{ckpt_path}' (epoch {ckpt.get('epoch','?')})")
+                break
+            except Exception as e:
+                print(f"[Init] SABER checkpoint error ({ckpt_path}): {e}")
+
+    # Only load separate bridge file if bridge weights were NOT included in main checkpoint
+    bridge_keys_in_main = any(
+        "bridge" in k for k in (ckpt.get("model_state_dict", {}) if isinstance(ckpt, dict) else {})
+    ) if 'ckpt' in dir() else False
+    if not bridge_keys_in_main:
+        for bridge_ckpt in [
+            "checkpoints/bridge_best_ben14k.pth",
+            "checkpoints/bridge_best.pth",
+            "checkpoints/ben14k/bridge_best.pth",
+        ]:
+            if os.path.exists(bridge_ckpt) and getattr(state.saber_model, "bridge", None) is not None:
+                try:
+                    b_data = torch.load(bridge_ckpt, map_location=str(state.device), weights_only=False)
+                    b_sd = b_data.get("net_state_dict", b_data) if isinstance(b_data, dict) else b_data
+                    state.saber_model.bridge.cfm_bridge.load_state_dict(b_sd)
+                    print(f"[Init] CFM Bridge checkpoint loaded separately from '{bridge_ckpt}'")
+                    break
+                except Exception as e:
+                    print(f"[Init] Bridge checkpoint warning ({bridge_ckpt}): {e}")
+    else:
+        print("[Init] CFM Bridge weights already embedded in main checkpoint — skipping separate load.")
+
     state.saber_model.eval()
     print("[Init] Server startup complete. Ready for ISRO Grand Finale queries.")
 
@@ -311,46 +419,116 @@ def get_samples(dataset_name: str = "ben14k", class_index: Optional[int] = None,
         
     return {"total": total, "page": page, "limit": limit, "items": items}
 
+def _get_gallery_thumbnail(dataset_name: str, target_modality: str, gallery_name: str) -> str:
+    """
+    Fetch the actual pixel data for a gallery item and return a base64 PNG.
+    Falls back to a placeholder if the sample cannot be located.
+    """
+    try:
+        is_dsrsid = dataset_name.lower() == "dsrsid"
+        ds = state.dsrsid_dataset if is_dsrsid else state.ben14k_dataset
+        name_map = state.dsrsid_name_to_idx if is_dsrsid else state.ben14k_name_to_idx
+
+        gallery_idx = name_map.get(gallery_name)
+        if gallery_idx is None:
+            # Try stripping path components
+            base = os.path.basename(gallery_name)
+            gallery_idx = name_map.get(base)
+
+        if gallery_idx is None or ds is None:
+            raise ValueError(f"Gallery item '{gallery_name}' not found in name map")
+
+        sample = ds[gallery_idx]
+        img_tensor = sample.get("image")
+        if img_tensor is None:
+            raise ValueError("No image tensor in sample")
+
+        # Select the right channel slice for the target modality
+        mod = target_modality.lower()
+        arr = img_tensor.numpy()  # shape (C, H, W)
+
+        if mod == "s2" and arr.shape[0] >= 12:
+            arr = arr[2:14] if arr.shape[0] >= 14 else arr  # s2 channels
+        elif mod == "s1" and arr.shape[0] >= 2:
+            arr = arr[:2]
+        elif mod == "ms" and arr.shape[0] >= 4:
+            arr = arr[-4:]
+        elif mod == "pan":
+            arr = arr[:1]
+
+        return array_to_base64_png(arr, modality=mod)
+    except Exception:
+        # Return grey placeholder
+        img = Image.new("RGB", (120, 120), color=(20, 20, 30))
+        buf = io.BytesIO()
+        img.save(buf, format="PNG")
+        return f"data:image/png;base64,{base64.b64encode(buf.getvalue()).decode('utf-8')}"
+
+
 @app.post("/api/retrieval/query")
 def execute_query(req: QueryRequest):
     """
     Executes live multi-sensor query with exact nanosecond latency profiling.
     """
     t_start = time.perf_counter_ns()
-    
-    ds = state.ben14k_dataset if req.dataset_name.lower() == "ben14k" else state.dsrsid_dataset
+
+    is_dsrsid = req.dataset_name.lower() == "dsrsid"
+    ds = state.dsrsid_dataset if is_dsrsid else state.ben14k_dataset
     if ds is None:
         ds = state.ben14k_dataset
-        
+        is_dsrsid = False
+
+    # Pick the right class list for label decoding
+    class_list = DSRSID_CLASSES if is_dsrsid else BIGEARTHNET_19_CLASSES
+
     query_idx = min(req.query_index, len(ds) - 1)
     sample = ds[query_idx]
-    query_gt_label = sample["label"].numpy()
-    query_name = sample.get("name", f"query_{query_idx}.png")
-    
-    t0 = time.perf_counter_ns()
-    if req.source_modality.lower() in ["s1", "sar"] and "image_s1" in sample:
-        query_tensor = sample["image_s1"]
-    elif req.source_modality.lower() in ["s1", "sar"]:
-        query_tensor = sample["image"][:2, :, :]
+    query_gt_label_raw = sample["label"]
+    # DSRSID has scalar int label; BEN-14K has multi-hot float vector
+    if query_gt_label_raw.ndim == 0 or query_gt_label_raw.shape == torch.Size([]):
+        label_int = int(query_gt_label_raw.item())
+        query_gt_label = np.zeros(len(class_list), dtype=np.float32)
+        if label_int < len(class_list):
+            query_gt_label[label_int] = 1.0
     else:
-        query_tensor = sample["image"] if sample["image"].shape[0] in [2, 12, 1, 4] else sample["image"][2:, :, :]
-        
+        query_gt_label = query_gt_label_raw.numpy()
+
+    query_name = sample.get("name", f"query_{query_idx}.png")
+
+    t0 = time.perf_counter_ns()
+    # Select the right channel slice for the source modality
+    src = req.source_modality.lower()
+    if src in ["s1", "sar"]:
+        query_tensor = sample.get("image_s1", sample["image"][:2])
+    elif src == "pan":
+        query_tensor = sample.get("image_s1", sample["image"][:1])
+    elif src == "ms":
+        query_tensor = sample.get("image_s2", sample["image"][-4:] if sample["image"].shape[0] >= 4 else sample["image"])
+    else:
+        # s2 / default
+        full = sample["image"]
+        query_tensor = full[2:] if full.shape[0] >= 14 else full
+
     query_img_batch = query_tensor.unsqueeze(0).to(state.device)
-    query_b64 = array_to_base64_png(query_tensor.numpy(), modality=req.source_modality)
+    query_b64 = array_to_base64_png(query_tensor.numpy(), modality=src)
     t1 = time.perf_counter_ns()
     prep_ms = (t1 - t0) / 1e6
-    
+
     with torch.no_grad():
         t2 = time.perf_counter_ns()
-        if req.source_modality.lower() in ["s1", "sar"]:
+        if src in ["s1", "sar", "pan"]:
             feats = state.saber_model.backbone(query_img_batch, state.saber_model.s1_wvs)
             z1 = state.saber_model.s1_projection(feats)
             t3 = time.perf_counter_ns()
             feat_ext_ms = (t3 - t2) / 1e6
-            
+
             t4 = time.perf_counter_ns()
             if req.enable_bridge and getattr(state.saber_model, "bridge", None) is not None:
+                # Temporarily override ode_steps per-request (e.g. 5 for fast demo, 10 for full)
+                original_steps = state.saber_model.bridge.ode_steps
+                state.saber_model.bridge.ode_steps = req.ode_steps
                 z_query = state.saber_model.bridge(z1)
+                state.saber_model.bridge.ode_steps = original_steps
             else:
                 z_query = state.saber_model.predictor(z1)
             t5 = time.perf_counter_ns()
@@ -363,55 +541,73 @@ def execute_query(req: QueryRequest):
             feat_ext_ms = (t3 - t2) / 1e6
             bridge_ms = 0.0
             query_emb = state.saber_model.retrieval_head(z).cpu().numpy()[0]
-            
+
+    # Choose the right FAISS slot based on dataset + target modality
+    tgt = req.target_modality.lower()
+    ds_key = req.dataset_name.lower()
+    retriever = (
+        state.retrievers.get((ds_key, tgt))
+        or state.retrievers.get((ds_key, "ms" if ds_key == "dsrsid" else "s2"))
+        or state.retriever
+    )
+
     t6 = time.perf_counter_ns()
-    raw_matches = state.retriever.retrieve(query_emb, k=req.top_k)
+    raw_matches = retriever.retrieve(query_emb, k=req.top_k)
     t7 = time.perf_counter_ns()
     faiss_ms = (t7 - t6) / 1e6
-    
     total_ms = (t7 - t_start) / 1e6
-    
+
     candidates = []
     for rank, match in enumerate(raw_matches, 1):
-        m_name = match["name"]
+        m_name  = match["name"]
         m_score = float(match["score"])
         m_label = match["label"]
-        
+
         jaccard = calculate_jaccard(query_gt_label, m_label)
-        m_b64 = array_to_base64_png(np.random.randn(120, 120, 12).astype(np.float32), modality=req.target_modality)
-        active_classes = [BIGEARTHNET_19_CLASSES[i] for i in np.where(m_label > 0.5)[0] if i < len(BIGEARTHNET_19_CLASSES)]
-        
+
+        # ── Fetch actual gallery image ──────────────────────────
+        m_b64 = _get_gallery_thumbnail(req.dataset_name, tgt, m_name)
+
+        # Decode class names — handle both int scalar and multi-hot
+        if m_label.ndim == 0 or (hasattr(m_label, "shape") and m_label.shape == ()):
+            label_int = int(m_label)
+            active_classes = [class_list[label_int]] if label_int < len(class_list) else []
+            label_indices = [label_int]
+        else:
+            label_indices = np.where(m_label > 0.5)[0].tolist()
+            active_classes = [class_list[i] for i in label_indices if i < len(class_list)]
+
         candidates.append({
-            "rank": rank,
-            "name": m_name,
+            "rank":             rank,
+            "name":             m_name,
             "similarity_score": round(m_score * 100, 2),
-            "jaccard_overlap": round(jaccard * 100, 2),
-            "label_indices": np.where(m_label > 0.5)[0].tolist(),
-            "active_classes": active_classes,
-            "thumbnail": m_b64
+            "jaccard_overlap":  round(jaccard * 100, 2),
+            "label_indices":    label_indices,
+            "active_classes":   active_classes,
+            "thumbnail":        m_b64,
         })
-        
-    active_query_classes = [BIGEARTHNET_19_CLASSES[i] for i in np.where(query_gt_label > 0.5)[0] if i < len(BIGEARTHNET_19_CLASSES)]
-    
+
+    active_query_classes = [class_list[i] for i in np.where(query_gt_label > 0.5)[0].tolist() if i < len(class_list)]
+
     return {
         "query": {
-            "name": query_name,
-            "index": query_idx,
+            "name":            query_name,
+            "index":           query_idx,
             "source_modality": req.source_modality,
             "target_modality": req.target_modality,
-            "label_indices": np.where(query_gt_label > 0.5)[0].tolist(),
-            "active_classes": active_query_classes,
-            "thumbnail": query_b64
+            "label_indices":   np.where(query_gt_label > 0.5)[0].tolist(),
+            "active_classes":  active_query_classes,
+            "thumbnail":       query_b64,
         },
         "candidates": candidates,
         "latency_telemetry": {
-            "preprocessing_ms": round(prep_ms, 2),
+            "preprocessing_ms":      round(prep_ms, 2),
             "feature_extraction_ms": round(feat_ext_ms, 2),
-            "latent_bridge_ms": round(bridge_ms, 2),
-            "faiss_search_ms": round(faiss_ms, 2),
-            "total_latency_ms": round(total_ms, 2),
-            "status": "SUB-30MS TARGET ACHIEVED" if total_ms < 30.0 else "OPERATIONAL"
-        }
+            "latent_bridge_ms":      round(bridge_ms, 2),
+            "faiss_search_ms":       round(faiss_ms, 2),
+            "total_latency_ms":      round(total_ms, 2),
+            "status": "SUB-30MS TARGET ACHIEVED" if total_ms < 30.0 else "OPERATIONAL",
+        },
     }
 
 @app.post("/api/retrieval/ablation")

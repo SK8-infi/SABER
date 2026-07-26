@@ -34,39 +34,28 @@ __pycache__/
 
 # Project checkpoints & data outputs
 checkpoints/
-rejepa/checkpoints/
-Saber/checkpoints/
-Saber_bridge/checkpoints/
-Saber_bridge/checkpoints_bridge/
-Saber_bridge/extracted/
-Saber_bridge/visualizations_bridge/
+datasets/
 
-data/
-rejepa/data/
-Saber/data/
-Saber_bridge/data/
-/Datasets/
-!datasets/
+# Old dev workspaces (merged into Saber/)
+rejepa/
+Saber_bridge/
+Saber_dofa/
+Saber_geometry/
+Saber_retrieval/
 
-# Local prep files
-prep/
-Datasets
-
-# Large archives
-*.zip
-
-# Intermediate extracted features and lock files
+# Intermediate extracted features
 Saber/extracted_temp*/
+
+# Large archives & temp files
+*.zip
 ~$*.docx
 ~$*.pptx
 
-# User requested excluded files
+# Stale files
 run_round1.ps1
 SABER_Presentation_Script.docx
 SABER_Colab_backup.ipynb
 improvement_plan.md
 benchmark_latency.py
-\[Pub\] ISRO BAH 2026 _ Idea Submission Team Sentinel8 Final.pdf
-*Sentinel8 Final.pdf
-rejepa/
+*Sentinel8\ Final.pdf
 

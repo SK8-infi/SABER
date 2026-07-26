@@ -1,84 +1,94 @@
-import React from 'react';
-import { X, Layers, CheckCircle, AlertTriangle } from 'lucide-react';
+import { X } from 'lucide-react';
 
 export default function CompareModal({ query, candidate, onClose }) {
   if (!query || !candidate) return null;
 
+  const items = [
+    {
+      img:     query.thumbnail,
+      label:   query.source_modality.toUpperCase(),
+      name:    query.name,
+      classes: query.active_classes,
+      tag:     'tag--saffron',
+      border:  'rgba(255,153,51,0.25)',
+      caption: 'QUERY IMAGE',
+    },
+    {
+      img:     candidate.thumbnail,
+      label:   `RANK #${candidate.rank}`,
+      name:    candidate.name,
+      classes: candidate.active_classes,
+      tag:     'tag--green',
+      border:  'rgba(34,197,94,0.25)',
+      caption: 'RETRIEVED MATCH',
+    },
+  ];
+
   return (
-    <div style={{
-      position: 'fixed',
-      top: 0,
-      left: 0,
-      right: 0,
-      bottom: 0,
-      backgroundColor: 'rgba(11, 14, 20, 0.85)',
-      backdropFilter: 'blur(8px)',
-      zIndex: 200,
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      padding: '24px'
-    }}>
-      <div className="scientific-card" style={{ width: '100%', maxWidth: '900px', maxHeight: '90vh', overflowY: 'auto' }}>
-        
-        <div className="card-header">
-          <span className="card-title">
-            <Layers className="card-title-icon" size={16} /> Side-by-Side Multi-Sensor Image & Spectrum Inspector
-          </span>
-          <button className="secondary-btn" onClick={onClose} style={{ padding: '4px 8px' }}>
-            <X size={16} />
-          </button>
-        </div>
-
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '20px' }}>
-          
-          {/* Left: Query Image */}
-          <div style={{ backgroundColor: 'var(--bg-dark)', padding: '16px', borderRadius: '6px', border: '1px solid var(--border-color)' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
-              <span className="mono-tag saffron">QUERY: {query.source_modality.toUpperCase()}</span>
-              <span style={{ fontSize: '0.8rem', fontWeight: 600 }}>{query.name}</span>
-            </div>
-            <div style={{ width: '100%', height: '240px', borderRadius: '6px', overflow: 'hidden', marginBottom: '12px' }}>
-              <img src={query.thumbnail} alt="Query" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-            </div>
-            <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
-              Active Classes: {query.active_classes.join(', ') || 'None'}
-            </div>
-          </div>
-
-          {/* Right: Candidate Image */}
-          <div style={{ backgroundColor: 'var(--bg-dark)', padding: '16px', borderRadius: '6px', border: '1px solid var(--accent-saffron)' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
-              <span className="mono-tag green">MATCH RANK #{candidate.rank} ({candidate.similarity_score}%)</span>
-              <span style={{ fontSize: '0.8rem', fontWeight: 600 }}>{candidate.name}</span>
-            </div>
-            <div style={{ width: '100%', height: '240px', borderRadius: '6px', overflow: 'hidden', marginBottom: '12px' }}>
-              <img src={candidate.thumbnail} alt="Candidate" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-            </div>
-            <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
-              Active Classes: {candidate.active_classes.join(', ') || 'None'}
-            </div>
-          </div>
-
-        </div>
-
-        {/* Overlap Summary */}
-        <div style={{ backgroundColor: 'var(--bg-dark)', padding: '14px', borderRadius: '6px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+    <div className="modal-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
+      <div className="modal-box">
+        {/* header */}
+        <div className="modal-header">
           <div>
-            <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>MULTI-LABEL JACCARD OVERLAP</div>
-            <div className="data-mono" style={{ fontSize: '1.2rem', fontWeight: 700, color: 'var(--accent-cyan)' }}>
-              {candidate.jaccard_overlap}% Overlap
+            <div className="card-title" style={{ fontSize: '0.9rem' }}>Multi-Sensor Inspector</div>
+            <div style={{ fontSize: '0.72rem', color: 'var(--text-2)', marginTop: 3 }}>
+              Cross-modal pair comparison
             </div>
           </div>
+          <button className="btn btn--ghost btn--sm" onClick={onClose}><X size={14} /></button>
+        </div>
 
-          <div>
-            <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>COSINE VECTOR SIMILARITY</div>
-            <div className="data-mono" style={{ fontSize: '1.2rem', fontWeight: 700, color: 'var(--accent-saffron)' }}>
-              {candidate.similarity_score}% Score
+        {/* images */}
+        <div className="modal-images">
+          {items.map((item, i) => (
+            <div key={i} className="modal-img-card" style={{ borderColor: item.border }}>
+              <div className="modal-img-head">
+                <span className={`tag ${item.tag}`}>{item.label}</span>
+                <span style={{ fontSize: '0.72rem', fontWeight: 600, color: 'var(--text-1)' }}>{item.caption}</span>
+              </div>
+              <img src={item.img} alt={item.name} className="modal-img" />
+              <div style={{ padding: '10px 12px' }}>
+                <div style={{ fontSize: '0.76rem', fontWeight: 600, marginBottom: 5 }}>{item.name}</div>
+                <div className="chips">
+                  {item.classes.map((cl, j) => <span className="chip" key={j}>{cl}</span>)}
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* metrics */}
+        <div className="modal-metrics">
+          <div className="modal-metric">
+            <div className="metric-label">Jaccard Overlap</div>
+            <div className="mono text-cyan" style={{ fontSize: '1.4rem', fontWeight: 700 }}>
+              {candidate.jaccard_overlap}%
+            </div>
+            <div style={{ fontSize: '0.68rem', color: 'var(--text-2)', marginTop: 2 }}>
+              semantic class similarity
+            </div>
+          </div>
+          <div className="modal-metric-divider" />
+          <div className="modal-metric">
+            <div className="metric-label">Cosine Similarity</div>
+            <div className="mono text-saffron" style={{ fontSize: '1.4rem', fontWeight: 700 }}>
+              {candidate.similarity_score}%
+            </div>
+            <div style={{ fontSize: '0.68rem', color: 'var(--text-2)', marginTop: 2 }}>
+              embedding space distance
+            </div>
+          </div>
+          <div className="modal-metric-divider" />
+          <div className="modal-metric">
+            <div className="metric-label">Rank Position</div>
+            <div className="mono text-green" style={{ fontSize: '1.4rem', fontWeight: 700 }}>
+              #{candidate.rank}
+            </div>
+            <div style={{ fontSize: '0.68rem', color: 'var(--text-2)', marginTop: 2 }}>
+              in gallery of 11,866
             </div>
           </div>
         </div>
-
       </div>
     </div>
   );

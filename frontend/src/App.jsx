@@ -1,100 +1,47 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import Navbar from './components/Navbar';
-import OverviewSection from './components/OverviewSection';
-import ArchitectureFlow from './components/ArchitectureFlow';
 import RetrievalWorkspace from './components/RetrievalWorkspace';
-import ExplainabilityLab from './components/ExplainabilityLab';
-import BridgeAblationStudio from './components/BridgeAblationStudio';
-import BenchmarkDashboard from './components/BenchmarkDashboard';
-import DatasetExplorer from './components/DatasetExplorer';
-import SystemTelemetry from './components/SystemTelemetry';
-import EmbeddingSpaceInspector from './components/EmbeddingSpaceInspector';
-import ReportExporter from './components/ReportExporter';
+import ResultsDashboard from './components/ResultsDashboard';
+import AboutPanel from './components/AboutPanel';
 import CompareModal from './components/CompareModal';
 
+const TABS = [
+  { id: 'demo',    label: 'Demo' },
+  { id: 'results', label: 'Results' },
+  { id: 'about',   label: 'About' },
+];
+
 export default function App() {
-  const [activeTab, setActiveTab] = useState('overview');
+  const [tab, setTab]         = useState('demo');
   const [telemetry, setTelemetry] = useState(null);
-  const [compareData, setCompareData] = useState(null);
+  const [compare, setCompare] = useState(null);
 
   useEffect(() => {
     fetch('/api/health')
-      .then((res) => res.json())
-      .then((data) => setTelemetry(data))
-      .catch((err) => console.error("Error fetching health telemetry:", err));
+      .then(r => r.json())
+      .then(setTelemetry)
+      .catch(() => {});
   }, []);
 
-  const handleQueryExecuted = (retrievalResult) => {
-    if (retrievalResult && retrievalResult.latency_telemetry) {
-      setTelemetry((prev) => ({
-        ...prev,
-        total_latency_ms: retrievalResult.latency_telemetry.total_latency_ms
-      }));
+  const handleQuery = result => {
+    if (result?.latency_telemetry?.total_latency_ms) {
+      setTelemetry(prev => ({ ...prev, total_latency_ms: result.latency_telemetry.total_latency_ms }));
     }
   };
 
-  const handleCompareSelect = (query, candidate) => {
-    setCompareData({ query, candidate });
-  };
-
   return (
-    <div className="app-container">
-      <Navbar 
-        activeTab={activeTab} 
-        setActiveTab={setActiveTab} 
-        telemetry={telemetry} 
-      />
-
-      <main className="main-content-layout">
-        {activeTab === 'overview' && (
-          <OverviewSection onStartDemo={() => setActiveTab('workspace')} />
-        )}
-
-        {activeTab === 'architecture' && (
-          <ArchitectureFlow />
-        )}
-
-        {activeTab === 'workspace' && (
-          <RetrievalWorkspace 
-            onQueryExecuted={handleQueryExecuted} 
-            onCompareSelect={handleCompareSelect} 
-          />
-        )}
-
-        {activeTab === 'explainability' && (
-          <ExplainabilityLab />
-        )}
-
-        {activeTab === 'ablation' && (
-          <BridgeAblationStudio />
-        )}
-
-        {activeTab === 'benchmark' && (
-          <BenchmarkDashboard />
-        )}
-
-        {activeTab === 'dataset' && (
-          <DatasetExplorer />
-        )}
-
-        {activeTab === 'telemetry' && (
-          <SystemTelemetry />
-        )}
-
-        {activeTab === 'embedding' && (
-          <EmbeddingSpaceInspector />
-        )}
-
-        {activeTab === 'report' && (
-          <ReportExporter />
-        )}
+    <div className="app">
+      <Navbar tabs={TABS} active={tab} setTab={setTab} telemetry={telemetry} />
+      <main className="page">
+        {tab === 'demo'    && <RetrievalWorkspace onQuery={handleQuery} onCompare={setCompare} />}
+        {tab === 'results' && <ResultsDashboard />}
+        {tab === 'about'   && <AboutPanel />}
       </main>
-
-      {compareData && (
-        <CompareModal 
-          query={compareData.query} 
-          candidate={compareData.candidate} 
-          onClose={() => setCompareData(null)} 
+      {compare && (
+        <CompareModal
+          query={compare.query}
+          candidate={compare.candidate}
+          onClose={() => setCompare(null)}
         />
       )}
     </div>
