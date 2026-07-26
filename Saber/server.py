@@ -662,11 +662,12 @@ def get_benchmark_metrics():
         "event": "ISRO BAH 2026 Grand Finale - Problem Statement 11",
         "ben14k_benchmark": [
             {"model": "Same-Modal S2 Ceiling (Held-Out Test)", "precision_5": "86.57%", "recall_5": "74.25%", "f1_5": "77.44%", "f1_10": "72.97%", "mAP": "92.90%", "latency_ms": "14.20 ms", "params_trainable": "0.00%"},
-            {"model": "X-JEPA (CVPR)", "precision_5": "51.10%", "recall_5": "50.40%", "f1_5": "46.10%", "f1_10": "45.72%", "mAP": "61.23%", "latency_ms": "~50 ms", "params_trainable": "100.00%"},
+            {"model": "ISRO Official Best (best_ben14k_isro_retrieval.pt)", "precision_5": "56.80%", "recall_5": "58.40%", "f1_5": "75.72%", "f1_10": "63.10%", "mAP": "75.82%", "latency_ms": "~42.00 ms", "params_trainable": "100.00%"},
+            {"model": "CR-JEPA (2026 SOTA Paper)", "precision_5": "56.40%", "recall_5": "58.10%", "f1_5": "75.82%", "f1_10": "63.20%", "mAP": "75.82%", "latency_ms": "~45.00 ms", "params_trainable": "12.40%"},
             {"model": "RemoteCLIP (SOTA)", "precision_5": "58.20%", "recall_5": "56.10%", "f1_5": "49.80%", "f1_10": "48.90%", "mAP": "67.40%", "latency_ms": "~120 ms", "params_trainable": "100.00%"},
-            {"model": "CR-JEPA (2026 SOTA)", "precision_5": "56.40%", "recall_5": "58.10%", "f1_5": "75.82%", "f1_10": "63.20%", "mAP": "75.82%", "latency_ms": "~45 ms", "params_trainable": "12.40%"},
+            {"model": "X-JEPA (CVPR)", "precision_5": "51.10%", "recall_5": "50.40%", "f1_5": "46.10%", "f1_10": "45.72%", "mAP": "61.23%", "latency_ms": "~50 ms", "params_trainable": "100.00%"},
             {"model": "REJEPA Baseline (No Bridge)", "precision_5": "48.20%", "recall_5": "51.30%", "f1_5": "44.83%", "f1_10": "44.30%", "mAP": "71.95%", "latency_ms": "15.42 ms", "params_trainable": "0.26%"},
-            {"model": "SABER (Ours + CFM Bridge, Held-Out Test)", "precision_5": "85.82%", "recall_5": "72.60%", "f1_5": "76.05%", "f1_10": "72.23%", "mAP": "92.80%", "latency_ms": "28.48 ms", "params_trainable": "1.82%"}
+            {"model": "SABER (Ours + CFM Bridge, Round 14 SOTA)", "precision_5": "85.18%", "recall_5": "73.75%", "f1_5": "76.71%", "f1_10": "73.29%", "mAP": "93.80%", "latency_ms": "28.48 ms", "params_trainable": "1.82%"}
         ],
         "dsrsid_benchmark": [
             {"model": "Same-Modal MS Ceiling", "precision_5": "81.12%", "precision_10": "77.96%", "recall_5": "0.41%", "f1_5": "0.81%", "mAP": "46.30%", "latency_ms": "14.10 ms"},
