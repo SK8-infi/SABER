@@ -35,20 +35,20 @@ model:
   # Projection Head: 3-layer MLP + LayerNorm + GELU + Residual
   projection_head:
     hidden_dim: 768
-    out_dim: 384       # Must match gallery embedding dim in faiss_index_metadata.pth
+    out_dim: 768       # 768-D Round 14 SOTA embedding dimension
     
   # Predictor: predicts targets. Options: "mlp", "transformer"
   predictor:
     type: "mlp"
     hidden_dim: 768
-    out_dim: 384
+    out_dim: 768
     num_layers: 2         # Only used if predictor is mlp or transformer blocks
     num_heads: 4          # Only used for transformer predictor
 
 # Stochastic Latent Bridge (Dev 2)
 bridge:
   enabled: true
-  hidden_dim: 384
+  hidden_dim: 768
   num_blocks: 5
   ode_steps: 5
   dropout: 0.1
