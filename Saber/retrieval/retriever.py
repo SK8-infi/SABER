@@ -36,33 +36,50 @@ class Retriever:
         else:
             self.reranker = None
 
-    def retrieve(self, query_embedding: np.ndarray, k: int = 5, uncertainty: float = 0.0) -> List[Dict[str, Any]]:
+    def retrieve(self, query_embedding: np.ndarray, k: int = 5, uncertainty: float = 0.0, query_label: Optional[np.ndarray] = None, return_timings: bool = False) -> Any:
         """
         Performs search for a query embedding and returns matched items with metadata.
+        Optionally returns detailed microsecond timing metrics.
         """
+        import time
+        t_start = time.perf_counter_ns()
+        
         # Ensure query has shape (1, dimension)
         if len(query_embedding.shape) == 1:
             query_embedding = np.expand_dims(query_embedding, axis=0)
             
+        rerank_ms = 0.0
+
         if self.rerank_enabled and self.reranker is not None and self.gallery_embeddings is not None:
             # Query the FAISS index with shortlist K
             search_k = max(k, self.reranker.shortlist_k)
+            t_search_0 = time.perf_counter_ns()
             scores, indices = self.index.search(query_embedding, k=search_k)
-            
-            # Apply graph re-ranking on the shortlist
+            t_search_1 = time.perf_counter_ns()
+            faiss_search_ms = (t_search_1 - t_search_0) / 1e6
+
+            # Apply Jaccard & graph re-ranking on the shortlist
+            t_rerank_0 = time.perf_counter_ns()
             refined_scores, refined_indices = self.reranker.rerank(
                 query_embedding=query_embedding[0],
                 gallery_embeddings=self.gallery_embeddings,
                 indices=indices[0],
                 scores=scores[0],
                 gallery_labels=self.gallery_labels,
+                query_label=query_label,
                 uncertainty=uncertainty,
                 final_k=k
             )
+            t_rerank_1 = time.perf_counter_ns()
+            rerank_ms = (t_rerank_1 - t_rerank_0) / 1e6
+
             scores = np.expand_dims(refined_scores, axis=0)
             indices = np.expand_dims(refined_indices, axis=0)
         else:
+            t_search_0 = time.perf_counter_ns()
             scores, indices = self.index.search(query_embedding, k=k)
+            t_search_1 = time.perf_counter_ns()
+            faiss_search_ms = (t_search_1 - t_search_0) / 1e6
             
         results = []
         for score, rank_idx in zip(scores[0], indices[0]):
@@ -74,5 +91,7 @@ class Retriever:
                 "score": float(score),
                 "label": self.gallery_labels[rank_idx]
             })
-            
+
+        if return_timings:
+            return results, {"faiss_search_ms": round(faiss_search_ms, 2), "rerank_ms": round(rerank_ms, 2)}
         return results

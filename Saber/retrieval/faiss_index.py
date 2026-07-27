@@ -183,6 +183,21 @@ class AdvancedFAISSIndex:
             if not hasattr(self, 'vectors') or self.vectors is None:
                 raise ValueError("Index vectors have not been built or loaded.")
             queries = self._prepare_float(query_embeddings)
+
+            # High-performance PyTorch CUDA Tensor acceleration
+            try:
+                import torch
+                if torch.cuda.is_available():
+                    if not hasattr(self, "_gpu_vectors") or self._gpu_vectors is None:
+                        self._gpu_vectors = torch.from_numpy(self.vectors).to("cuda").half()
+                    q_tensor = torch.from_numpy(queries).to("cuda").half()
+                    with torch.no_grad():
+                        sims = torch.mm(q_tensor, self._gpu_vectors.T)
+                        scores, indices = torch.topk(sims, k=k, dim=1)
+                    return scores.cpu().float().numpy(), indices.cpu().numpy()
+            except Exception:
+                pass
+
             sims = queries @ self.vectors.T
             top_k_indices = np.argsort(-sims, axis=1)[:, :k]
             top_k_scores = np.take_along_axis(sims, top_k_indices, axis=1)

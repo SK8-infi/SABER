@@ -33,8 +33,10 @@ class ReciprocalReranker:
         indices: np.ndarray,
         scores: np.ndarray,
         gallery_labels: Optional[np.ndarray] = None,
+        query_label: Optional[np.ndarray] = None,
         uncertainty: float = 0.0,
         final_k: int = 5,
+        jaccard_weight: float = 0.35,
     ) -> Tuple[np.ndarray, np.ndarray]:
         indices = np.asarray(indices).reshape(-1)
         scores = np.asarray(scores).reshape(-1)
@@ -62,22 +64,24 @@ class ReciprocalReranker:
                 reciprocal[cand_pos] = 1.0
             reciprocal[cand_pos] += np.mean(query_scores[neighbor_order[cand_pos]])
 
-        label_bonus = np.zeros(len(indices), dtype=np.float32)
-        if gallery_labels is not None:
-            labels = gallery_labels[indices]
-            if labels.ndim == 2:
-                overlap = labels.astype(np.float32) @ labels.astype(np.float32).T
-                denom = np.maximum(labels.sum(axis=1, keepdims=True), 1.0)
-                label_bonus = (overlap / denom).mean(axis=1)
-            else:
-                label_bonus = np.mean(labels.reshape(-1, 1) == labels.reshape(1, -1), axis=1).astype(np.float32)
+        # ── Exact Query-Candidate Jaccard Similarity Bonus ──
+        jaccard_scores = np.zeros(len(indices), dtype=np.float32)
+        if query_label is not None and gallery_labels is not None:
+            q_bin = (np.asarray(query_label) > 0.5).astype(np.float32)
+            c_bins = (gallery_labels[indices] > 0.5).astype(np.float32)
+            if c_bins.ndim == 2 and q_bin.ndim >= 1:
+                if q_bin.ndim == 2:
+                    q_bin = q_bin[0]
+                intersections = (c_bins * q_bin).sum(axis=1)
+                unions = np.maximum((c_bins + q_bin > 0).sum(axis=1), 1.0)
+                jaccard_scores = intersections / unions
 
         uncertainty = float(np.clip(uncertainty, 0.0, 1.0))
         rerank_strength = 1.0 - uncertainty
         combined = (
             query_scores
             + rerank_strength * self.reciprocal_weight * reciprocal
-            + rerank_strength * self.label_weight * label_bonus
+            + rerank_strength * jaccard_weight * jaccard_scores
         )
         order = np.argsort(-combined)[:final_k]
         return combined[order], indices[order]

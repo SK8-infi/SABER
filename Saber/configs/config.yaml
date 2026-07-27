@@ -50,7 +50,7 @@ bridge:
   enabled: true
   hidden_dim: 768
   num_blocks: 5
-  ode_steps: 5
+  ode_steps: 3
   dropout: 0.1
   checkpoint: "checkpoints/bridge_best_ben14k.pth"
 
