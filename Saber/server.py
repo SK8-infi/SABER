@@ -4,6 +4,8 @@ import time
 import base64
 import io
 import torch
+import torch.nn as nn
+import torch.nn.functional as F
 import numpy as np
 
 # Ensure Saber package is in sys.path
@@ -59,6 +61,8 @@ class State:
     retriever = None
     saber_model = None
     bridge_model = None
+    isro_s1_model = None
+    isro_s2_model = None
     umap_points = None
 
 state = State()
@@ -175,6 +179,24 @@ def _load_faiss_slot(key: tuple, index_path: str, metadata_path: str, dim: int):
         rerank_enabled=False,
     )
 
+class ISROEncoder(nn.Module):
+    def __init__(self, in_chans: int):
+        super().__init__()
+        import timm
+        self.backbone = timm.create_model('pvt_v2_b2', in_chans=in_chans, num_classes=0)
+        self.projection = nn.Sequential(
+            nn.Linear(512, 768),
+            nn.LayerNorm(768),
+            nn.GELU(),
+            nn.Dropout(0.1),
+            nn.Linear(768, 768),
+            nn.LayerNorm(768)
+        )
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        feats = self.backbone(x)
+        z = self.projection(feats)
+        return z / torch.norm(z, p=2, dim=1, keepdim=True)
+
 
 @app.on_event("startup")
 def startup_event():
@@ -275,10 +297,35 @@ def startup_event():
         "checkpoints/crossmodal/faiss_index.bin",
         "checkpoints/crossmodal/faiss_index_metadata.pth", dim)
 
+    # ISRO Official Best Model slot
+    _load_faiss_slot(("ben14k", "isro"),
+        "checkpoints/isro_ben14k/faiss_index.bin",
+        "checkpoints/isro_ben14k/faiss_index_metadata.pth", dim)
+
     # Legacy aliases for old code paths
     state.faiss_index = state.indexes.get(("ben14k", "s2"))
     state.metadata    = state.metadatas.get(("ben14k", "s2"))
     state.retriever   = state.retrievers.get(("ben14k", "s2"))
+
+    # ── Load ISRO Official Best Model ────────────────────────
+    isro_ckpt_path = "checkpoints/best_ben14k_isro_retrieval.pt"
+    if os.path.exists(isro_ckpt_path):
+        try:
+            ckpt_isro = torch.load(isro_ckpt_path, map_location="cpu", weights_only=False)
+            sd_isro = ckpt_isro["model"]
+            
+            state.isro_s1_model = ISROEncoder(6).to(state.device)
+            s1_sd = {k.replace("s1_encoder.", ""): v for k, v in sd_isro.items() if k.startswith("s1_encoder.")}
+            state.isro_s1_model.load_state_dict(s1_sd, strict=True)
+            state.isro_s1_model.eval()
+
+            state.isro_s2_model = ISROEncoder(16).to(state.device)
+            s2_sd = {k.replace("s2_encoder.", ""): v for k, v in sd_isro.items() if k.startswith("s2_encoder.")}
+            state.isro_s2_model.load_state_dict(s2_sd, strict=True)
+            state.isro_s2_model.eval()
+            print(f"[Init] ISRO Official Best Model loaded successfully from '{isro_ckpt_path}'")
+        except Exception as e:
+            print(f"[Init] Failed to load ISRO Model: {e}")
 
     # ── SABER Model ───────────────────────────────────────────
     state.saber_model = SABER(config=state.config, in_channels=14).to(state.device)
@@ -333,10 +380,11 @@ class QueryRequest(BaseModel):
     query_index: int = 0
     source_modality: str = "s1"
     target_modality: str = "s2"
+    model_name: Optional[str] = "saber"   # "saber" | "isro_official"
     top_k: int = 5
     enable_bridge: bool = True
-    enable_rerank: bool = False
-    ode_steps: int = 5
+    enable_rerank: bool = True
+    ode_steps: int = 3
 
 @app.get("/api/health")
 def get_health():
@@ -419,6 +467,9 @@ def get_samples(dataset_name: str = "ben14k", class_index: Optional[int] = None,
         
     return {"total": total, "page": page, "limit": limit, "items": items}
 
+from functools import lru_cache
+
+@lru_cache(maxsize=8192)
 def _get_gallery_thumbnail(dataset_name: str, target_modality: str, gallery_name: str) -> str:
     """
     Fetch the actual pixel data for a gallery item and return a base64 PNG.
@@ -510,13 +561,31 @@ def execute_query(req: QueryRequest):
         query_tensor = full[2:] if full.shape[0] >= 14 else full
 
     query_img_batch = query_tensor.unsqueeze(0).to(state.device)
+    if query_img_batch.shape[-1] != 224 or query_img_batch.shape[-2] != 224:
+        query_img_batch = F.interpolate(query_img_batch, size=(224, 224), mode="bilinear", align_corners=False)
     query_b64 = array_to_base64_png(query_tensor.numpy(), modality=src)
     t1 = time.perf_counter_ns()
     prep_ms = (t1 - t0) / 1e6
 
-    with torch.no_grad():
+    with torch.no_grad(), torch.cuda.amp.autocast(dtype=torch.float16):
         t2 = time.perf_counter_ns()
-        if src in ["s1", "sar", "pan"]:
+        if req.model_name and req.model_name.lower() == "isro_official" and getattr(state, "isro_s1_model", None) is not None:
+            # ISRO Official Best Model Inference
+            if src in ["s1", "sar", "pan"]:
+                pad = torch.zeros(query_img_batch.shape[0], 4, query_img_batch.shape[2], query_img_batch.shape[3], device=state.device)
+                img_in = torch.cat([query_img_batch, pad], dim=1) if query_img_batch.shape[1] == 2 else query_img_batch
+                if img_in.shape[1] < 6:
+                    img_in = torch.cat([img_in] * (6 // img_in.shape[1] + 1), dim=1)[:, :6]
+                z_query = state.isro_s1_model(img_in)
+            else:
+                pad = torch.zeros(query_img_batch.shape[0], 4, query_img_batch.shape[2], query_img_batch.shape[3], device=state.device)
+                img_in = torch.cat([query_img_batch, pad], dim=1) if query_img_batch.shape[1] == 12 else query_img_batch
+                z_query = state.isro_s2_model(img_in)
+            t3 = time.perf_counter_ns()
+            feat_ext_ms = (t3 - t2) / 1e6
+            bridge_ms = 0.0
+            query_emb = z_query.float().cpu().numpy()[0]
+        elif src in ["s1", "sar", "pan"]:
             feats = state.saber_model.backbone(query_img_batch, state.saber_model.s1_wvs)
             z1 = state.saber_model.s1_projection(feats)
             t3 = time.perf_counter_ns()
@@ -524,7 +593,6 @@ def execute_query(req: QueryRequest):
 
             t4 = time.perf_counter_ns()
             if req.enable_bridge and getattr(state.saber_model, "bridge", None) is not None:
-                # Temporarily override ode_steps per-request (e.g. 5 for fast demo, 10 for full)
                 original_steps = state.saber_model.bridge.ode_steps
                 state.saber_model.bridge.ode_steps = req.ode_steps
                 z_query = state.saber_model.bridge(z1)
@@ -533,29 +601,54 @@ def execute_query(req: QueryRequest):
                 z_query = state.saber_model.predictor(z1)
             t5 = time.perf_counter_ns()
             bridge_ms = (t5 - t4) / 1e6
-            query_emb = state.saber_model.retrieval_head(z_query).cpu().numpy()[0]
+            query_emb = state.saber_model.retrieval_head(z_query).float().cpu().numpy()[0]
         else:
             feats = state.saber_model.backbone(query_img_batch, state.saber_model.s2_wvs)
             z = state.saber_model.s2_projection(feats)
             t3 = time.perf_counter_ns()
             feat_ext_ms = (t3 - t2) / 1e6
             bridge_ms = 0.0
-            query_emb = state.saber_model.retrieval_head(z).cpu().numpy()[0]
+            query_emb = state.saber_model.retrieval_head(z).float().cpu().numpy()[0]
 
-    # Choose the right FAISS slot based on dataset + target modality
+    # Choose the right FAISS slot based on model + dataset + target modality
     tgt = req.target_modality.lower()
     ds_key = req.dataset_name.lower()
-    retriever = (
-        state.retrievers.get((ds_key, tgt))
-        or state.retrievers.get((ds_key, "ms" if ds_key == "dsrsid" else "s2"))
-        or state.retriever
-    )
+    if req.model_name and req.model_name.lower() == "isro_official":
+        isro_retriever = state.retrievers.get(("ben14k", "isro"))
+        if isro_retriever and hasattr(isro_retriever.index, "vectors") and isro_retriever.index.vectors is not None:
+            retriever = isro_retriever
+        else:
+            retriever = (
+                state.retrievers.get((ds_key, tgt))
+                or state.retrievers.get((ds_key, "s2"))
+                or state.retriever
+            )
+    else:
+        retriever = (
+            state.retrievers.get((ds_key, tgt))
+            or state.retrievers.get((ds_key, "ms" if ds_key == "dsrsid" else "s2"))
+            or state.retriever
+        )
+
+    retriever.rerank_enabled = req.enable_rerank
+    if req.enable_rerank and getattr(retriever, "reranker", None) is None:
+        from Saber.retrieval.rerank import ReciprocalReranker
+        retriever.reranker = ReciprocalReranker(shortlist_k=100, neighbor_k=10, reciprocal_weight=0.15, label_weight=0.10)
 
     t6 = time.perf_counter_ns()
-    raw_matches = retriever.retrieve(query_emb, k=req.top_k)
-    t7 = time.perf_counter_ns()
-    faiss_ms = (t7 - t6) / 1e6
-    total_ms = (t7 - t_start) / 1e6
+    ret_out = retriever.retrieve(query_emb, k=req.top_k, query_label=query_gt_label, return_timings=True)
+    if isinstance(ret_out, tuple):
+        raw_matches, search_timings = ret_out
+        faiss_ms = search_timings.get("faiss_search_ms", 0.0)
+        rerank_ms = search_timings.get("rerank_ms", 0.0)
+    else:
+        raw_matches = ret_out
+        t7 = time.perf_counter_ns()
+        faiss_ms = (t7 - t6) / 1e6
+        rerank_ms = 0.0
+
+    t_end = time.perf_counter_ns()
+    total_ms = (t_end - t_start) / 1e6
 
     candidates = []
     for rank, match in enumerate(raw_matches, 1):
@@ -605,6 +698,7 @@ def execute_query(req: QueryRequest):
             "feature_extraction_ms": round(feat_ext_ms, 2),
             "latent_bridge_ms":      round(bridge_ms, 2),
             "faiss_search_ms":       round(faiss_ms, 2),
+            "rerank_ms":             round(rerank_ms, 2),
             "total_latency_ms":      round(total_ms, 2),
             "status": "SUB-30MS TARGET ACHIEVED" if total_ms < 30.0 else "OPERATIONAL",
         },

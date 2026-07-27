@@ -8,18 +8,21 @@ import {
 
 function LatencyStrip({ lats }) {
   const items = [
-    { label: 'Feat Ext', val: lats.feature_extraction_ms,  color: 'var(--cyan)' },
-    { label: 'CFM ODE',  val: lats.latent_bridge_ms,        color: 'var(--saffron)' },
-    { label: 'FAISS',    val: lats.faiss_search_ms,         color: 'var(--blue)' },
-    { label: 'Total',    val: lats.total_latency_ms,        color: 'var(--green)', bold: true },
-  ];
+    { label: 'Prep',     val: lats?.preprocessing_ms,      color: 'var(--text-2)' },
+    { label: 'Feat Ext', val: lats?.feature_extraction_ms, color: 'var(--cyan)' },
+    { label: 'CFM ODE',  val: lats?.latent_bridge_ms,       color: 'var(--saffron)', hideIfZero: true },
+    { label: 'FAISS',    val: lats?.faiss_search_ms,        color: 'var(--blue)' },
+    { label: 'Re-Rank',  val: lats?.rerank_ms,              color: '#a855f7', hideIfZero: true },
+    { label: 'Total',    val: lats?.total_latency_ms,       color: 'var(--green)', bold: true },
+  ].filter(m => !m.hideIfZero || (m.val && m.val > 0));
+
   return (
-    <div className="lat-strip">
+    <div className="lat-strip" style={{ gap: '0.4rem', flexWrap: 'wrap' }}>
       {items.map(m => (
         <div key={m.label} className={`lat-item${m.bold ? ' lat-item--total' : ''}`}>
           <span className="metric-label">{m.label}</span>
           <span className="mono" style={{ fontSize: '0.82rem', fontWeight: m.bold ? 700 : 500, color: m.color }}>
-            {m.val} ms
+            {m.val !== undefined && m.val !== null ? `${m.val} ms` : 'N/A'}
           </span>
         </div>
       ))}
@@ -102,32 +105,53 @@ function CandidateCard({ c, query, onCompare, rank }) {
 
 function QueryMode({ params, onResult, onCompare }) {
   const { dataset, srcMod, tgtMod, qIdx, topK, bridge, rerank, odeSteps } = params;
-  const [loading, setLoading] = useState(false);
-  const [result, setResult]   = useState(null);
-  const [error, setError]     = useState(null);
+  const [loading, setLoading]         = useState(false);
+  const [resultSaber, setResultSaber] = useState(null);
+  const [resultIsro, setResultIsro]   = useState(null);
+  const [error, setError]             = useState(null);
 
   const run = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch('/api/retrieval/query', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          dataset_name:     dataset,
-          query_index:      qIdx,
-          source_modality:  srcMod,
-          target_modality:  tgtMod,
-          top_k:            topK,
-          enable_bridge:    bridge,
-          enable_rerank:    rerank,
-          ode_steps:        odeSteps,
+      const [resSaber, resIsro] = await Promise.all([
+        fetch('/api/retrieval/query', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            dataset_name:     dataset,
+            query_index:      qIdx,
+            source_modality:  srcMod,
+            target_modality:  tgtMod,
+            model_name:       'saber',
+            top_k:            topK,
+            enable_bridge:    bridge,
+            enable_rerank:    rerank,
+            ode_steps:        odeSteps,
+          }),
         }),
-      });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = await res.json();
-      setResult(data);
-      if (onResult) onResult(data);
+        fetch('/api/retrieval/query', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            dataset_name:     dataset,
+            query_index:      qIdx,
+            source_modality:  srcMod,
+            target_modality:  tgtMod,
+            model_name:       'isro_official',
+            top_k:            topK,
+            enable_bridge:    false,
+            enable_rerank:    false,
+            ode_steps:        odeSteps,
+          }),
+        })
+      ]);
+      if (!resSaber.ok || !resIsro.ok) throw new Error("Retrieval request failed");
+      const dataSaber = await resSaber.json();
+      const dataIsro  = await resIsro.json();
+      setResultSaber(dataSaber);
+      setResultIsro(dataIsro);
+      if (onResult) onResult(dataSaber);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -138,12 +162,14 @@ function QueryMode({ params, onResult, onCompare }) {
   // auto-run when core params change
   useEffect(() => { run(); }, [dataset, qIdx, srcMod, tgtMod, topK]);
 
+  const queryInfo = resultSaber?.query || resultIsro?.query;
+
   return (
     <div className="results-area">
       {loading && (
         <div className="loading-state">
           <div className="spinner" />
-          <span className="text-dim">Running retrieval…</span>
+          <span className="text-dim">Executing Real-Time Dual-Model Retrieval (SABER + ISRO Official)…</span>
         </div>
       )}
 
@@ -154,40 +180,78 @@ function QueryMode({ params, onResult, onCompare }) {
         </div>
       )}
 
-      {result && !loading && (
+      {queryInfo && !loading && (
         <>
           {/* Query header */}
           <div className="query-header">
             <div className="query-img-wrap">
-              <img src={result.query.thumbnail} alt="Query" className="query-thumb" />
-              <span className="query-mod-badge">{result.query.source_modality.toUpperCase()}</span>
+              <img src={queryInfo.thumbnail} alt="Query" className="query-thumb" />
+              <span className="query-mod-badge">{queryInfo.source_modality.toUpperCase()}</span>
             </div>
             <div className="query-meta">
-              <div className="query-name">{result.query.name}</div>
+              <div className="query-name">{queryInfo.name}</div>
               <div className="chips" style={{ marginTop: 4 }}>
-                {result.query.active_classes.slice(0, 6).map((cl, i) => (
+                {queryInfo.active_classes.slice(0, 6).map((cl, i) => (
                   <span className="chip chip--query" key={i}>{cl}</span>
                 ))}
               </div>
               <div style={{ marginTop: 8, fontSize: '0.75rem', color: 'var(--text-2)' }}>
-                Gallery: <span className="text-dim">{result.query.target_modality.toUpperCase()}</span>
+                Target Gallery: <span className="text-dim">{queryInfo.target_modality.toUpperCase()}</span>
                 &nbsp;·&nbsp;Top-{topK}
                 &nbsp;·&nbsp;Bridge: <span style={{ color: bridge ? 'var(--green)' : 'var(--red)' }}>{bridge ? 'ON' : 'OFF'}</span>
               </div>
             </div>
-            <LatencyStrip lats={result.latency_telemetry} />
           </div>
 
-          {/* Candidates */}
-          <div className="cand-grid">
-            {result.candidates.map(c => (
-              <CandidateCard key={c.rank} c={c} query={result.query} onCompare={onCompare} rank={c.rank} />
-            ))}
-          </div>
+          {/* ── MODEL 1: SABER (OURS) ── */}
+          {resultSaber && (
+            <div className="model-results-section" style={{ marginBottom: 28 }}>
+              <div className="section-title-bar" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12, paddingBottom: 8, borderBottom: '1px solid rgba(0, 230, 153, 0.2)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{ background: 'linear-gradient(135deg, #00e699, #00b377)', color: '#000', fontWeight: 700, padding: '2px 8px', borderRadius: 4, fontSize: '0.72rem', letterSpacing: '0.5px' }}>
+                    MODEL 1
+                  </span>
+                  <span style={{ fontWeight: 600, color: '#fff', fontSize: '0.95rem' }}>
+                    SABER — Neural ODE Bridge (Ours)
+                  </span>
+                </div>
+                <LatencyStrip lats={resultSaber.latency_telemetry} />
+              </div>
+
+              <div className="cand-grid">
+                {resultSaber.candidates.map(c => (
+                  <CandidateCard key={`saber_${c.rank}`} c={c} query={resultSaber.query} onCompare={onCompare} rank={c.rank} />
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* ── MODEL 2: ISRO OFFICIAL BEST ── */}
+          {resultIsro && (
+            <div className="model-results-section">
+              <div className="section-title-bar" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12, paddingBottom: 8, borderBottom: '1px solid rgba(160, 100, 255, 0.2)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{ background: 'linear-gradient(135deg, #a064ff, #7020fb)', color: '#fff', fontWeight: 700, padding: '2px 8px', borderRadius: 4, fontSize: '0.72rem', letterSpacing: '0.5px' }}>
+                    MODEL 2
+                  </span>
+                  <span style={{ fontWeight: 600, color: '#fff', fontSize: '0.95rem' }}>
+                    ISRO Official Best Model <span style={{ fontSize: '0.75rem', opacity: 0.7, fontWeight: 400 }}>(best_ben14k_isro_retrieval.pt)</span>
+                  </span>
+                </div>
+                <LatencyStrip lats={resultIsro.latency_telemetry} />
+              </div>
+
+              <div className="cand-grid">
+                {resultIsro.candidates.map(c => (
+                  <CandidateCard key={`isro_${c.rank}`} c={c} query={resultIsro.query} onCompare={onCompare} rank={c.rank} />
+                ))}
+              </div>
+            </div>
+          )}
         </>
       )}
 
-      {!result && !loading && !error && (
+      {!resultSaber && !resultIsro && !loading && !error && (
         <div className="empty-state">
           <Search size={32} color="var(--border-2)" />
           <span className="text-dim">Configure params and hit Execute</span>
@@ -329,10 +393,11 @@ export default function RetrievalWorkspace({ onQuery, onCompare }) {
   const [tgtMod, setTgtMod]     = useState('s2');
   const [qIdx, setQIdx]         = useState(0);
   const [topK, setTopK]         = useState(5);
+  const [modelName, setModelName] = useState('saber');
   const [showAdv, setShowAdv]   = useState(false);
   const [bridge, setBridge]     = useState(true);
-  const [rerank, setRerank]     = useState(false);
-  const [odeSteps, setOdeSteps] = useState(5);
+  const [rerank, setRerank]     = useState(true);
+  const [odeSteps, setOdeSteps] = useState(3);
   const isBen = dataset === 'ben14k';
 
   const handleDatasetChange = v => {
@@ -343,7 +408,7 @@ export default function RetrievalWorkspace({ onQuery, onCompare }) {
 
   const randomize = () => setQIdx(Math.floor(Math.random() * 2000));
 
-  const params = { dataset, srcMod, tgtMod, qIdx, topK, bridge, rerank, odeSteps };
+  const params = { dataset, srcMod, tgtMod, qIdx, topK, modelName, bridge, rerank, odeSteps };
 
   return (
     <div className="workspace">
