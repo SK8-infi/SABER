@@ -54,7 +54,11 @@ class Trainer:
         os.makedirs(self.checkpoint_dir, exist_ok=True)
         self.tb_writer = SummaryWriter(log_dir=os.path.join(config.log_dir, "tensorboard"))
         
-        self.scaler = torch.cuda.amp.GradScaler(enabled=self.amp_enabled)
+        if hasattr(torch.amp, "GradScaler"):
+            self.scaler = torch.amp.GradScaler("cuda", enabled=self.amp_enabled)
+        else:
+            self.scaler = torch.cuda.amp.GradScaler(enabled=self.amp_enabled)
+
 
         # Configurable EMA target encoder path for cross-modal prediction stability
         self.use_ema = config.train.get("use_ema", False)
@@ -104,7 +108,9 @@ class Trainer:
                 labels = labels.to(self.device)
 
             # Execute forward pass under autocast for mixed precision
-            with torch.cuda.amp.autocast(enabled=self.amp_enabled):
+            autocast_cm = torch.amp.autocast("cuda", enabled=self.amp_enabled) if hasattr(torch.amp, "autocast") else torch.cuda.amp.autocast(enabled=self.amp_enabled)
+            with autocast_cm:
+
                 if self.use_ema and self.target_model is not None:
                     outputs = self.model(x1, x2)
                     if len(outputs) == 5:

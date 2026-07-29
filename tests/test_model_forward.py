@@ -24,6 +24,41 @@ def test_saber_model_forward():
     norms = torch.norm(emb, p=2, dim=1)
     assert torch.allclose(norms, torch.ones_like(norms), atol=1e-3)
 
+from Saber.losses.saber_loss import SaberCombinedLoss
+
+def test_saber_loss_dsrsid_and_ben14k():
+    """Verify SaberCombinedLoss compatibility with DSRSID (1D) and BEN14K (2D) targets."""
+    loss_fn = SaberCombinedLoss()
+    
+    # 1. DSRSID (8 classes, single label 1D tensor of class indices)
+    z1 = torch.randn(4, 768)
+    z2 = torch.randn(4, 768)
+    z1_pred = torch.randn(4, 768)
+    logits_s1_dsrsid = torch.randn(4, 8)
+    logits_s2_dsrsid = torch.randn(4, 8)
+    targets_dsrsid = torch.tensor([0, 3, 7, 2], dtype=torch.long)
+    
+    res_dsrsid = loss_fn(
+        z1=z1, z2=z2, z1_pred=z1_pred, targets=targets_dsrsid,
+        logits_s1=logits_s1_dsrsid, logits_s2=logits_s2_dsrsid
+    )
+    assert "loss" in res_dsrsid
+    assert not torch.isnan(res_dsrsid["loss"])
+    
+    # 2. BEN-14K (19 classes, multi-label 2D multi-hot tensor)
+    logits_s1_ben = torch.randn(4, 19)
+    logits_s2_ben = torch.randn(4, 19)
+    targets_ben = torch.randint(0, 2, (4, 19)).float()
+    
+    res_ben = loss_fn(
+        z1=z1, z2=z2, z1_pred=z1_pred, targets=targets_ben,
+        logits_s1=logits_s1_ben, logits_s2=logits_s2_ben
+    )
+    assert "loss" in res_ben
+    assert not torch.isnan(res_ben["loss"])
+
 if __name__ == "__main__":
     test_saber_model_forward()
-    print("ALL MODEL FORWARD TESTS PASSED CLEANLY!")
+    test_saber_loss_dsrsid_and_ben14k()
+    print("ALL MODEL FORWARD & LOSS TESTS PASSED CLEANLY!")
+

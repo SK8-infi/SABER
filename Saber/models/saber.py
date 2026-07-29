@@ -94,8 +94,17 @@ class SABER(nn.Module):
             normalize=True
         )
 
-        # 5b. Multi-Label Classification Head
-        self.classifier = nn.Linear(config.model.projection_head.out_dim, 19)
+        # 5b. Multi-Label / Multi-Class Classification Head
+        dataset_cfg = getattr(config, "dataset", {})
+        if isinstance(dataset_cfg, dict):
+            ds_name = dataset_cfg.get("name", "").lower()
+            num_classes = dataset_cfg.get("num_classes", 8 if ds_name == "dsrsid" else 19)
+        else:
+            ds_name = getattr(dataset_cfg, "name", "").lower()
+            num_classes = getattr(dataset_cfg, "num_classes", 8 if ds_name == "dsrsid" else 19)
+
+        self.classifier = nn.Linear(config.model.projection_head.out_dim, num_classes)
+
 
         # 6. Optional CFM Latent Bridge (Dev 2)
         if config.get("bridge", {}).get("enabled", False):

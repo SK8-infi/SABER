@@ -272,15 +272,26 @@ class SaberCombinedLoss(nn.Module):
             if self.sigreg_weight > 0.0:
                 sigreg_loss = 0.5 * (sigreg_strong_loss(z1) + sigreg_strong_loss(z2))
 
-        # 2.5 Compute Multi-Label Classification Loss
+        # 2.5 Compute Multi-Label / Multi-Class Classification Loss
         classification_loss = torch.tensor(0.0, device=device)
         if logits_s1 is not None and targets is not None:
-            bce_s1 = F.binary_cross_entropy_with_logits(logits_s1, targets)
-            if logits_s2 is not None:
-                bce_s2 = F.binary_cross_entropy_with_logits(logits_s2, targets)
-                classification_loss = 0.5 * (bce_s1 + bce_s2)
+            if targets.ndim == 1 or targets.dtype in (torch.int64, torch.long):
+                targets_long = targets.long()
+                bce_s1 = F.cross_entropy(logits_s1, targets_long)
+                if logits_s2 is not None:
+                    bce_s2 = F.cross_entropy(logits_s2, targets_long)
+                    classification_loss = 0.5 * (bce_s1 + bce_s2)
+                else:
+                    classification_loss = bce_s1
             else:
-                classification_loss = bce_s1
+                targets_float = targets.float()
+                bce_s1 = F.binary_cross_entropy_with_logits(logits_s1, targets_float)
+                if logits_s2 is not None:
+                    bce_s2 = F.binary_cross_entropy_with_logits(logits_s2, targets_float)
+                    classification_loss = 0.5 * (bce_s1 + bce_s2)
+                else:
+                    classification_loss = bce_s1
+
 
         # 3. Combined total loss
         total_loss = (
