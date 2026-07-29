@@ -14,9 +14,9 @@ dataset:
   data_dir: "datasets/benv1_14k"          # BEN-14K root dir (relative to project root)
   dsrsid_path: "datasets/DSRSID.mat"     # DSRSID .mat file (relative to project root)
   use_synthetic: false            # Set to false to train on real data
-  size: 14832                     # Dataset size (e.g. 14832 for full ben14k, 80000 for dsrsid)
-  batch_size: 64
+  batch_size: 32
   num_workers: 2                  # Set to 2 for optimal loading on 2-core VM
+
 
 
   image_size: 120
@@ -87,7 +87,8 @@ train:
   weight_decay: 0.01
   epochs: 5
   grad_clip: 1.0
-  grad_accumulation_steps: 4  # Effective batch = 64 * 4 = 256
+  grad_accumulation_steps: 8  # Effective batch = 32 * 8 = 256
+
 
 
   amp: true              # Automated Mixed Precision
