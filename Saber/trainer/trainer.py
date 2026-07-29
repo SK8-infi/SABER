@@ -49,15 +49,23 @@ class Trainer:
         self.checkpoint_dir = config.checkpoint_dir
         self.grad_clip = config.train.grad_clip
         self.amp_enabled = config.train.amp and ("cuda" in str(device))
-        self.accum_steps = config.train.get("grad_accumulation_steps", 1)
-
-        os.makedirs(self.checkpoint_dir, exist_ok=True)
-        self.tb_writer = SummaryWriter(log_dir=os.path.join(config.log_dir, "tensorboard"))
-        
-        if hasattr(torch.amp, "GradScaler"):
-            self.scaler = torch.amp.GradScaler("cuda", enabled=self.amp_enabled)
+        amp_dtype_str = config.train.get("amp_dtype", "bfloat16").lower()
+        if self.amp_enabled and amp_dtype_str == "bfloat16" and hasattr(torch.cuda, "is_bf16_supported") and torch.cuda.is_bf16_supported():
+            self.amp_dtype = torch.bfloat16
+            self.use_scaler = False
+            logger.info("Using Native CUDA bfloat16 Mixed Precision (GradScaler disabled for maximum speed).")
+        elif self.amp_enabled:
+            self.amp_dtype = torch.float16
+            self.use_scaler = True
+            if hasattr(torch.amp, "GradScaler"):
+                self.scaler = torch.amp.GradScaler("cuda", enabled=True)
+            else:
+                self.scaler = torch.cuda.amp.GradScaler(enabled=True)
+            logger.info("Using Standard CUDA float16 Mixed Precision with GradScaler.")
         else:
-            self.scaler = torch.cuda.amp.GradScaler(enabled=self.amp_enabled)
+            self.amp_dtype = torch.float32
+            self.use_scaler = False
+
 
 
         # Configurable EMA target encoder path for cross-modal prediction stability
@@ -107,10 +115,9 @@ class Trainer:
             if labels is not None:
                 labels = labels.to(self.device)
 
-            # Execute forward pass under autocast for mixed precision
-            autocast_cm = torch.amp.autocast("cuda", enabled=self.amp_enabled) if hasattr(torch.amp, "autocast") else torch.cuda.amp.autocast(enabled=self.amp_enabled)
+            # Execute forward pass under autocast for mixed precision (bfloat16 or float16)
+            autocast_cm = torch.amp.autocast("cuda", enabled=self.amp_enabled, dtype=self.amp_dtype) if hasattr(torch.amp, "autocast") else torch.cuda.amp.autocast(enabled=self.amp_enabled, dtype=self.amp_dtype)
             with autocast_cm:
-
                 if self.use_ema and self.target_model is not None:
                     outputs = self.model(x1, x2)
                     if len(outputs) == 5:
@@ -175,23 +182,29 @@ class Trainer:
                 
                 loss = loss_dict["loss"] / self.accum_steps
 
-            # Backward pass using gradient scaling
-            self.scaler.scale(loss).backward()
+            # Backward pass (bfloat16 skips GradScaler overhead, float16 uses GradScaler)
+            if self.use_scaler:
+                self.scaler.scale(loss).backward()
+            else:
+                loss.backward()
 
             # Step optimizer every accum_steps batches (or at the last batch)
             if (batch_idx + 1) % self.accum_steps == 0 or (batch_idx + 1) == num_batches:
+                trainable_params = [p for p in self.model.parameters() if p.requires_grad]
                 # Gradient Clipping
                 if self.grad_clip > 0:
-                    self.scaler.unscale_(self.optimizer)
-                    torch.nn.utils.clip_grad_norm_(
-                        [p for p in self.model.parameters() if p.requires_grad],
-                        self.grad_clip
-                    )
+                    if self.use_scaler:
+                        self.scaler.unscale_(self.optimizer)
+                    torch.nn.utils.clip_grad_norm_(trainable_params, self.grad_clip)
 
                 # Step optimizer & learning rate scaler
-                self.scaler.step(self.optimizer)
-                self.scaler.update()
+                if self.use_scaler:
+                    self.scaler.step(self.optimizer)
+                    self.scaler.update()
+                else:
+                    self.optimizer.step()
                 self.optimizer.zero_grad()
+
 
                 # Update EMA target model parameters
                 if self.use_ema and self.target_model is not None:
