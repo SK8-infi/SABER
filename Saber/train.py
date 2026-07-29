@@ -61,9 +61,14 @@ def main() -> None:
     # Seed random number generators
     set_seed(config.seed)
 
-    # Establish target device
+    # Establish target device & CUDA acceleration flags
     device = torch.device(config.device if torch.cuda.is_available() and config.device == "cuda" else "cpu")
     logger.info(f"Computation Device: {device}")
+    if device.type == "cuda":
+        torch.backends.cudnn.benchmark = True
+        torch.backends.cuda.matmul.allow_tf32 = True
+        torch.backends.cudnn.allow_tf32 = True
+        logger.info("Enabled CUDA TF32 Tensor Cores and cuDNN benchmark acceleration.")
 
     # Load spatial transforms
     train_transform = get_transforms(image_size=config.dataset.image_size, is_train=True)
@@ -95,7 +100,6 @@ def main() -> None:
             split="train"
         )
         in_channels = train_dataset.num_channels
-
     else:
         raise ValueError(f"Unknown dataset configuration: '{config.dataset.name}'")
 
@@ -103,17 +107,18 @@ def main() -> None:
     logger.info(f"Training samples: {len(train_dataset)}, Input channels: {in_channels}")
     logger.info(f"Active Training Configuration -> Batch Size: {config.dataset.batch_size}, Learning Rate: {config.train.learning_rate}")
 
-    # Build Dataloader
-    num_workers = 0 if dataset_name == "dsrsid" else config.dataset.num_workers
+    # Build Dataloader (Supports full multiprocessing for both BEN-14K and DSRSID)
+    num_workers = config.dataset.get("num_workers", 2)
     train_loader = DataLoader(
         train_dataset,
         batch_size=config.dataset.batch_size,
         shuffle=True,
         num_workers=num_workers,
         drop_last=True,
-        pin_memory=True,
+        pin_memory=(device.type == "cuda"),
         persistent_workers=(num_workers > 0)
     )
+
 
     # Create model instance based on architecture config
     arch = config.model.get("architecture", "saber").lower()

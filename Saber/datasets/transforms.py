@@ -35,10 +35,11 @@ def get_transforms(image_size: int = 224, is_train: bool = True) -> Any:
             A.HorizontalFlip(p=0.5),
             A.VerticalFlip(p=0.5),
             A.RandomRotate90(p=0.5),
-            A.ShiftScaleRotate(
-                shift_limit=0.05, scale_limit=0.15, rotate_limit=15,
-                border_mode=0, p=0.5
+            A.Affine(
+                scale=(0.85, 1.15), translate_percent=(-0.05, 0.05), rotate=(-15, 15),
+                cval=0, p=0.5
             ),
+
             A.RandomResizedCrop(
                 size=(image_size, image_size),
                 scale=(0.7, 1.0), ratio=(0.85, 1.15), p=0.5
