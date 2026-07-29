@@ -30,9 +30,7 @@ def main() -> None:
     parser.add_argument("--data_dir", type=str, default=None, help="Override path to dataset directory")
     parser.add_argument("--modality", type=str, default=None, help="Override dataset modality ('s1', 's2', 'both')")
     parser.add_argument("--size", type=int, default=None, help="Override dataset size")
-    parser.add_argument("--compile", type=str, default=None, help="Enable PyTorch 2.x torch.compile ('true' or 'false')")
     args = parser.parse_args()
-
 
     # Load configuration
     config = load_config(args.config)
@@ -159,21 +157,6 @@ def main() -> None:
         )
     else:
         raise ValueError(f"Unknown architecture target: '{arch}'")
-
-    # Apply PyTorch 2.x torch.compile kernel fusion optimization if enabled
-    use_compile = config.train.get("compile", False)
-    if args.compile is not None:
-        use_compile = (args.compile.lower() == "true")
-
-    if use_compile and hasattr(torch, "compile") and device.type == "cuda":
-        try:
-            compile_mode = config.train.get("compile_mode", "reduce-overhead")
-            logger.info(f"Wrapping model with PyTorch 2.x torch.compile (mode='{compile_mode}')...")
-            model = torch.compile(model, mode=compile_mode)
-            logger.info("Successfully compiled SABER model with PyTorch 2.x Triton kernel fusion!")
-        except Exception as e:
-            logger.warning(f"Could not apply torch.compile: {e}. Falling back to uncompiled model.")
-
 
     # Build AdamW optimizer (train only adaptive layers)
     trainable_params = [p for p in model.parameters() if p.requires_grad]

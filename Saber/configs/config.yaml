@@ -88,10 +88,7 @@ train:
   grad_clip: 1.0
   grad_accumulation_steps: 4  # Effective batch = 64 * 4 = 256
   amp: true              # Automated Mixed Precision
-  compile: true          # PyTorch 2.x Kernel Fusion (torch.compile)
-  compile_mode: "reduce-overhead" # "reduce-overhead", "default", or "max-autotune"
   use_ema: true          # EMA target model copy
-
   ema_decay: 0.996
   warmup_epochs: 3
 

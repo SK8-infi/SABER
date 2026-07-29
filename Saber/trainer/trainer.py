@@ -93,9 +93,9 @@ class Trainer:
         )
 
         for batch_idx, batch in pbar:
-            # Move images and labels to target device with non-blocking async transfer
-            x1 = batch["image1"].to(self.device, non_blocking=True)
-            x2 = batch["image2"].to(self.device, non_blocking=True)
+            # Move images and labels to target device
+            x1 = batch["image1"].to(self.device)
+            x2 = batch["image2"].to(self.device)
             
             # Auto-resize on GPU to prevent CPU resize bottleneck
             if x1.shape[-1] != 224 or x1.shape[-2] != 224:
@@ -105,8 +105,7 @@ class Trainer:
                 
             labels = batch.get("label", None)
             if labels is not None:
-                labels = labels.to(self.device, non_blocking=True)
-
+                labels = labels.to(self.device)
 
             # Execute forward pass under autocast for mixed precision
             autocast_cm = torch.amp.autocast("cuda", enabled=self.amp_enabled) if hasattr(torch.amp, "autocast") else torch.cuda.amp.autocast(enabled=self.amp_enabled)
