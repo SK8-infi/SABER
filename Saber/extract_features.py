@@ -99,8 +99,8 @@ def main() -> None:
     logger.info(f"Total samples: {len(eval_dataset)}")
 
     # Build Dataloader
-    num_workers = config.dataset.get("num_workers", 2)
-    extraction_batch_size = 64 if torch.cuda.is_available() else config.dataset.batch_size
+    num_workers = 0 if dataset_name == "dsrsid" else config.dataset.num_workers
+    extraction_batch_size = 256 if torch.cuda.is_available() else config.dataset.batch_size
     eval_loader = DataLoader(
         eval_dataset,
         batch_size=extraction_batch_size,
@@ -109,7 +109,6 @@ def main() -> None:
         pin_memory=torch.cuda.is_available(),
         persistent_workers=(num_workers > 0)
     )
-
 
     # Create model instance
     arch = config.model.get("architecture", "saber").lower()

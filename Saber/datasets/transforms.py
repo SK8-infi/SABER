@@ -37,9 +37,8 @@ def get_transforms(image_size: int = 224, is_train: bool = True) -> Any:
             A.RandomRotate90(p=0.5),
             A.Affine(
                 scale=(0.85, 1.15), translate_percent=(-0.05, 0.05), rotate=(-15, 15),
-                p=0.5
+                cval=0, p=0.5
             ),
-
 
             A.RandomResizedCrop(
                 size=(image_size, image_size),

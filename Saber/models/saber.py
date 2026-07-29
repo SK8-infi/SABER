@@ -155,20 +155,7 @@ class SABER(nn.Module):
         else:
             raise ValueError(f"Unsupported channel dimension: {num_channels}")
 
-    def get_target_embedding(self, x2: torch.Tensor) -> torch.Tensor:
-        """Extract target embedding z2 efficiently without processing context view."""
-        if self.in_channels in [14, 5]:
-            x_s2 = x2[:, self.s1_channels:, :, :] if x2.shape[1] == self.in_channels else x2
-            feats2 = self.backbone(x_s2, self.s2_wvs)
-            z2 = self.s2_projection(feats2)
-        else:
-            wvs = self._get_wvs_for_channels(self.in_channels)
-            feats2 = self.backbone(x2, wvs)
-            z2 = self.projection_head(feats2)
-        return z2
-
     def forward(self, x1: torch.Tensor, x2: Optional[torch.Tensor] = None) -> Tuple[torch.Tensor, ...]:
-
         """
         Forward pass.
         In training, x1 is context view, x2 is target view.
