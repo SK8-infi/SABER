@@ -110,7 +110,7 @@ def main() -> None:
     logger.info(f"Dataset Loaded: {config.dataset.name.upper()} [{eval_split.upper()} HELD-OUT PARTITION] (Synthetic={eval_dataset.use_synthetic})")
 
     # Build Dataloader
-    num_workers = 0 if dataset_name == "dsrsid" else config.dataset.num_workers
+    num_workers = config.dataset.get("num_workers", 2)
     extraction_batch_size = 256 if torch.cuda.is_available() else config.dataset.batch_size
     eval_loader = DataLoader(
         eval_dataset,
@@ -120,6 +120,7 @@ def main() -> None:
         pin_memory=torch.cuda.is_available(),
         persistent_workers=(num_workers > 0)
     )
+
 
     arch = config.model.get("architecture", "saber").lower()
     if arch == "saber":

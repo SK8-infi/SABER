@@ -99,7 +99,7 @@ def main() -> None:
     logger.info(f"Total samples: {len(eval_dataset)}")
 
     # Build Dataloader
-    num_workers = 0 if dataset_name == "dsrsid" else config.dataset.num_workers
+    num_workers = config.dataset.get("num_workers", 2)
     extraction_batch_size = 256 if torch.cuda.is_available() else config.dataset.batch_size
     eval_loader = DataLoader(
         eval_dataset,
@@ -140,8 +140,9 @@ def main() -> None:
     logger.info("Extracting projection latents...")
     with torch.no_grad():
         for batch in tqdm(eval_loader):
-            img_s1 = batch["image_s1"].to(device)
-            img_s2 = batch["image_s2"].to(device)
+            img_s1 = batch["image_s1"].to(device, non_blocking=True)
+            img_s2 = batch["image_s2"].to(device, non_blocking=True)
+
 
             # Auto-resize on GPU to prevent CPU resize bottleneck and shape mismatch in ViT
             if img_s1.shape[-1] != 224 or img_s1.shape[-2] != 224:
