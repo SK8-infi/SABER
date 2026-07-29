@@ -34,7 +34,9 @@ __pycache__/
 
 # Project checkpoints & data outputs
 checkpoints/
-datasets/
+/Datasets/
+/datasets/
+
 
 # Old dev workspaces (merged into Saber/)
 rejepa/
@@ -59,3 +61,6 @@ improvement_plan.md
 benchmark_latency.py
 *Sentinel8\ Final.pdf
 
+# Local scratch & prep folders
+prep/
+scratch/

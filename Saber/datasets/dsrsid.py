@@ -28,7 +28,7 @@ class DSRSIDDataset(BaseDataset):
         self,
         data_dir: str,
         use_synthetic: bool = False,
-        size: int = 1000,
+        size: Optional[int] = None,
         image_size: int = 224,
         transform: Optional[Any] = None,
         modality: str = "ms",  # "pan", "ms", or "both"
@@ -76,8 +76,11 @@ class DSRSIDDataset(BaseDataset):
                 self.mat_path = data_dir
             elif os.path.isdir(data_dir):
                 target_file = os.path.join(data_dir, "DSRSID.mat")
+                target_file_alt = os.path.join(data_dir, "DSRSID-001.mat")
                 if os.path.exists(target_file):
                     self.mat_path = target_file
+                elif os.path.exists(target_file_alt):
+                    self.mat_path = target_file_alt
             
             # Fallback scan locations
             if self.mat_path is None or not os.path.exists(self.mat_path):
@@ -105,20 +108,23 @@ class DSRSIDDataset(BaseDataset):
                         self.total_samples = f["MUL_IMAGES"].shape[0]
                         all_labels = f["LAND_COVER_TYPES"][0, :].astype(int)
 
-                    self.size = min(self.size, self.total_samples)
+                    if self.size is None or self.size <= 0 or self.size >= self.total_samples:
+                        self.size = self.total_samples
+                        all_stratified = np.arange(self.total_samples)
+                    else:
+                        # Build stratified indices: sample equally from each class
+                        unique_classes = np.unique(all_labels)
+                        num_classes_found = len(unique_classes)
+                        per_class = max(1, self.size // num_classes_found)
+                        rng = np.random.RandomState(42)
+                        selected = []
+                        for cls in unique_classes:
+                            cls_indices = np.where(all_labels == cls)[0]
+                            n_take = min(per_class, len(cls_indices))
+                            chosen = rng.choice(cls_indices, size=n_take, replace=False)
+                            selected.append(chosen)
+                        all_stratified = np.sort(np.concatenate(selected))[:self.size]
 
-                    # Build stratified indices: sample equally from each class
-                    unique_classes = np.unique(all_labels)
-                    num_classes_found = len(unique_classes)
-                    per_class = max(1, self.size // num_classes_found)
-                    rng = np.random.RandomState(42)
-                    selected = []
-                    for cls in unique_classes:
-                        cls_indices = np.where(all_labels == cls)[0]
-                        n_take = min(per_class, len(cls_indices))
-                        chosen = rng.choice(cls_indices, size=n_take, replace=False)
-                        selected.append(chosen)
-                    all_stratified = np.sort(np.concatenate(selected))[:self.size]
                     
                     # Split partitioning (Seed 42): 70% Train | 10% Val | 20% Test
                     total_n = len(all_stratified)

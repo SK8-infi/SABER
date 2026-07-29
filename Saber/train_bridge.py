@@ -1,5 +1,6 @@
 import sys
 import os
+import time
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 import argparse
@@ -7,11 +8,13 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
+from tqdm import tqdm
 from torch.utils.data import TensorDataset, DataLoader
 from Saber.models.bridge import CFMBridge
 from Saber.losses.bridge_loss import CFMLoss
 from Saber.trainer.metrics import compute_retrieval_metrics
 from Saber.utils.seed import set_seed
+
 
 def integrate_ode(model, z_s1, steps=1, device="cpu"):
     """
@@ -103,11 +106,22 @@ def main() -> None:
     best_epoch = 0
 
     print("Starting CFM bridge training loop...")
+    start_time = time.time()
+
     for epoch in range(1, args.epochs + 1):
+        epoch_start = time.time()
         model.train()
         train_loss = 0.0
 
-        for batch_s1, batch_s2 in train_loader:
+        pbar = tqdm(
+            train_loader,
+            desc=f"Epoch [{epoch:02d}/{args.epochs:02d}]",
+            dynamic_ncols=True,
+            unit="batch",
+            leave=False
+        )
+
+        for batch_s1, batch_s2 in pbar:
             batch_s1, batch_s2 = batch_s1.to(device), batch_s2.to(device)
             
             optimizer.zero_grad()
@@ -129,6 +143,7 @@ def main() -> None:
             optimizer.step()
             
             train_loss += loss.item() * batch_s1.size(0)
+            pbar.set_postfix({"loss": f"{loss.item():.4f}"})
 
         train_loss /= len(train_dataset)
         scheduler.step()
@@ -164,7 +179,18 @@ def main() -> None:
         f1_1step = metrics_1step["f1@5"]
         f1_nstep = metrics_nstep["f1@5"]
 
-        print(f"Epoch {epoch:02d}/{args.epochs:02d} | Loss: {train_loss:.4f} | "
+        epoch_duration = time.time() - epoch_start
+        elapsed_total = time.time() - start_time
+        avg_epoch_time = elapsed_total / epoch
+        remaining_epochs = args.epochs - epoch
+        eta_seconds = avg_epoch_time * remaining_epochs
+
+        eta_hours = int(eta_seconds // 3600)
+        eta_mins = int((eta_seconds % 3600) // 60)
+        eta_secs = int(eta_seconds % 60)
+        eta_str = f"{eta_hours:02d}h {eta_mins:02d}m {eta_secs:02d}s" if eta_hours > 0 else f"{eta_mins:02d}m {eta_secs:02d}s"
+
+        print(f"Epoch {epoch:02d}/{args.epochs:02d} ({epoch_duration:.1f}s | Est. Remaining: {eta_str}) | Loss: {train_loss:.4f} | "
               f"1-Step F1@5: {f1_1step:.4f} | "
               f"{args.ode_steps}-Step F1@5: {f1_nstep:.4f}")
 

@@ -1,12 +1,15 @@
 import os
+import time
 import torch
 import logging
 import copy
 from typing import Any, Dict
 from torch.utils.tensorboard import SummaryWriter
 from torch.utils.data import DataLoader
+from tqdm import tqdm
 
 logger = logging.getLogger("saber")
+
 
 class Trainer:
     """
@@ -76,7 +79,16 @@ class Trainer:
         if num_batches == 0:
             return {}
 
-        for batch_idx, batch in enumerate(self.train_loader):
+        pbar = tqdm(
+            enumerate(self.train_loader),
+            total=num_batches,
+            desc=f"Epoch [{epoch:02d}/{self.epochs:02d}]",
+            dynamic_ncols=True,
+            unit="batch",
+            leave=True
+        )
+
+        for batch_idx, batch in pbar:
             # Move images and labels to target device
             x1 = batch["image1"].to(self.device)
             x2 = batch["image2"].to(self.device)
@@ -186,9 +198,12 @@ class Trainer:
                 if k not in epoch_losses:
                     epoch_losses[k] = 0.0
                 epoch_losses[k] += loss_dict[k].item()
-                
-            if batch_idx % 50 == 0:
-                logger.info(f"Epoch [{epoch}] - Batch [{batch_idx}/{num_batches}] - Loss: {loss.item() * self.accum_steps:.4f}")
+
+            current_lr = self.optimizer.param_groups[0]["lr"]
+            pbar.set_postfix({
+                "loss": f"{loss.item() * self.accum_steps:.4f}",
+                "lr": f"{current_lr:.2e}"
+            })
 
         # Average losses
         for k in epoch_losses:
@@ -203,15 +218,33 @@ class Trainer:
     def fit(self) -> None:
         """Main loop that executes the full training timeline."""
         logger.info(f"Starting training for {self.epochs} epochs on device: {self.device}")
+        start_time = time.time()
         
         for epoch in range(1, self.epochs + 1):
+            epoch_start = time.time()
             losses = self.train_epoch(epoch)
+            epoch_duration = time.time() - epoch_start
+            
+            elapsed_total = time.time() - start_time
+            avg_epoch_time = elapsed_total / epoch
+            remaining_epochs = self.epochs - epoch
+            eta_seconds = avg_epoch_time * remaining_epochs
+            
+            eta_hours = int(eta_seconds // 3600)
+            eta_mins = int((eta_seconds % 3600) // 60)
+            eta_secs = int(eta_seconds % 60)
+            if eta_hours > 0:
+                eta_str = f"{eta_hours:02d}h {eta_mins:02d}m {eta_secs:02d}s"
+            else:
+                eta_str = f"{eta_mins:02d}m {eta_secs:02d}s"
+
             current_lr = self.optimizer.param_groups[0]["lr"]
 
             # Log metrics to stdout and TensorBoard
             loss_str = " | ".join(f"{k.capitalize()[:4]}: {v:.4f}" for k, v in losses.items())
             logger.info(
-                f"Epoch [{epoch}/{self.epochs}] "
+                f"Epoch [{epoch}/{self.epochs}] completed in {epoch_duration:.1f}s | "
+                f"Est. Time Remaining: {eta_str} | "
                 f"{loss_str} | "
                 f"LR: {current_lr:.6f}"
             )
