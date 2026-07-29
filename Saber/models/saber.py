@@ -155,7 +155,19 @@ class SABER(nn.Module):
         else:
             raise ValueError(f"Unsupported channel dimension: {num_channels}")
 
+    def encode_target(self, x2: torch.Tensor) -> torch.Tensor:
+        """Efficiently encodes target view x2 only (used by EMA target model)."""
+        if self.in_channels in [14, 5]:
+            x_s2 = x2[:, self.s1_channels:, :, :] if x2.shape[1] == self.in_channels else x2
+            feats2 = self.backbone(x_s2, self.s2_wvs)
+            return self.s2_projection(feats2)
+        else:
+            wvs = self._get_wvs_for_channels(self.in_channels)
+            feats2 = self.backbone(x2, wvs)
+            return self.projection_head(feats2)
+
     def forward(self, x1: torch.Tensor, x2: Optional[torch.Tensor] = None) -> Tuple[torch.Tensor, ...]:
+
         """
         Forward pass.
         In training, x1 is context view, x2 is target view.

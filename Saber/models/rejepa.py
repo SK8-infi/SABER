@@ -61,7 +61,18 @@ class REJEPA(nn.Module):
             normalize=True  # L2 normalization for Cosine Similarity search
         )
 
+    def encode_target(self, x2: torch.Tensor) -> torch.Tensor:
+        """Efficiently encodes target view x2 only (used by EMA target model)."""
+        if self.in_channels == 14:
+            x_s2 = x2[:, 2:, :, :] if x2.shape[1] == 14 else x2
+            feats2 = self.backbone(self.adapter_s2(x_s2))
+            return self.projection_head(feats2)
+        else:
+            feats2 = self.backbone(self.adapter(x2))
+            return self.projection_head(feats2)
+
     def forward(self, x1: torch.Tensor, x2: Optional[torch.Tensor] = None) -> Tuple[torch.Tensor, ...]:
+
         """
         Forward pass.
         In training, x1 is context view, x2 is target view.
