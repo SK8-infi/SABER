@@ -60,8 +60,9 @@ class DSRSIDDataset(BaseDataset):
         self.f_handle = None  # Lazy-opened HDF5 file handle
 
         if self.use_synthetic:
-            total_n = self.size
+            total_n = self.size if self.size is not None else 80000
             train_end = int(0.70 * total_n)
+
             val_end = int(0.80 * total_n)
             if self.split == "train":
                 self.size = train_end

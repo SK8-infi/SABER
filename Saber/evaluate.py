@@ -91,10 +91,11 @@ def main() -> None:
         )
         in_channels = eval_dataset.num_channels
     elif dataset_name == "dsrsid":
+        dsrsid_size = args.size if args.size is not None else None
         eval_dataset = DSRSIDDataset(
             data_dir=config.dataset.data_dir,
             use_synthetic=config.dataset.use_synthetic,
-            size=config.dataset.get("size", 1000),
+            size=dsrsid_size,
             image_size=config.dataset.image_size,
             transform=eval_transform,
             modality=config.dataset.get("modality", "ms"),
@@ -102,6 +103,7 @@ def main() -> None:
             split=eval_split
         )
         in_channels = eval_dataset.num_channels
+
     else:
         raise ValueError(f"Unknown dataset configuration: '{config.dataset.name}'")
 
