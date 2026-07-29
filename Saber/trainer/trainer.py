@@ -93,11 +93,11 @@ class Trainer:
         )
 
         for batch_idx, batch in pbar:
-            # Move images and labels to target device
-            x1 = batch["image1"].to(self.device)
-            x2 = batch["image2"].to(self.device)
+            # Move images and labels to target device with async non_blocking transfer
+            x1 = batch["image1"].to(self.device, non_blocking=True)
+            x2 = batch["image2"].to(self.device, non_blocking=True)
             
-            # Auto-resize on GPU to prevent CPU resize bottleneck
+            # Auto-resize on GPU to prevent CPU resize bottleneck if needed
             if x1.shape[-1] != 224 or x1.shape[-2] != 224:
                 import torch.nn.functional as F
                 x1 = F.interpolate(x1, size=(224, 224), mode="bilinear", align_corners=False)
@@ -105,31 +105,37 @@ class Trainer:
                 
             labels = batch.get("label", None)
             if labels is not None:
-                labels = labels.to(self.device)
+                labels = labels.to(self.device, non_blocking=True)
 
-            # Execute forward pass under autocast for mixed precision
-            autocast_cm = torch.amp.autocast("cuda", enabled=self.amp_enabled) if hasattr(torch.amp, "autocast") else torch.cuda.amp.autocast(enabled=self.amp_enabled)
+            # Execute forward pass under autocast (bfloat16 if GPU supported, else float16)
+            amp_dtype = torch.bfloat16 if (self.amp_enabled and torch.cuda.is_available() and torch.cuda.is_bf16_supported()) else torch.float16
+            if hasattr(torch.amp, "autocast"):
+                autocast_cm = torch.amp.autocast("cuda", enabled=self.amp_enabled, dtype=amp_dtype)
+            else:
+                autocast_cm = torch.cuda.amp.autocast(enabled=self.amp_enabled)
+
             with autocast_cm:
-
                 if self.use_ema and self.target_model is not None:
                     outputs = self.model(x1, x2)
                     if len(outputs) == 5:
                         z1, z2_online, z1_pred, logits_s1, logits_s2 = outputs
-                        with torch.no_grad():
-                            target_outputs = self.target_model(x1, x2)
-                            _, target_z2, _, _, _ = target_outputs
-                            z2 = target_z2.detach()
                     else:
                         z1, _, z1_pred = outputs
-                        with torch.no_grad():
-                            _, z2, _ = self.target_model(x1, x2)
-                            z2 = z2.detach()
+
+                    with torch.no_grad():
+                        # Extract target embedding z2 efficiently in 1 pass instead of 2
+                        if hasattr(self.target_model, "get_target_embedding"):
+                            z2 = self.target_model.get_target_embedding(x2).detach()
+                        else:
+                            target_outputs = self.target_model(x1, x2)
+                            z2 = target_outputs[1].detach() if len(target_outputs) == 5 else target_outputs[1].detach()
                 else:
                     outputs = self.model(x1, x2)
                     if len(outputs) == 5:
                         z1, z2, z1_pred, logits_s1, logits_s2 = outputs
                     else:
                         z1, z2, z1_pred = outputs
+
                 
                 # Forward to loss criterion (with labels if supported)
                 if labels is not None:

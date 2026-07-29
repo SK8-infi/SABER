@@ -30,7 +30,9 @@ def main() -> None:
     parser.add_argument("--data_dir", type=str, default=None, help="Override path to dataset directory")
     parser.add_argument("--modality", type=str, default=None, help="Override dataset modality ('s1', 's2', 'both')")
     parser.add_argument("--size", type=int, default=None, help="Override dataset size")
+    parser.add_argument("--compile", type=str, default=None, help="Enable PyTorch 2.x torch.compile ('true' or 'false')")
     args = parser.parse_args()
+
 
     # Load configuration
     config = load_config(args.config)
@@ -125,6 +127,17 @@ def main() -> None:
     if arch == "saber":
         logger.info("Instantiating SABER model (DOFA + LoRA)...")
         model = SABER(config=config, in_channels=in_channels).to(device)
+        
+        # Optional PyTorch 2.x kernel compilation
+        enable_compile = (args.compile.lower() == "true") if args.compile is not None else False
+        if enable_compile and hasattr(torch, "compile") and device.type == "cuda":
+            try:
+                logger.info("Compiling SABER model with PyTorch 2.x torch.compile...")
+                model = torch.compile(model, mode="reduce-overhead")
+                logger.info("Successfully compiled model kernels.")
+            except Exception as e:
+                logger.warning(f"Could not compile model: {e}. Running in standard mode.")
+
         
         # Combined target prediction + Jaccard + Ranking + VICReg + SIGReg loss
         criterion = SaberCombinedLoss(
