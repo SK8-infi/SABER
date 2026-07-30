@@ -93,14 +93,8 @@ def main() -> None:
 
     feat_dim = train_s1.shape[1]
     model = CFMBridge(dim=feat_dim, hidden_dim=768, num_blocks=5, dropout=0.1).to(device)
-    if device.type == "cuda":
-        try:
-            optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=args.weight_decay, fused=True)
-            print("Enabled fused CUDA AdamW optimizer acceleration for CFM bridge.")
-        except Exception:
-            optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
-    else:
-        optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
+    optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
+
 
     
     warmup_scheduler = torch.optim.lr_scheduler.LinearLR(

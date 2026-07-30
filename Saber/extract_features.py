@@ -140,8 +140,9 @@ def main() -> None:
     logger.info("Extracting projection latents...")
     with torch.no_grad():
         for batch in tqdm(eval_loader):
-            img_s1 = batch["image_s1"].to(device, non_blocking=True)
-            img_s2 = batch["image_s2"].to(device, non_blocking=True)
+            img_s1 = batch["image_s1"].to(device)
+            img_s2 = batch["image_s2"].to(device)
+
 
 
             # Auto-resize on GPU to prevent CPU resize bottleneck and shape mismatch in ViT

@@ -112,7 +112,8 @@ class Evaluator:
             
             with torch.no_grad():
                 for batch_idx, batch in enumerate(self.dataloader):
-                    images = batch["image"].to(self.device, non_blocking=True)
+                    images = batch["image"].to(self.device)
+
 
                     
                     # Auto-resize on GPU to prevent CPU resize bottleneck

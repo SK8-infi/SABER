@@ -160,18 +160,12 @@ def main() -> None:
 
     # Build AdamW optimizer (train only adaptive layers)
     trainable_params = [p for p in model.parameters() if p.requires_grad]
-    optimizer_kwargs = {
-        "lr": float(config.train.learning_rate),
-        "weight_decay": float(config.train.weight_decay)
-    }
-    if device.type == "cuda":
-        try:
-            optimizer = torch.optim.AdamW(trainable_params, fused=True, **optimizer_kwargs)
-            logger.info("Enabled fused CUDA AdamW optimizer acceleration.")
-        except Exception:
-            optimizer = torch.optim.AdamW(trainable_params, **optimizer_kwargs)
-    else:
-        optimizer = torch.optim.AdamW(trainable_params, **optimizer_kwargs)
+    optimizer = torch.optim.AdamW(
+        trainable_params,
+        lr=float(config.train.learning_rate),
+        weight_decay=float(config.train.weight_decay)
+    )
+
 
 
     # Warmup + Cosine Scheduler
