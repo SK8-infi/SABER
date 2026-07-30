@@ -55,7 +55,7 @@ class OFAViT(nn.Module):
         self.head = nn.Linear(embed_dim, num_classes) if num_classes > 0 else nn.Identity()
 
 
-    def forward_features(self, x, wave_list):
+    def forward_features(self, x, wave_list, pyramid: bool = False):
         # embed patches
         wavelist = torch.tensor(wave_list, device=x.device).float()
         self.waves = wavelist
@@ -68,9 +68,19 @@ class OFAViT(nn.Module):
         cls_tokens = cls_token.expand(x.shape[0], -1, -1)
         x = torch.cat((cls_tokens, x), dim=1)
 
-        # apply Transformer blocks
-        for block in self.blocks:
+        # apply Transformer blocks & extract pyramid tokens from Layer 6 (idx 5), Layer 9 (idx 8), and Layer 12 (idx 11)
+        pyramid_tokens = []
+        for idx, block in enumerate(self.blocks):
             x = block(x)
+            if pyramid and idx in [5, 8, 11]:
+                if self.global_pool:
+                    layer_pooled = self.fc_norm(x[:, 1:, :].mean(dim=1))
+                else:
+                    layer_pooled = self.norm(x)[:, 0]
+                pyramid_tokens.append(layer_pooled)
+
+        if pyramid and len(pyramid_tokens) == 3:
+            return torch.cat(pyramid_tokens, dim=-1)
 
         if self.global_pool:
             x = x[:, 1:, :].mean(dim=1)  # global pool without cls token
@@ -79,6 +89,7 @@ class OFAViT(nn.Module):
             x = self.norm(x)
             outcome = x[:, 0]
         return outcome
+
 
     def forward_head(self, x, pre_logits=False):
         x = self.head_drop(x)

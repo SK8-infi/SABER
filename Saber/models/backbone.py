@@ -95,17 +95,21 @@ class DummyDOFAModel(nn.Module):
     def __init__(self):
         super().__init__()
         self.dummy_param = nn.Parameter(torch.zeros(1))
-    def forward_features(self, x, wave_list=None):
-        return torch.randn(x.shape[0], 768, device=x.device)
+    def forward_features(self, x, wave_list=None, pyramid=False):
+        dim = 2304 if pyramid else 768
+        return torch.randn(x.shape[0], dim, device=x.device)
+
 
 class FrozenDOFABackbone(nn.Module):
     """
     Loads and freezes the pre-trained DOFA ViT backbone.
     Utilizes a wavelength-conditioned patch embedding hypernetwork.
+    Supports Layer-Wise Pyramid Token Aggregation (Layers 6, 9, 12).
     """
-    def __init__(self, pretrained: bool = True) -> None:
+    def __init__(self, pretrained: bool = True, pyramid: bool = True) -> None:
         super().__init__()
-        self.embed_dim = 768
+        self.pyramid = pyramid
+        self.embed_dim = 2304 if pyramid else 768
         
         if DOFA_AVAILABLE:
             self.model = vit_base_patch16()
@@ -144,16 +148,17 @@ class FrozenDOFABackbone(nn.Module):
             x: Input tensor of shape (B, C, H, W).
             wave_list: Central wavelengths in micrometers. Shape (C,).
         Returns:
-            Pooled feature representation of shape (B, 768).
+            Pooled feature representation of shape (B, 2304) if pyramid else (B, 768).
         """
         has_trainable = any(p.requires_grad for p in self.model.parameters())
         if self.training and has_trainable:
-            features = self.model.forward_features(x, wave_list)
+            features = self.model.forward_features(x, wave_list, pyramid=self.pyramid)
         else:
             prev_mode = self.model.training
             self.model.eval()
             with torch.no_grad():
-                features = self.model.forward_features(x, wave_list)
+                features = self.model.forward_features(x, wave_list, pyramid=self.pyramid)
             self.model.train(prev_mode)
         return features
+
 

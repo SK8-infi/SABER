@@ -48,8 +48,10 @@ class SABER(nn.Module):
             self.s1_wvs = []
             self.s2_wvs = []
 
-        # 1. Wavelength-Conditioned Foundation Backbone
-        self.backbone = FrozenDOFABackbone(pretrained=config.model.pretrained)
+        # 1. Wavelength-Conditioned Foundation Backbone with Layer-Wise Pyramid Token Aggregation (Layers 6, 9, 12)
+        use_pyramid = config.model.get("pyramid", True)
+        self.backbone = FrozenDOFABackbone(pretrained=config.model.pretrained, pyramid=use_pyramid)
+
 
         # 2. LoRA Adaptation on Attention Projections (qkv)
         # Freeze backbone parameters
