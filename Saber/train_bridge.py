@@ -81,14 +81,9 @@ def main() -> None:
     val_s2 = torch.tensor(s2_feats[query_indices], dtype=torch.float32)
     val_lbl = labels[query_indices]
 
-    if device.type == "cuda":
-        torch.backends.cudnn.benchmark = True
-        torch.backends.cuda.matmul.allow_tf32 = True
-        torch.backends.cudnn.allow_tf32 = True
-
     train_dataset = TensorDataset(train_s1, train_s2)
-    num_workers = 2 if device.type == "cuda" else 0
-    train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True, pin_memory=(device.type == "cuda"), num_workers=num_workers)
+    train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True)
+
 
 
     feat_dim = train_s1.shape[1]

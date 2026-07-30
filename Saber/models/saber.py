@@ -65,13 +65,8 @@ class SABER(nn.Module):
                 bias="none"
             )
             self.backbone.model = get_peft_model(self.backbone.model, lora_config)
-            if hasattr(self.backbone.model, "gradient_checkpointing_enable"):
-                try:
-                    self.backbone.model.gradient_checkpointing_enable()
-                    logger.info("Enabled gradient checkpointing for LoRA ViT blocks.")
-                except Exception:
-                    pass
             logger.info("Successfully wrapped DOFA ViT blocks with LoRA adapters (Rank 16, Target: qkv, fc1, fc2).")
+
 
         else:
             logger.warning("PEFT module not installed. Running DOFA ViT backbone without LoRA adapters.")
