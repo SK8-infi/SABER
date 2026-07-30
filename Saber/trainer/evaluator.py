@@ -79,12 +79,18 @@ class Evaluator:
         if num_samples < 5:
             raise ValueError(f"Dataset has only {num_samples} samples, which is too small for retrieval split.")
 
-        # Use randomized splitting with fixed seed to prevent geographic data leakage
+        # Use randomized splitting with fixed seed to select held-out query items
         rng = np.random.RandomState(42)
         shuffled_indices = rng.permutation(num_samples)
         query_size = max(1, num_samples // 5)
         query_indices = np.sort(shuffled_indices[:query_size])
-        gallery_indices = np.sort(shuffled_indices[query_size:])
+        
+        eval_split = str(self.config.dataset.get("split", "all")).lower()
+        if eval_split == "test":
+            gallery_indices = np.sort(shuffled_indices[query_size:])
+        else:
+            gallery_indices = np.arange(num_samples)
+
 
         is_cross_modal = (self.config.dataset.get("modality", "s2").lower() == "both")
 

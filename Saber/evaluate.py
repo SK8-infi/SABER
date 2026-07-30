@@ -33,7 +33,8 @@ def main() -> None:
     parser.add_argument("--size", type=int, default=None, help="Override dataset size")
     parser.add_argument("--batch_size", type=int, default=None, help="Override batch size")
     parser.add_argument("--direction", type=str, default="s1_to_s2", choices=["s1_to_s2", "s2_to_s1"], help="Cross-modal retrieval direction")
-    parser.add_argument("--split", type=str, default="test", choices=["train", "val", "test", "all"], help="Dataset split partition for evaluation ('test', 'val', 'train', 'all')")
+    parser.add_argument("--split", type=str, default="all", choices=["train", "val", "test", "all"], help="Dataset split partition for evaluation ('all', 'test', 'val', 'train')")
+
     parser.add_argument("--viz", action="store_true", help="Generate and save t-SNE and UMAP visualizations")
     args = parser.parse_args()
 
