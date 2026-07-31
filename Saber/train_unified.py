@@ -43,7 +43,7 @@ def train_unified(
     synthetic_override: Optional[bool] = None
 ) -> None:
     print("="*80)
-    print(" 🚀 UNIFIED SENSOR-AGNOSTIC SABER MASTER TRAINING ENGINE (PURE UNSUPERVISED)")
+    print(" 🚀 UNIFIED SENSOR-AGNOSTIC SABER MASTER TRAINING ENGINE (SPEED OPTIMIZED)")
     print("="*80)
 
     config = load_config(config_path)
@@ -56,7 +56,10 @@ def train_unified(
     set_seed(config.seed)
 
     device = torch.device("cuda" if torch.cuda.is_available() and config.device == "cuda" else "cpu")
-    logger.info(f"Computation Device: {device} | Execution Mode: '{mode.upper()}' | Pure Unsupervised Mode: ACTIVE")
+    if torch.cuda.is_available():
+        torch.backends.cudnn.benchmark = True
+
+    logger.info(f"Computation Device: {device} | Execution Mode: '{mode.upper()}' | CuDNN Benchmark: ACTIVE")
 
     # Load spatial data transforms
     train_transform = get_transforms(image_size=config.dataset.image_size, is_train=True)
@@ -116,15 +119,19 @@ def train_unified(
     )
 
     num_workers = config.dataset.get("num_workers", 2)
-    batch_size = batch_size_override or 32  # VRAM Safe default: 32 for T4 GPU
+    batch_size = batch_size_override or 48  # Optimized Speed Default: 48 (uses ~11.8 GB VRAM)
 
     ben14k_loader = DataLoader(
         ben14k_dataset, batch_size=batch_size, shuffle=True,
-        num_workers=num_workers, pin_memory=torch.cuda.is_available(), drop_last=True
+        num_workers=num_workers, pin_memory=torch.cuda.is_available(),
+        persistent_workers=(num_workers > 0), prefetch_factor=2 if num_workers > 0 else None,
+        drop_last=True
     )
     dsrsid_loader = DataLoader(
         dsrsid_dataset, batch_size=batch_size, shuffle=True,
-        num_workers=num_workers, pin_memory=torch.cuda.is_available(), drop_last=True
+        num_workers=num_workers, pin_memory=torch.cuda.is_available(),
+        persistent_workers=(num_workers > 0), prefetch_factor=2 if num_workers > 0 else None,
+        drop_last=True
     )
 
     logger.info(f"BEN-14K Batches: {len(ben14k_loader)} | DSRSID Batches: {len(dsrsid_loader)} (Batch Size: {batch_size})")
@@ -174,7 +181,7 @@ def train_unified(
         grad_clip = config.train.get("grad_clip", 1.0)
 
         logger.info("="*60)
-        logger.info(f" PHASE 1: MASTER ENCODER JOINT TRAINING ({epochs} Epochs | 100% UNSUPERVISED)")
+        logger.info(f" PHASE 1: MASTER ENCODER JOINT TRAINING ({epochs} Epochs | SPEED OPTIMIZED)")
         logger.info("="*60)
 
         for epoch in range(1, epochs + 1):
@@ -194,7 +201,6 @@ def train_unified(
                 is_ben_step = (step % 2 == 0)
 
                 if is_ben_step:
-                    # 1. Process BEN-14K Unlabelled Batch (S1 SAR 2ch <-> S2 MS 12ch)
                     try:
                         ben_batch = next(ben_iter)
                     except StopIteration:
@@ -213,7 +219,6 @@ def train_unified(
                         z1_ben, z2_ben, z1_pred_ben = model(x_s1, x_s2)[:3]
                         loss_dict = loss_fn(z1_ben, z2_ben, z1_pred_ben, targets=None)
                 else:
-                    # 2. Process DSRSID Unlabelled Batch (Gaofen PAN 1ch <-> Gaofen MS 4ch)
                     try:
                         dsr_batch = next(dsr_iter)
                     except StopIteration:
@@ -321,7 +326,7 @@ def train_unified(
     # -------------------------------------------------------------
     if mode_clean in ["all", "bridge"]:
         logger.info("="*60)
-        logger.info(" PHASE 2: MASTER PATCH-PROJECTED CFM BRIDGE TRAINING (100% UNSUPERVISED)")
+        logger.info(" PHASE 2: MASTER PATCH-PROJECTED CFM BRIDGE TRAINING (SPEED OPTIMIZED)")
         logger.info("="*60)
 
         # If mode is bridge-only, ensure encoder weights are loaded
@@ -427,17 +432,17 @@ def train_unified(
         logger.info(f"Saved Master Unified CFM Bridge to '{unified_ckpt_path}' and '{latest_ckpt_path}'")
 
     print("="*80)
-    print(" 🎉 MASTER UNIFIED TRAINING COMPLETED SUCCESSFULLY (100% UNSUPERVISED)!")
+    print(" 🎉 MASTER UNIFIED TRAINING COMPLETED SUCCESSFULLY (SPEED OPTIMIZED)!")
     print(f" Master Model Checkpoint : '{unified_ckpt_path}'")
     print(f" Master Bridge Checkpoint: '{unified_bridge_path}'")
     print("="*80)
 
 def main():
-    parser = argparse.ArgumentParser(description="Train Unified Sensor-Agnostic SABER Engine & CFM Bridge (100% Unsupervised)")
+    parser = argparse.ArgumentParser(description="Train Unified Sensor-Agnostic SABER Engine & CFM Bridge (Speed Optimized)")
     parser.add_argument("--config", type=str, default="Saber/configs/config.yaml")
     parser.add_argument("--data_dir", type=str, default=None, help="Path to BEN-14K dataset directory")
     parser.add_argument("--dsrsid_path", type=str, default=None, help="Path to DSRSID dataset mat file/dir")
-    parser.add_argument("--batch_size", type=int, default=32, help="Batch size for training (default: 32 for VRAM safety)")
+    parser.add_argument("--batch_size", type=int, default=48, help="Batch size for training (default: 48 for ~11.8 GB VRAM utilization)")
     parser.add_argument("--epochs", type=int, default=None, help="Custom number of Phase 1 Encoder training epochs")
     parser.add_argument("--bridge_epochs", type=int, default=5, help="Custom number of Phase 2 CFM Bridge training epochs (default: 5)")
     parser.add_argument("--mode", type=str, default="all", choices=["all", "encoder", "bridge"], help="Training mode: 'all' (Encoder + Bridge), 'encoder' (Encoder only), 'bridge' (Bridge only)")
