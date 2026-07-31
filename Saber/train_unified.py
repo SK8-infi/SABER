@@ -43,7 +43,7 @@ def train_unified(
     synthetic_override: Optional[bool] = None
 ) -> None:
     print("="*80)
-    print(" 🚀 UNIFIED SENSOR-AGNOSTIC SABER MASTER TRAINING ENGINE")
+    print(" 🚀 UNIFIED SENSOR-AGNOSTIC SABER MASTER TRAINING ENGINE (PURE UNSUPERVISED)")
     print("="*80)
 
     config = load_config(config_path)
@@ -56,7 +56,7 @@ def train_unified(
     set_seed(config.seed)
 
     device = torch.device("cuda" if torch.cuda.is_available() and config.device == "cuda" else "cpu")
-    logger.info(f"Computation Device: {device} | Execution Mode: '{mode.upper()}'")
+    logger.info(f"Computation Device: {device} | Execution Mode: '{mode.upper()}' | Pure Unsupervised Mode: ACTIVE")
 
     # Load spatial data transforms
     train_transform = get_transforms(image_size=config.dataset.image_size, is_train=True)
@@ -149,14 +149,14 @@ def train_unified(
     # PHASE 1: MASTER ENCODER & PROJECTION HEAD JOINT TRAINING
     # -------------------------------------------------------------
     if mode_clean in ["all", "encoder"]:
-        # 4. Instantiate Unified Jaccard + VICReg Loss
+        # 4. Instantiate Pure Unsupervised Loss (Zero Classification Weight)
         loss_fn = SaberCombinedLoss(
             jaccard_weight=config.geometry.get("jaccard_weight", 2.0),
             ranking_weight=config.geometry.get("ranking_weight", 1.5),
             invariance_weight=config.loss.get("vicreg_invariance_weight", 15.0),
             variance_weight=config.loss.get("vicreg_variance_weight", 25.0),
             covariance_weight=config.loss.get("vicreg_covariance_weight", 2.0),
-            classification_weight=config.geometry.get("classification_weight", 1.0)
+            classification_weight=0.0  # PURE UNSUPERVISED (NO LABELS)
         ).to(device)
 
         # Optimizer
@@ -174,13 +174,13 @@ def train_unified(
         grad_clip = config.train.get("grad_clip", 1.0)
 
         logger.info("="*60)
-        logger.info(f" PHASE 1: MASTER ENCODER JOINT TRAINING ({epochs} Epochs)")
+        logger.info(f" PHASE 1: MASTER ENCODER JOINT TRAINING ({epochs} Epochs | 100% UNSUPERVISED)")
         logger.info("="*60)
 
         for epoch in range(1, epochs + 1):
             model.train()
             total_loss = 0.0
-            sum_jacc, sum_rank, sum_inv, sum_var, sum_cov, sum_cls = 0.0, 0.0, 0.0, 0.0, 0.0, 0.0
+            sum_jacc, sum_rank, sum_inv, sum_var, sum_cov = 0.0, 0.0, 0.0, 0.0, 0.0
             start_time = time.time()
 
             ben_iter = iter(ben14k_loader)
@@ -194,7 +194,7 @@ def train_unified(
                 is_ben_step = (step % 2 == 0)
 
                 if is_ben_step:
-                    # 1. Process BEN-14K Batch (S1 SAR 2ch <-> S2 MS 12ch)
+                    # 1. Process BEN-14K Unlabelled Batch (S1 SAR 2ch <-> S2 MS 12ch)
                     try:
                         ben_batch = next(ben_iter)
                     except StopIteration:
@@ -202,7 +202,6 @@ def train_unified(
                         ben_batch = next(ben_iter)
 
                     images_ben = ben_batch.get("image1", ben_batch.get("image")).to(device, non_blocking=True)
-                    labels_ben = ben_batch["label"].to(device, non_blocking=True)
 
                     if images_ben.shape[-1] != 224 or images_ben.shape[-2] != 224:
                         images_ben = F.interpolate(images_ben, size=(224, 224), mode="bilinear", align_corners=False)
@@ -211,10 +210,10 @@ def train_unified(
                     x_s2 = images_ben[:, 2:, :, :]
 
                     with torch.amp.autocast("cuda", enabled=use_amp, dtype=torch.bfloat16 if torch.cuda.is_bf16_supported() else torch.float16):
-                        z1_ben, z2_ben, z1_pred_ben, logits1_ben, logits2_ben = model(x_s1, x_s2)
-                        loss_dict = loss_fn(z1_ben, z2_ben, z1_pred_ben, labels_ben, logits_s1=logits1_ben, logits_s2=logits2_ben)
+                        z1_ben, z2_ben, z1_pred_ben = model(x_s1, x_s2)[:3]
+                        loss_dict = loss_fn(z1_ben, z2_ben, z1_pred_ben, targets=None)
                 else:
-                    # 2. Process DSRSID Batch (Gaofen PAN 1ch <-> Gaofen MS 4ch)
+                    # 2. Process DSRSID Unlabelled Batch (Gaofen PAN 1ch <-> Gaofen MS 4ch)
                     try:
                         dsr_batch = next(dsr_iter)
                     except StopIteration:
@@ -222,7 +221,6 @@ def train_unified(
                         dsr_batch = next(dsr_iter)
 
                     images_dsr = dsr_batch.get("image1", dsr_batch.get("image")).to(device, non_blocking=True)
-                    labels_dsr = dsr_batch["label"].to(device, non_blocking=True)
 
                     if images_dsr.shape[-1] != 224 or images_dsr.shape[-2] != 224:
                         images_dsr = F.interpolate(images_dsr, size=(224, 224), mode="bilinear", align_corners=False)
@@ -238,7 +236,7 @@ def train_unified(
                         feats_ms = model.backbone(x_ms, [0.485, 0.555, 0.660, 0.830])
                         z_ms = model.projection_head(feats_ms)
 
-                        loss_dict = loss_fn(z_pan, z_ms, z_pan_pred, labels_dsr)
+                        loss_dict = loss_fn(z_pan, z_ms, z_pan_pred, targets=None)
 
                 step_loss = loss_dict.get("loss", loss_dict.get("total_loss"))
 
@@ -258,14 +256,13 @@ def train_unified(
                     for p_online, p_target in zip(model.parameters(), ema_model.parameters()):
                         p_target.data.mul_(ema_decay).add_(p_online.data, alpha=1.0 - ema_decay)
 
-                # Accumulate loss sub-components
+                # Accumulate pure SSL loss sub-components
                 v_loss = step_loss.item()
                 v_jacc = loss_dict.get("jaccard_loss", torch.tensor(0.0)).item()
                 v_rank = loss_dict.get("ranking_loss", torch.tensor(0.0)).item()
                 v_inv = loss_dict.get("invariance_loss", torch.tensor(0.0)).item()
                 v_var = loss_dict.get("variance_loss", torch.tensor(0.0)).item()
                 v_cov = loss_dict.get("covariance_loss", torch.tensor(0.0)).item()
-                v_cls = loss_dict.get("classification_loss", torch.tensor(0.0)).item()
 
                 total_loss += v_loss
                 sum_jacc += v_jacc
@@ -273,7 +270,6 @@ def train_unified(
                 sum_inv += v_inv
                 sum_var += v_var
                 sum_cov += v_cov
-                sum_cls += v_cls
 
                 current_lr = optimizer.param_groups[0]["lr"]
                 pbar.set_postfix({
@@ -282,7 +278,6 @@ def train_unified(
                     "invar": f"{v_inv:.3f}",
                     "var": f"{v_var:.3f}",
                     "cov": f"{v_cov:.3f}",
-                    "bce": f"{v_cls:.3f}",
                     "lr": f"{current_lr:.2e}"
                 })
 
@@ -293,7 +288,6 @@ def train_unified(
             avg_inv = sum_inv / max_batches
             avg_var = sum_var / max_batches
             avg_cov = sum_cov / max_batches
-            avg_cls = sum_cls / max_batches
 
             logger.info(
                 f"Epoch [{epoch}/{epochs}] completed in {elapsed:.1f}s | "
@@ -302,8 +296,7 @@ def train_unified(
                 f"Rank: {avg_rank:.4f} | "
                 f"Invar: {avg_inv:.4f} | "
                 f"Var: {avg_var:.4f} | "
-                f"Cov: {avg_cov:.4f} | "
-                f"Class: {avg_cls:.4f}"
+                f"Cov: {avg_cov:.4f}"
             )
 
             # Save Master Unified Checkpoint directly using torch.save
@@ -324,7 +317,7 @@ def train_unified(
     # -------------------------------------------------------------
     if mode_clean in ["all", "bridge"]:
         logger.info("="*60)
-        logger.info(" PHASE 2: MASTER PATCH-PROJECTED CFM BRIDGE TRAINING")
+        logger.info(" PHASE 2: MASTER PATCH-PROJECTED CFM BRIDGE TRAINING (100% UNSUPERVISED)")
         logger.info("="*60)
 
         # If mode is bridge-only, ensure encoder weights are loaded
@@ -427,16 +420,16 @@ def train_unified(
         # Save Unified CFM Bridge Checkpoints
         torch.save(bridge_net.state_dict(), unified_bridge_path)
         torch.save(bridge_net.state_dict(), legacy_bridge_path)
-        logger.info(f"Saved Master Unified CFM Bridge to '{unified_bridge_path}' and '{legacy_bridge_path}'")
+        logger.info(f"Saved Master Unified CFM Bridge to '{unified_bridge_path}' and '{latest_ckpt_path}'")
 
     print("="*80)
-    print(" 🎉 MASTER UNIFIED TRAINING COMPLETED SUCCESSFULLY!")
+    print(" 🎉 MASTER UNIFIED TRAINING COMPLETED SUCCESSFULLY (100% UNSUPERVISED)!")
     print(f" Master Model Checkpoint : '{unified_ckpt_path}'")
     print(f" Master Bridge Checkpoint: '{unified_bridge_path}'")
     print("="*80)
 
 def main():
-    parser = argparse.ArgumentParser(description="Train Unified Sensor-Agnostic SABER Engine & CFM Bridge")
+    parser = argparse.ArgumentParser(description="Train Unified Sensor-Agnostic SABER Engine & CFM Bridge (100% Unsupervised)")
     parser.add_argument("--config", type=str, default="Saber/configs/config.yaml")
     parser.add_argument("--data_dir", type=str, default=None, help="Path to BEN-14K dataset directory")
     parser.add_argument("--dsrsid_path", type=str, default=None, help="Path to DSRSID dataset mat file/dir")

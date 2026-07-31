@@ -274,7 +274,7 @@ class SaberCombinedLoss(nn.Module):
 
         # 2.5 Compute Multi-Label / Multi-Class Classification Loss
         classification_loss = torch.tensor(0.0, device=device)
-        if logits_s1 is not None and targets is not None:
+        if self.classification_weight > 0.0 and logits_s1 is not None and targets is not None:
             if targets.ndim == 1 or targets.dtype in (torch.int64, torch.long):
                 targets_long = targets.long()
                 bce_s1 = F.cross_entropy(logits_s1, targets_long)

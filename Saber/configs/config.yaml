@@ -63,7 +63,7 @@ geometry:
   ranking_temp_p: 0.05
   triplet_weight: 0.5
   sigreg_weight: 0.1
-  classification_weight: 1.0
+  classification_weight: 0.0
 
 # Hashing Configuration (Dev 4)
 hashing:
