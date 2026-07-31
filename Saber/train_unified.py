@@ -19,6 +19,7 @@ from Saber.datasets.ben14k import BEN14KDataset
 from Saber.datasets.dsrsid import DSRSIDDataset
 from Saber.datasets.transforms import get_transforms
 from Saber.models.saber import SABER
+from Saber.models.bridge import CFMBridge, CFMBridgeWrapper
 from Saber.losses.saber_loss import SaberCombinedLoss
 
 def train_unified(config_path: str = "Saber/configs/config.yaml", epochs_override: int = None, synthetic_override: bool = None) -> None:
@@ -82,7 +83,6 @@ def train_unified(config_path: str = "Saber/configs/config.yaml", epochs_overrid
     logger.info(f"BEN-14K Batches: {len(ben14k_loader)} | DSRSID Batches: {len(dsrsid_loader)}")
 
     # 3. Instantiate SINGLE UNIFIED SABER MODEL (DOFA ViT + LoRA + Shared Projection)
-    # Master in_channels set to 14 (supports dynamic routing for 14, 12, 5, 4, 2, 1 channels)
     model = SABER(config=config, in_channels=14).to(device)
 
     # Instantiate EMA target model
@@ -116,7 +116,12 @@ def train_unified(config_path: str = "Saber/configs/config.yaml", epochs_overrid
     epochs = config.train.get("epochs", 5)
     grad_clip = config.train.get("grad_clip", 1.0)
 
-    logger.info(f"Starting Joint Sensor-Agnostic Master Training for {epochs} Epochs...")
+    # -------------------------------------------------------------
+    # PHASE 1: MASTER ENCODER & PROJECTION HEAD JOINT TRAINING
+    # -------------------------------------------------------------
+    logger.info("="*60)
+    logger.info(f" PHASE 1: MASTER ENCODER JOINT TRAINING ({epochs} Epochs)")
+    logger.info("="*60)
 
     os.makedirs(config.checkpoint_dir, exist_ok=True)
     unified_ckpt_path = os.path.join(config.checkpoint_dir, "saber_unified.pth")
@@ -126,7 +131,6 @@ def train_unified(config_path: str = "Saber/configs/config.yaml", epochs_overrid
         total_loss = 0.0
         start_time = time.time()
 
-        # Interleave batches from both datasets
         ben_iter = iter(ben14k_loader)
         dsr_iter = iter(dsrsid_loader)
         max_batches = max(len(ben14k_loader), len(dsrsid_loader))
@@ -172,7 +176,6 @@ def train_unified(config_path: str = "Saber/configs/config.yaml", epochs_overrid
                 loss_dict_ben = loss_fn(z1_ben, z2_ben, z1_pred_ben, labels_ben, logits_s1=logits1_ben, logits_s2=logits2_ben)
 
                 # 2. Forward DSRSID (PAN/MS)
-                # Channel routing for PAN (1ch) and MS (4ch)
                 feats_pan = model.backbone(x_pan, [0.675])
                 z_pan = model.projection_head(feats_pan)
                 z_pan_pred = model.predictor(z_pan)
@@ -204,11 +207,11 @@ def train_unified(config_path: str = "Saber/configs/config.yaml", epochs_overrid
             total_loss += batch_loss.item()
 
             if (batch_idx + 1) % 50 == 0 or (batch_idx + 1) == max_batches:
-                logger.info(f"Epoch [{epoch}/{epochs}] Batch [{batch_idx+1}/{max_batches}] | Joint Loss: {batch_loss.item():.4f}")
+                logger.info(f"Phase 1 Epoch [{epoch}/{epochs}] Batch [{batch_idx+1}/{max_batches}] | Joint Loss: {batch_loss.item():.4f}")
 
         elapsed = time.time() - start_time
         avg_loss = total_loss / max_batches
-        logger.info(f"=== Epoch {epoch}/{epochs} Complete | Avg Joint Loss: {avg_loss:.4f} | Time: {elapsed:.1f}s ===")
+        logger.info(f"=== Phase 1 Epoch {epoch}/{epochs} Complete | Avg Joint Loss: {avg_loss:.4f} | Time: {elapsed:.1f}s ===")
 
         # Save Master Unified Checkpoint
         save_checkpoint(
@@ -224,13 +227,85 @@ def train_unified(config_path: str = "Saber/configs/config.yaml", epochs_overrid
         )
         logger.info(f"Saved Master Unified SABER checkpoint to '{unified_ckpt_path}'")
 
+    # -------------------------------------------------------------
+    # PHASE 2: MASTER PATCH-PROJECTED CFM BRIDGE TRAINING
+    # -------------------------------------------------------------
+    logger.info("="*60)
+    logger.info(" PHASE 2: MASTER PATCH-PROJECTED CFM BRIDGE TRAINING")
+    logger.info("="*60)
+
+    bridge_net = CFMBridge(dim=768, hidden_dim=768, num_blocks=4, dropout=0.1).to(device)
+    bridge_opt = torch.optim.AdamW(bridge_net.parameters(), lr=0.0003, weight_decay=0.01)
+
+    bridge_epochs = max(15, epochs * 3)
+    model.eval()
+
+    unified_bridge_path = os.path.join(config.checkpoint_dir, "bridge_unified.pth")
+    legacy_bridge_path = os.path.join(config.checkpoint_dir, "bridge_best.pth")
+
+    logger.info(f"Training Master CFM Bridge for {bridge_epochs} Epochs on Cross-Modal Pair Features...")
+
+    for b_epoch in range(1, bridge_epochs + 1):
+        bridge_net.train()
+        total_bridge_loss = 0.0
+
+        ben_iter = iter(ben14k_loader)
+        dsr_iter = iter(dsrsid_loader)
+        max_batches = max(len(ben14k_loader), len(dsrsid_loader))
+
+        for batch_idx in range(max_batches):
+            bridge_opt.zero_grad()
+
+            try:
+                ben_batch = next(ben_iter)
+            except StopIteration:
+                ben_iter = iter(ben14k_loader)
+                ben_batch = next(ben_iter)
+
+            images_ben = ben_batch["image"].to(device, non_blocking=True)
+            if images_ben.shape[-1] != 224 or images_ben.shape[-2] != 224:
+                images_ben = F.interpolate(images_ben, size=(224, 224), mode="bilinear", align_corners=False)
+
+            x_s1 = images_ben[:, :2, :, :]
+            x_s2 = images_ben[:, 2:, :, :]
+
+            with torch.no_grad():
+                feats_s1 = model.backbone(x_s1, model.s1_wvs)
+                feats_s2 = model.backbone(x_s2, model.s2_wvs)
+                z_s1 = model.s1_projection(feats_s1)
+                z_s2 = model.s2_projection(feats_s2)
+
+            # Flow Matching Interpolation
+            tau = torch.rand(z_s1.shape[0], 1, device=device)
+            z_tau = (1.0 - tau) * z_s1 + tau * z_s2
+            target_velocity = z_s2 - z_s1
+
+            v_pred, logvar = bridge_net(z_tau, tau, z_s1)
+            b_loss = F.mse_loss(v_pred, target_velocity)
+
+            b_loss.backward()
+            torch.nn.utils.clip_grad_norm_(bridge_net.parameters(), 1.0)
+            bridge_opt.step()
+
+            total_bridge_loss += b_loss.item()
+
+        avg_b_loss = total_bridge_loss / max_batches
+        if b_epoch % 5 == 0 or b_epoch == bridge_epochs:
+            logger.info(f"Phase 2 Bridge Epoch [{b_epoch}/{bridge_epochs}] | Flow Matching Loss: {avg_b_loss:.6f}")
+
+    # Save Unified CFM Bridge Checkpoints
+    torch.save(bridge_net.state_dict(), unified_bridge_path)
+    torch.save(bridge_net.state_dict(), legacy_bridge_path)
+    logger.info(f"Saved Master Unified CFM Bridge to '{unified_bridge_path}' and '{legacy_bridge_path}'")
+
     print("="*80)
-    print(" 🎉 UNIFIED SENSOR-AGNOSTIC MASTER TRAINING COMPLETE!")
-    print(f" Master Checkpoint Saved: '{unified_ckpt_path}'")
+    print(" 🎉 ALL MASTER UNIFIED TRAINING PHASES COMPLETE SUCCESSFULLY!")
+    print(f" Master Model Checkpoint : '{unified_ckpt_path}'")
+    print(f" Master Bridge Checkpoint: '{unified_bridge_path}'")
     print("="*80)
 
 def main():
-    parser = argparse.ArgumentParser(description="Train Unified Sensor-Agnostic SABER Engine")
+    parser = argparse.ArgumentParser(description="Train Unified Sensor-Agnostic SABER Engine & CFM Bridge")
     parser.add_argument("--config", type=str, default="Saber/configs/config.yaml")
     parser.add_argument("--epochs", type=int, default=None)
     parser.add_argument("--synthetic", type=str, default=None)
