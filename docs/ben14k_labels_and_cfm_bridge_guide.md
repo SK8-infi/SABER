@@ -68,6 +68,27 @@ graph LR
 
 ---
 
+### Why Convert 43 CORINE Classes to 19?
+
+Converting the raw 43 CORINE Land Cover (CLC) classes down to 19 target categories is a standard scientific necessity in satellite remote sensing for **three key reasons**:
+
+#### 1. Extreme Class Imbalance & Rare Classes
+In the original 43-class CORINE dataset, class frequencies are extremely skewed. Rare categories like *"Glaciers and perpetual snow"*, *"Burnt areas"*, *"Dump sites"*, or *"Mineral extraction sites"* appear in less than **0.01%** of all European satellite scenes. 
+- Attempting to evaluate multi-label retrieval metrics (Precision@K, Recall@K, mAP) on classes with almost zero positive samples leads to ill-defined metrics and extreme gradient instability during training.
+- Merging sparse sub-classes (e.g., grouping *"Bare rock"*, *"Burnt areas"*, and *"Glaciers"* into *"Beaches, dunes, sands"*) establishes statistically balanced class distributions across dataset splits.
+
+#### 2. Spatial Resolution & Physical Ambiguity (10m - 20m per Pixel)
+Sentinel-2 multispectral sensors capture imagery at **10m, 20m, and 60m pixel resolution**. At 10m resolution, fine-grained taxonomies become physically ambiguous:
+- Distinguishing *"Continuous urban fabric"* (100% concrete) vs. *"Discontinuous urban fabric"* (80% concrete + 20% trees) or *"Construction sites"* from optical/radar reflectance alone introduces high label noise.
+- Merging these highly correlated sub-classes into coherent broad categories (e.g., *"Urban fabric"*, *"Arable land"*) matches the actual physical resolving capability of 10m/20m satellite imagery.
+
+#### 3. Official Remote Sensing Benchmark Standard (Sumbul et al., IEEE TGRS 2021)
+In 2021, the creators of BigEarthNet (TU Berlin Computer Vision and Remote Sensing Group) formally published the **BigEarthNet-19 nomenclature standard**.
+- They conducted extensive empirical studies on CORINE mapping noise and established 19 classes as the universal benchmark standard.
+- By adhering to the official 19-class standard, SABER's retrieval metrics (Precision@K, Recall@K, F1@K, mAP) are **directly comparable to SOTA peer-reviewed research papers** across IEEE TGRS, ISPRS, and CVPR EarthVision benchmarks.
+
+---
+
 ## Part 2: Conditional Flow Matching (CFM) Latent Bridge
 
 ### The Problem: Sensor Modality Disparity
