@@ -39,13 +39,16 @@ class ResBlockCFM(nn.Module):
     def forward(self, x: torch.Tensor, t_emb: torch.Tensor) -> torch.Tensor:
         h = self.ln1(self.fc1(x))
         scale, shift = self.time_proj(t_emb).chunk(2, dim=-1)
+        if h.ndim == 3 and scale.ndim == 2:
+            scale = scale.unsqueeze(1)
+            shift = shift.unsqueeze(1)
         h = h * (1.0 + scale) + shift
         h = self.act(h)
         h = self.dropout(h)
         return x + self.ln2(self.fc2(h))
 
 class AttentionBlockCFM(nn.Module):
-    """Self-attention block with time conditioning for CFM bridge."""
+    """Self-attention block with time conditioning for CFM bridge (supports 2D or 3D sequence tokens)."""
     def __init__(self, dim: int, num_heads: int = 4, dropout: float = 0.1) -> None:
         super().__init__()
         self.ln = nn.LayerNorm(dim)
@@ -53,15 +56,24 @@ class AttentionBlockCFM(nn.Module):
         self.time_proj = nn.Linear(dim, dim)
 
     def forward(self, x: torch.Tensor, t_emb: torch.Tensor) -> torch.Tensor:
-        # x: (B, D) → (B, 1, D) for attention
-        x_seq = x.unsqueeze(1)
-        q_bias = self.time_proj(t_emb).unsqueeze(1)
+        is_2d = (x.ndim == 2)
+        x_seq = x.unsqueeze(1) if is_2d else x
+        
+        q_bias = self.time_proj(t_emb)
+        if q_bias.ndim == 2 and x_seq.ndim == 3:
+            q_bias = q_bias.unsqueeze(1)
+            
         x_norm = self.ln(x_seq + q_bias)
         attn_out, _ = self.attn(x_norm, x_norm, x_norm)
-        return x + attn_out.squeeze(1)
+        out = x_seq + attn_out
+        return out.squeeze(1) if is_2d else out
 
 class CFMBridge(nn.Module):
-    def __init__(self, dim: int = 384, hidden_dim: int = 768, num_blocks: int = 5, dropout: float = 0.1) -> None:
+    """
+    Stochastic Latent Bridge using Flow Matching.
+    Supports both 2D pooled global latents (B, D) and 3D spatial patch sequences (B, L, D).
+    """
+    def __init__(self, dim: int = 768, hidden_dim: int = 768, num_blocks: int = 5, dropout: float = 0.1) -> None:
         super().__init__()
         self.dim = dim
         self.hidden_dim = hidden_dim
@@ -73,7 +85,7 @@ class CFMBridge(nn.Module):
         self.blocks = nn.ModuleList()
         for i in range(num_blocks):
             self.blocks.append(ResBlockCFM(hidden_dim, hidden_dim, dropout=dropout))
-            if (i + 1) % 2 == 0:  # Add attention every 2 ResBlocks
+            if (i + 1) % 2 == 0:
                 self.blocks.append(AttentionBlockCFM(hidden_dim, num_heads=4, dropout=dropout))
 
         self.out_v = nn.Linear(hidden_dim, dim)
@@ -94,13 +106,16 @@ class CFMBridge(nn.Module):
         return v, logvar
 
 class CFMBridgeWrapper(nn.Module):
+    """
+    Single-step / Multi-step distilled predictor wrapper for CFM Bridge.
+    Supports (B, D) pooled features and (B, L, D) spatial patch token sequences.
+    """
     def __init__(self, cfm_bridge: nn.Module, ode_steps: int = 10) -> None:
         super().__init__()
         self.cfm_bridge = cfm_bridge
         self.ode_steps = ode_steps
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        # Integrate ODE dz/d_tau = v(z, tau, x) to map source → target latent
         z = x.clone()
         device = x.device
         if self.ode_steps == 1:
