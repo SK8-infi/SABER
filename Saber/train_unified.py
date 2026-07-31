@@ -175,6 +175,7 @@ def train_unified(
     for epoch in range(1, epochs + 1):
         model.train()
         total_loss = 0.0
+        sum_jacc, sum_rank, sum_inv, sum_var, sum_cov, sum_cls = 0.0, 0.0, 0.0, 0.0, 0.0, 0.0
         start_time = time.time()
 
         ben_iter = iter(ben14k_loader)
@@ -182,9 +183,6 @@ def train_unified(
         max_batches = len(ben14k_loader) + len(dsrsid_loader)
 
         pbar = tqdm(range(max_batches), desc=f"Phase 1 Epoch {epoch}/{epochs}", leave=True, dynamic_ncols=True)
-        
-        last_ben_loss = 0.0
-        last_dsr_loss = 0.0
 
         for step in pbar:
             optimizer.zero_grad()
@@ -209,10 +207,7 @@ def train_unified(
 
                 with torch.amp.autocast("cuda", enabled=use_amp, dtype=torch.bfloat16 if torch.cuda.is_bf16_supported() else torch.float16):
                     z1_ben, z2_ben, z1_pred_ben, logits1_ben, logits2_ben = model(x_s1, x_s2)
-                    loss_dict_ben = loss_fn(z1_ben, z2_ben, z1_pred_ben, labels_ben, logits_s1=logits1_ben, logits_s2=logits2_ben)
-                    step_loss = loss_dict_ben.get("loss", loss_dict_ben.get("total_loss"))
-
-                last_ben_loss = step_loss.item()
+                    loss_dict = loss_fn(z1_ben, z2_ben, z1_pred_ben, labels_ben, logits_s1=logits1_ben, logits_s2=logits2_ben)
             else:
                 # 2. Process DSRSID Batch (Gaofen PAN 1ch <-> Gaofen MS 4ch)
                 try:
@@ -238,10 +233,9 @@ def train_unified(
                     feats_ms = model.backbone(x_ms, [0.485, 0.555, 0.660, 0.830])
                     z_ms = model.projection_head(feats_ms)
 
-                    loss_dict_dsr = loss_fn(z_pan, z_ms, z_pan_pred, labels_dsr)
-                    step_loss = loss_dict_dsr.get("loss", loss_dict_dsr.get("total_loss"))
+                    loss_dict = loss_fn(z_pan, z_ms, z_pan_pred, labels_dsr)
 
-                last_dsr_loss = step_loss.item()
+            step_loss = loss_dict.get("loss", loss_dict.get("total_loss"))
 
             if scaler is not None:
                 scaler.scale(step_loss).backward()
@@ -259,16 +253,53 @@ def train_unified(
                 for p_online, p_target in zip(model.parameters(), ema_model.parameters()):
                     p_target.data.mul_(ema_decay).add_(p_online.data, alpha=1.0 - ema_decay)
 
-            total_loss += step_loss.item()
+            # Accumulate loss sub-components
+            v_loss = step_loss.item()
+            v_jacc = loss_dict.get("jaccard_loss", torch.tensor(0.0)).item()
+            v_rank = loss_dict.get("ranking_loss", torch.tensor(0.0)).item()
+            v_inv = loss_dict.get("invariance_loss", torch.tensor(0.0)).item()
+            v_var = loss_dict.get("variance_loss", torch.tensor(0.0)).item()
+            v_cov = loss_dict.get("covariance_loss", torch.tensor(0.0)).item()
+            v_cls = loss_dict.get("classification_loss", torch.tensor(0.0)).item()
+
+            total_loss += v_loss
+            sum_jacc += v_jacc
+            sum_rank += v_rank
+            sum_inv += v_inv
+            sum_var += v_var
+            sum_cov += v_cov
+            sum_cls += v_cls
+
+            current_lr = optimizer.param_groups[0]["lr"]
             pbar.set_postfix({
-                "loss": f"{step_loss.item():.4f}",
-                "ben_loss": f"{last_ben_loss:.4f}",
-                "dsr_loss": f"{last_dsr_loss:.4f}"
+                "loss": f"{v_loss:.4f}",
+                "jacc": f"{v_jacc:.3f}",
+                "invar": f"{v_inv:.3f}",
+                "var": f"{v_var:.3f}",
+                "cov": f"{v_cov:.3f}",
+                "bce": f"{v_cls:.3f}",
+                "lr": f"{current_lr:.2e}"
             })
 
         elapsed = time.time() - start_time
         avg_loss = total_loss / max_batches
-        logger.info(f"=== Phase 1 Epoch {epoch}/{epochs} Complete | Avg Joint Loss: {avg_loss:.4f} | Time: {elapsed:.1f}s ===")
+        avg_jacc = sum_jacc / max_batches
+        avg_rank = sum_rank / max_batches
+        avg_inv = sum_inv / max_batches
+        avg_var = sum_var / max_batches
+        avg_cov = sum_cov / max_batches
+        avg_cls = sum_cls / max_batches
+
+        logger.info(
+            f"Epoch [{epoch}/{epochs}] completed in {elapsed:.1f}s | "
+            f"Loss: {avg_loss:.4f} | "
+            f"Jacc: {avg_jacc:.4f} | "
+            f"Rank: {avg_rank:.4f} | "
+            f"Invar: {avg_inv:.4f} | "
+            f"Var: {avg_var:.4f} | "
+            f"Cov: {avg_cov:.4f} | "
+            f"Class: {avg_cls:.4f}"
+        )
 
         # Save Master Unified Checkpoint directly using torch.save
         checkpoint_payload = {
