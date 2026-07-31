@@ -37,6 +37,7 @@ def train_unified(
     config_path: str = "Saber/configs/config.yaml",
     data_dir_override: Optional[str] = None,
     dsrsid_path_override: Optional[str] = None,
+    batch_size_override: Optional[int] = None,
     epochs_override: Optional[int] = None,
     synthetic_override: Optional[bool] = None
 ) -> None:
@@ -114,8 +115,8 @@ def train_unified(
     )
 
     num_workers = config.dataset.get("num_workers", 2)
-    # VRAM Memory Safety Tuning: batch size 16 for Colab T4 GPU
-    batch_size = 16 if torch.cuda.is_available() else config.dataset.get("batch_size", 32)
+    # Batch size set to 64
+    batch_size = batch_size_override or config.dataset.get("batch_size", 64)
 
     ben14k_loader = DataLoader(
         ben14k_dataset, batch_size=batch_size, shuffle=True,
@@ -385,6 +386,7 @@ def main():
     parser.add_argument("--config", type=str, default="Saber/configs/config.yaml")
     parser.add_argument("--data_dir", type=str, default=None, help="Path to BEN-14K dataset directory")
     parser.add_argument("--dsrsid_path", type=str, default=None, help="Path to DSRSID dataset mat file/dir")
+    parser.add_argument("--batch_size", type=int, default=64, help="Batch size for training")
     parser.add_argument("--epochs", type=int, default=None)
     parser.add_argument("--synthetic", type=str, default=None)
     args = parser.parse_args()
@@ -394,6 +396,7 @@ def main():
         config_path=args.config,
         data_dir_override=args.data_dir,
         dsrsid_path_override=args.dsrsid_path,
+        batch_size_override=args.batch_size,
         epochs_override=args.epochs,
         synthetic_override=synthetic_bool
     )
