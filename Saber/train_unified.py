@@ -7,7 +7,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.utils.data import DataLoader
 from tqdm import tqdm
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 
 os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
 sys.stdout.reconfigure(encoding='utf-8', line_buffering=True)
@@ -24,7 +24,22 @@ from Saber.models.saber import SABER
 from Saber.models.bridge import CFMBridge, CFMBridgeWrapper
 from Saber.losses.saber_loss import SaberCombinedLoss
 
-def train_unified(config_path: str = "Saber/configs/config.yaml", epochs_override: int = None, synthetic_override: bool = None) -> None:
+def resolve_existing_path(path: str, candidate_paths: list) -> str:
+    """Smart path resolver for Linux case-sensitive filesystems (Google Colab / Kaggle)."""
+    if os.path.exists(path):
+        return path
+    for candidate in candidate_paths:
+        if os.path.exists(candidate):
+            return candidate
+    return path
+
+def train_unified(
+    config_path: str = "Saber/configs/config.yaml",
+    data_dir_override: Optional[str] = None,
+    dsrsid_path_override: Optional[str] = None,
+    epochs_override: Optional[int] = None,
+    synthetic_override: Optional[bool] = None
+) -> None:
     print("="*80)
     print(" 🚀 UNIFIED SENSOR-AGNOSTIC SABER MASTER TRAINING ENGINE")
     print("="*80)
@@ -44,10 +59,38 @@ def train_unified(config_path: str = "Saber/configs/config.yaml", epochs_overrid
     # Load spatial data transforms
     train_transform = get_transforms(image_size=config.dataset.image_size, is_train=True)
 
+    # Resolve paths for Linux case sensitivity
+    ben_raw_path = data_dir_override or config.dataset.data_dir
+    ben_resolved_path = resolve_existing_path(
+        ben_raw_path,
+        [
+            "Datasets/benv1_14k",
+            "datasets/benv1_14k",
+            "Datasets/ben14k",
+            "datasets/ben14k",
+            "/content/SABER/Datasets/benv1_14k"
+        ]
+    )
+
+    dsr_raw_path = dsrsid_path_override or config.dataset.get("dsrsid_path", "datasets/DSRSID.mat")
+    dsr_resolved_path = resolve_existing_path(
+        dsr_raw_path,
+        [
+            "Datasets/DSRSID/DSRSID-001.mat",
+            "Datasets/DSRSID/DSRSID.mat",
+            "Datasets/DSRSID-001.mat",
+            "Datasets/DSRSID.mat",
+            "Datasets/DSRSID",
+            "datasets/DSRSID.mat",
+            "/content/SABER/Datasets/DSRSID/DSRSID-001.mat",
+            "/content/SABER/Datasets/DSRSID/DSRSID.mat"
+        ]
+    )
+
     # 1. Dataset 1: BEN-14K (Sentinel-1 SAR 2ch + Sentinel-2 MS 12ch = 14ch)
-    logger.info("Initializing BEN-14K Sentinel-1/2 dataset (14,832 samples)...")
+    logger.info(f"Initializing BEN-14K Sentinel-1/2 dataset from '{ben_resolved_path}'...")
     ben14k_dataset = BEN14KDataset(
-        data_dir=config.dataset.data_dir,
+        data_dir=ben_resolved_path,
         use_synthetic=config.dataset.use_synthetic,
         size=config.dataset.get("size", 14832),
         image_size=config.dataset.image_size,
@@ -58,9 +101,9 @@ def train_unified(config_path: str = "Saber/configs/config.yaml", epochs_overrid
     )
 
     # 2. Dataset 2: DSRSID (Gaofen PAN 1ch + Gaofen MS 4ch = 5ch, Stratified Balanced 14,000 samples)
-    logger.info("Initializing DSRSID Gaofen PAN/MS dataset (Stratified 14,000 samples)...")
+    logger.info(f"Initializing DSRSID Gaofen PAN/MS dataset from '{dsr_resolved_path}'...")
     dsrsid_dataset = DSRSIDDataset(
-        data_dir=config.dataset.get("dsrsid_path", "datasets/DSRSID.mat"),
+        data_dir=dsr_resolved_path,
         use_synthetic=config.dataset.use_synthetic,
         size=14000,
         image_size=config.dataset.image_size,
@@ -340,12 +383,20 @@ def train_unified(config_path: str = "Saber/configs/config.yaml", epochs_overrid
 def main():
     parser = argparse.ArgumentParser(description="Train Unified Sensor-Agnostic SABER Engine & CFM Bridge")
     parser.add_argument("--config", type=str, default="Saber/configs/config.yaml")
+    parser.add_argument("--data_dir", type=str, default=None, help="Path to BEN-14K dataset directory")
+    parser.add_argument("--dsrsid_path", type=str, default=None, help="Path to DSRSID dataset mat file/dir")
     parser.add_argument("--epochs", type=int, default=None)
     parser.add_argument("--synthetic", type=str, default=None)
     args = parser.parse_args()
 
     synthetic_bool = (args.synthetic.lower() == "true") if args.synthetic is not None else None
-    train_unified(config_path=args.config, epochs_override=args.epochs, synthetic_override=synthetic_bool)
+    train_unified(
+        config_path=args.config,
+        data_dir_override=args.data_dir,
+        dsrsid_path_override=args.dsrsid_path,
+        epochs_override=args.epochs,
+        synthetic_override=synthetic_bool
+    )
 
 if __name__ == "__main__":
     main()
