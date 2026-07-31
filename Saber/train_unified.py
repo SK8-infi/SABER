@@ -6,6 +6,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.utils.data import DataLoader
+from tqdm import tqdm
 from typing import Dict, Any
 
 os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
@@ -70,7 +71,7 @@ def train_unified(config_path: str = "Saber/configs/config.yaml", epochs_overrid
     )
 
     num_workers = config.dataset.get("num_workers", 2)
-    # VRAM Memory Safety Tuning: default batch size 16 for Colab T4 GPU
+    # VRAM Memory Safety Tuning: batch size 16 for Colab T4 GPU
     batch_size = 16 if torch.cuda.is_available() else config.dataset.get("batch_size", 32)
 
     ben14k_loader = DataLoader(
@@ -135,75 +136,78 @@ def train_unified(config_path: str = "Saber/configs/config.yaml", epochs_overrid
 
         ben_iter = iter(ben14k_loader)
         dsr_iter = iter(dsrsid_loader)
-        max_batches = max(len(ben14k_loader), len(dsrsid_loader))
+        max_batches = len(ben14k_loader) + len(dsrsid_loader)
 
-        for batch_idx in range(max_batches):
+        pbar = tqdm(range(max_batches), desc=f"Phase 1 Epoch {epoch}/{epochs}", leave=True, dynamic_ncols=True)
+        
+        last_ben_loss = 0.0
+        last_dsr_loss = 0.0
+
+        for step in pbar:
             optimizer.zero_grad()
+            is_ben_step = (step % 2 == 0)
 
-            # Process BEN-14K Batch (S1 SAR 2ch <-> S2 MS 12ch)
-            try:
-                ben_batch = next(ben_iter)
-            except StopIteration:
-                ben_iter = iter(ben14k_loader)
-                ben_batch = next(ben_iter)
+            if is_ben_step:
+                # 1. Process BEN-14K Batch (S1 SAR 2ch <-> S2 MS 12ch)
+                try:
+                    ben_batch = next(ben_iter)
+                except StopIteration:
+                    ben_iter = iter(ben14k_loader)
+                    ben_batch = next(ben_iter)
 
-            images_ben = ben_batch.get("image1", ben_batch.get("image")).to(device, non_blocking=True)
-            labels_ben = ben_batch["label"].to(device, non_blocking=True)
+                images_ben = ben_batch.get("image1", ben_batch.get("image")).to(device, non_blocking=True)
+                labels_ben = ben_batch["label"].to(device, non_blocking=True)
 
-            if images_ben.shape[-1] != 224 or images_ben.shape[-2] != 224:
-                images_ben = F.interpolate(images_ben, size=(224, 224), mode="bilinear", align_corners=False)
+                if images_ben.shape[-1] != 224 or images_ben.shape[-2] != 224:
+                    images_ben = F.interpolate(images_ben, size=(224, 224), mode="bilinear", align_corners=False)
 
-            x_s1 = images_ben[:, :2, :, :]
-            x_s2 = images_ben[:, 2:, :, :]
+                x_s1 = images_ben[:, :2, :, :]
+                x_s2 = images_ben[:, 2:, :, :]
 
-            # Process DSRSID Batch (Gaofen PAN 1ch <-> Gaofen MS 4ch)
-            try:
-                dsr_batch = next(dsr_iter)
-            except StopIteration:
-                dsr_iter = iter(dsrsid_loader)
-                dsr_batch = next(dsr_iter)
+                with torch.amp.autocast("cuda", enabled=use_amp, dtype=torch.bfloat16 if torch.cuda.is_bf16_supported() else torch.float16):
+                    z1_ben, z2_ben, z1_pred_ben, logits1_ben, logits2_ben = model(x_s1, x_s2)
+                    loss_dict_ben = loss_fn(z1_ben, z2_ben, z1_pred_ben, labels_ben, logits_s1=logits1_ben, logits_s2=logits2_ben)
+                    step_loss = loss_dict_ben.get("loss", loss_dict_ben.get("total_loss"))
 
-            images_dsr = dsr_batch.get("image1", dsr_batch.get("image")).to(device, non_blocking=True)
-            labels_dsr = dsr_batch["label"].to(device, non_blocking=True)
-
-            if images_dsr.shape[-1] != 224 or images_dsr.shape[-2] != 224:
-                images_dsr = F.interpolate(images_dsr, size=(224, 224), mode="bilinear", align_corners=False)
-
-            x_pan = images_dsr[:, :1, :, :]
-            x_ms = images_dsr[:, 1:, :, :]
-
-            # Sequential Forward + Backward to prevent VRAM spikes
-            # 1. Forward & Backward for BEN-14K
-            with torch.amp.autocast("cuda", enabled=use_amp, dtype=torch.bfloat16 if torch.cuda.is_bf16_supported() else torch.float16):
-                z1_ben, z2_ben, z1_pred_ben, logits1_ben, logits2_ben = model(x_s1, x_s2)
-                loss_dict_ben = loss_fn(z1_ben, z2_ben, z1_pred_ben, labels_ben, logits_s1=logits1_ben, logits_s2=logits2_ben)
-                loss_ben = loss_dict_ben.get("loss", loss_dict_ben.get("total_loss")) / 2.0
-
-            if scaler is not None:
-                scaler.scale(loss_ben).backward()
+                last_ben_loss = step_loss.item()
             else:
-                loss_ben.backward()
+                # 2. Process DSRSID Batch (Gaofen PAN 1ch <-> Gaofen MS 4ch)
+                try:
+                    dsr_batch = next(dsr_iter)
+                except StopIteration:
+                    dsr_iter = iter(dsrsid_loader)
+                    dsr_batch = next(dsr_iter)
 
-            # 2. Forward & Backward for DSRSID (VRAM for BEN-14K graph is freed!)
-            with torch.amp.autocast("cuda", enabled=use_amp, dtype=torch.bfloat16 if torch.cuda.is_bf16_supported() else torch.float16):
-                feats_pan = model.backbone(x_pan, [0.675])
-                z_pan = model.projection_head(feats_pan)
-                z_pan_pred = model.predictor(z_pan)
+                images_dsr = dsr_batch.get("image1", dsr_batch.get("image")).to(device, non_blocking=True)
+                labels_dsr = dsr_batch["label"].to(device, non_blocking=True)
 
-                feats_ms = model.backbone(x_ms, [0.485, 0.555, 0.660, 0.830])
-                z_ms = model.projection_head(feats_ms)
+                if images_dsr.shape[-1] != 224 or images_dsr.shape[-2] != 224:
+                    images_dsr = F.interpolate(images_dsr, size=(224, 224), mode="bilinear", align_corners=False)
 
-                loss_dict_dsr = loss_fn(z_pan, z_ms, z_pan_pred, labels_dsr)
-                loss_dsr = loss_dict_dsr.get("loss", loss_dict_dsr.get("total_loss")) / 2.0
+                x_pan = images_dsr[:, :1, :, :]
+                x_ms = images_dsr[:, 1:, :, :]
+
+                with torch.amp.autocast("cuda", enabled=use_amp, dtype=torch.bfloat16 if torch.cuda.is_bf16_supported() else torch.float16):
+                    feats_pan = model.backbone(x_pan, [0.675])
+                    z_pan = model.projection_head(feats_pan)
+                    z_pan_pred = model.predictor(z_pan)
+
+                    feats_ms = model.backbone(x_ms, [0.485, 0.555, 0.660, 0.830])
+                    z_ms = model.projection_head(feats_ms)
+
+                    loss_dict_dsr = loss_fn(z_pan, z_ms, z_pan_pred, labels_dsr)
+                    step_loss = loss_dict_dsr.get("loss", loss_dict_dsr.get("total_loss"))
+
+                last_dsr_loss = step_loss.item()
 
             if scaler is not None:
-                scaler.scale(loss_dsr).backward()
+                scaler.scale(step_loss).backward()
                 scaler.unscale_(optimizer)
                 torch.nn.utils.clip_grad_norm_(trainable_params, grad_clip)
                 scaler.step(optimizer)
                 scaler.update()
             else:
-                loss_dsr.backward()
+                step_loss.backward()
                 torch.nn.utils.clip_grad_norm_(trainable_params, grad_clip)
                 optimizer.step()
 
@@ -212,11 +216,12 @@ def train_unified(config_path: str = "Saber/configs/config.yaml", epochs_overrid
                 for p_online, p_target in zip(model.parameters(), ema_model.parameters()):
                     p_target.data.mul_(ema_decay).add_(p_online.data, alpha=1.0 - ema_decay)
 
-            batch_loss_val = loss_ben.item() + loss_dsr.item()
-            total_loss += batch_loss_val
-
-            if (batch_idx + 1) % 50 == 0 or (batch_idx + 1) == max_batches:
-                logger.info(f"Phase 1 Epoch [{epoch}/{epochs}] Batch [{batch_idx+1}/{max_batches}] | Joint Loss: {batch_loss_val:.4f}")
+            total_loss += step_loss.item()
+            pbar.set_postfix({
+                "loss": f"{step_loss.item():.4f}",
+                "ben_loss": f"{last_ben_loss:.4f}",
+                "dsr_loss": f"{last_dsr_loss:.4f}"
+            })
 
         elapsed = time.time() - start_time
         avg_loss = total_loss / max_batches
@@ -260,36 +265,54 @@ def train_unified(config_path: str = "Saber/configs/config.yaml", epochs_overrid
 
         ben_iter = iter(ben14k_loader)
         dsr_iter = iter(dsrsid_loader)
-        max_batches = max(len(ben14k_loader), len(dsrsid_loader))
+        max_batches = len(ben14k_loader) + len(dsrsid_loader)
 
-        for batch_idx in range(max_batches):
+        pbar_b = tqdm(range(max_batches), desc=f"Phase 2 Bridge Epoch {b_epoch}/{bridge_epochs}", leave=True, dynamic_ncols=True)
+        for step in pbar_b:
             bridge_opt.zero_grad()
+            is_ben_step = (step % 2 == 0)
 
-            try:
-                ben_batch = next(ben_iter)
-            except StopIteration:
-                ben_iter = iter(ben14k_loader)
-                ben_batch = next(ben_iter)
+            if is_ben_step:
+                try:
+                    ben_batch = next(ben_iter)
+                except StopIteration:
+                    ben_iter = iter(ben14k_loader)
+                    ben_batch = next(ben_iter)
 
-            images_ben = ben_batch.get("image1", ben_batch.get("image")).to(device, non_blocking=True)
-            if images_ben.shape[-1] != 224 or images_ben.shape[-2] != 224:
-                images_ben = F.interpolate(images_ben, size=(224, 224), mode="bilinear", align_corners=False)
+                images_ben = ben_batch.get("image1", ben_batch.get("image")).to(device, non_blocking=True)
+                if images_ben.shape[-1] != 224 or images_ben.shape[-2] != 224:
+                    images_ben = F.interpolate(images_ben, size=(224, 224), mode="bilinear", align_corners=False)
 
-            x_s1 = images_ben[:, :2, :, :]
-            x_s2 = images_ben[:, 2:, :, :]
+                x1 = images_ben[:, :2, :, :]
+                x2 = images_ben[:, 2:, :, :]
+                wvs1, wvs2 = model.s1_wvs, model.s2_wvs
+            else:
+                try:
+                    dsr_batch = next(dsr_iter)
+                except StopIteration:
+                    dsr_iter = iter(dsrsid_loader)
+                    dsr_batch = next(dsr_iter)
+
+                images_dsr = dsr_batch.get("image1", dsr_batch.get("image")).to(device, non_blocking=True)
+                if images_dsr.shape[-1] != 224 or images_dsr.shape[-2] != 224:
+                    images_dsr = F.interpolate(images_dsr, size=(224, 224), mode="bilinear", align_corners=False)
+
+                x1 = images_dsr[:, :1, :, :]
+                x2 = images_dsr[:, 1:, :, :]
+                wvs1, wvs2 = [0.675], [0.485, 0.555, 0.660, 0.830]
 
             with torch.no_grad():
-                feats_s1 = model.backbone(x_s1, model.s1_wvs)
-                feats_s2 = model.backbone(x_s2, model.s2_wvs)
-                z_s1 = model.s1_projection(feats_s1)
-                z_s2 = model.s2_projection(feats_s2)
+                feats1 = model.backbone(x1, wvs1)
+                feats2 = model.backbone(x2, wvs2)
+                z1 = model.projection_head(feats1)
+                z2 = model.projection_head(feats2)
 
             # Flow Matching Interpolation
-            tau = torch.rand(z_s1.shape[0], 1, device=device)
-            z_tau = (1.0 - tau) * z_s1 + tau * z_s2
-            target_velocity = z_s2 - z_s1
+            tau = torch.rand(z1.shape[0], 1, device=device)
+            z_tau = (1.0 - tau) * z1 + tau * z2
+            target_velocity = z2 - z1
 
-            v_pred, logvar = bridge_net(z_tau, tau, z_s1)
+            v_pred, logvar = bridge_net(z_tau, tau, z1)
             b_loss = F.mse_loss(v_pred, target_velocity)
 
             b_loss.backward()
@@ -297,6 +320,7 @@ def train_unified(config_path: str = "Saber/configs/config.yaml", epochs_overrid
             bridge_opt.step()
 
             total_bridge_loss += b_loss.item()
+            pbar_b.set_postfix({"flow_loss": f"{b_loss.item():.6f}"})
 
         avg_b_loss = total_bridge_loss / max_batches
         if b_epoch % 5 == 0 or b_epoch == bridge_epochs:
