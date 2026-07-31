@@ -116,7 +116,7 @@ def train_unified(
     )
 
     num_workers = config.dataset.get("num_workers", 2)
-    batch_size = batch_size_override or config.dataset.get("batch_size", 64)
+    batch_size = batch_size_override or 32  # VRAM Safe default: 32 for T4 GPU
 
     ben14k_loader = DataLoader(
         ben14k_dataset, batch_size=batch_size, shuffle=True,
@@ -312,6 +312,10 @@ def train_unified(
             torch.save(checkpoint_payload, latest_ckpt_path)
             logger.info(f"Saved Master Unified SABER checkpoint to '{unified_ckpt_path}' and '{latest_ckpt_path}'")
 
+    # Clear VRAM cache between Phase 1 and Phase 2
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+
     # -------------------------------------------------------------
     # PHASE 2: MASTER PATCH-PROJECTED CFM BRIDGE TRAINING
     # -------------------------------------------------------------
@@ -420,7 +424,7 @@ def train_unified(
         # Save Unified CFM Bridge Checkpoints
         torch.save(bridge_net.state_dict(), unified_bridge_path)
         torch.save(bridge_net.state_dict(), legacy_bridge_path)
-        logger.info(f"Saved Master Unified CFM Bridge to '{unified_bridge_path}' and '{latest_ckpt_path}'")
+        logger.info(f"Saved Master Unified CFM Bridge to '{unified_ckpt_path}' and '{latest_ckpt_path}'")
 
     print("="*80)
     print(" 🎉 MASTER UNIFIED TRAINING COMPLETED SUCCESSFULLY (100% UNSUPERVISED)!")
@@ -433,7 +437,7 @@ def main():
     parser.add_argument("--config", type=str, default="Saber/configs/config.yaml")
     parser.add_argument("--data_dir", type=str, default=None, help="Path to BEN-14K dataset directory")
     parser.add_argument("--dsrsid_path", type=str, default=None, help="Path to DSRSID dataset mat file/dir")
-    parser.add_argument("--batch_size", type=int, default=64, help="Batch size for training")
+    parser.add_argument("--batch_size", type=int, default=32, help="Batch size for training (default: 32 for VRAM safety)")
     parser.add_argument("--epochs", type=int, default=None, help="Custom number of Phase 1 Encoder training epochs")
     parser.add_argument("--bridge_epochs", type=int, default=5, help="Custom number of Phase 2 CFM Bridge training epochs (default: 5)")
     parser.add_argument("--mode", type=str, default="all", choices=["all", "encoder", "bridge"], help="Training mode: 'all' (Encoder + Bridge), 'encoder' (Encoder only), 'bridge' (Bridge only)")
