@@ -16,7 +16,6 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 from Saber.utils.config import load_config
 from Saber.utils.seed import set_seed
 from Saber.utils.logger import setup_logger
-from Saber.utils.checkpoint import save_checkpoint
 from Saber.datasets.ben14k import BEN14KDataset
 from Saber.datasets.dsrsid import DSRSIDDataset
 from Saber.datasets.transforms import get_transforms
@@ -115,7 +114,6 @@ def train_unified(
     )
 
     num_workers = config.dataset.get("num_workers", 2)
-    # Batch size set to 64
     batch_size = batch_size_override or config.dataset.get("batch_size", 64)
 
     ben14k_loader = DataLoader(
@@ -172,6 +170,7 @@ def train_unified(
 
     os.makedirs(config.checkpoint_dir, exist_ok=True)
     unified_ckpt_path = os.path.join(config.checkpoint_dir, "saber_unified.pth")
+    latest_ckpt_path = os.path.join(config.checkpoint_dir, "latest.pth")
 
     for epoch in range(1, epochs + 1):
         model.train()
@@ -271,19 +270,18 @@ def train_unified(
         avg_loss = total_loss / max_batches
         logger.info(f"=== Phase 1 Epoch {epoch}/{epochs} Complete | Avg Joint Loss: {avg_loss:.4f} | Time: {elapsed:.1f}s ===")
 
-        # Save Master Unified Checkpoint
-        save_checkpoint(
-            state={
-                "epoch": epoch,
-                "model_state_dict": model.state_dict(),
-                "ema_state_dict": ema_model.state_dict(),
-                "optimizer_state_dict": optimizer.state_dict(),
-                "loss": avg_loss,
-                "config": config
-            },
-            filename=unified_ckpt_path
-        )
-        logger.info(f"Saved Master Unified SABER checkpoint to '{unified_ckpt_path}'")
+        # Save Master Unified Checkpoint directly using torch.save
+        checkpoint_payload = {
+            "epoch": epoch,
+            "model_state_dict": model.state_dict(),
+            "ema_state_dict": ema_model.state_dict(),
+            "optimizer_state_dict": optimizer.state_dict(),
+            "loss": avg_loss,
+            "config": config
+        }
+        torch.save(checkpoint_payload, unified_ckpt_path)
+        torch.save(checkpoint_payload, latest_ckpt_path)
+        logger.info(f"Saved Master Unified SABER checkpoint to '{unified_ckpt_path}' and '{latest_ckpt_path}'")
 
     # -------------------------------------------------------------
     # PHASE 2: MASTER PATCH-PROJECTED CFM BRIDGE TRAINING
