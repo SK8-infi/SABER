@@ -177,7 +177,7 @@ def train_unified(config_path: str = "Saber/configs/config.yaml", epochs_overrid
             with torch.amp.autocast("cuda", enabled=use_amp, dtype=torch.bfloat16 if torch.cuda.is_bf16_supported() else torch.float16):
                 z1_ben, z2_ben, z1_pred_ben, logits1_ben, logits2_ben = model(x_s1, x_s2)
                 loss_dict_ben = loss_fn(z1_ben, z2_ben, z1_pred_ben, labels_ben, logits_s1=logits1_ben, logits_s2=logits2_ben)
-                loss_ben = loss_dict_ben["total_loss"] / 2.0
+                loss_ben = loss_dict_ben.get("loss", loss_dict_ben.get("total_loss")) / 2.0
 
             if scaler is not None:
                 scaler.scale(loss_ben).backward()
@@ -194,7 +194,7 @@ def train_unified(config_path: str = "Saber/configs/config.yaml", epochs_overrid
                 z_ms = model.projection_head(feats_ms)
 
                 loss_dict_dsr = loss_fn(z_pan, z_ms, z_pan_pred, labels_dsr)
-                loss_dsr = loss_dict_dsr["total_loss"] / 2.0
+                loss_dsr = loss_dict_dsr.get("loss", loss_dict_dsr.get("total_loss")) / 2.0
 
             if scaler is not None:
                 scaler.scale(loss_dsr).backward()
