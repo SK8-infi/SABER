@@ -145,7 +145,7 @@ def train_unified(config_path: str = "Saber/configs/config.yaml", epochs_overrid
                 ben_iter = iter(ben14k_loader)
                 ben_batch = next(ben_iter)
 
-            images_ben = ben_batch["image"].to(device, non_blocking=True)
+            images_ben = ben_batch.get("image1", ben_batch.get("image")).to(device, non_blocking=True)
             labels_ben = ben_batch["label"].to(device, non_blocking=True)
 
             if images_ben.shape[-1] != 224 or images_ben.shape[-2] != 224:
@@ -161,7 +161,7 @@ def train_unified(config_path: str = "Saber/configs/config.yaml", epochs_overrid
                 dsr_iter = iter(dsrsid_loader)
                 dsr_batch = next(dsr_iter)
 
-            images_dsr = dsr_batch["image"].to(device, non_blocking=True)
+            images_dsr = dsr_batch.get("image1", dsr_batch.get("image")).to(device, non_blocking=True)
             labels_dsr = dsr_batch["label"].to(device, non_blocking=True)
 
             if images_dsr.shape[-1] != 224 or images_dsr.shape[-2] != 224:
@@ -262,7 +262,7 @@ def train_unified(config_path: str = "Saber/configs/config.yaml", epochs_overrid
                 ben_iter = iter(ben14k_loader)
                 ben_batch = next(ben_iter)
 
-            images_ben = ben_batch["image"].to(device, non_blocking=True)
+            images_ben = ben_batch.get("image1", ben_batch.get("image")).to(device, non_blocking=True)
             if images_ben.shape[-1] != 224 or images_ben.shape[-2] != 224:
                 images_ben = F.interpolate(images_ben, size=(224, 224), mode="bilinear", align_corners=False)
 
