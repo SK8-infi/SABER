@@ -349,8 +349,7 @@ def train_unified(
         bridge_net = CFMBridge(dim=768, hidden_dim=768, num_blocks=4, dropout=0.1).to(device)
         bridge_opt = torch.optim.AdamW(bridge_net.parameters(), lr=0.0003, weight_decay=0.01)
 
-        base_epochs = epochs_override if epochs_override is not None else config.train.get("epochs", 5)
-        bridge_epochs = bridge_epochs_override if bridge_epochs_override is not None else max(15, base_epochs * 3)
+        bridge_epochs = bridge_epochs_override if bridge_epochs_override is not None else 5
         model.eval()
 
         unified_bridge_path = os.path.join(config.checkpoint_dir, "bridge_unified.pth")
@@ -443,7 +442,7 @@ def main():
     parser.add_argument("--dsrsid_path", type=str, default=None, help="Path to DSRSID dataset mat file/dir")
     parser.add_argument("--batch_size", type=int, default=64, help="Batch size for training")
     parser.add_argument("--epochs", type=int, default=None, help="Custom number of Phase 1 Encoder training epochs")
-    parser.add_argument("--bridge_epochs", type=int, default=None, help="Custom number of Phase 2 CFM Bridge training epochs")
+    parser.add_argument("--bridge_epochs", type=int, default=5, help="Custom number of Phase 2 CFM Bridge training epochs (default: 5)")
     parser.add_argument("--mode", type=str, default="all", choices=["all", "encoder", "bridge"], help="Training mode: 'all' (Encoder + Bridge), 'encoder' (Encoder only), 'bridge' (Bridge only)")
     parser.add_argument("--synthetic", type=str, default=None)
     args = parser.parse_args()
