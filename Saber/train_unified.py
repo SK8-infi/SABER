@@ -8,6 +8,7 @@ import torch.nn.functional as F
 from torch.utils.data import DataLoader
 from typing import Dict, Any
 
+os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
 sys.stdout.reconfigure(encoding='utf-8', line_buffering=True)
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
@@ -69,7 +70,8 @@ def train_unified(config_path: str = "Saber/configs/config.yaml", epochs_overrid
     )
 
     num_workers = config.dataset.get("num_workers", 2)
-    batch_size = config.dataset.get("batch_size", 32)
+    # VRAM Memory Safety Tuning: default batch size 16 for Colab T4 GPU
+    batch_size = 16 if torch.cuda.is_available() else config.dataset.get("batch_size", 32)
 
     ben14k_loader = DataLoader(
         ben14k_dataset, batch_size=batch_size, shuffle=True,
@@ -80,7 +82,7 @@ def train_unified(config_path: str = "Saber/configs/config.yaml", epochs_overrid
         num_workers=num_workers, pin_memory=torch.cuda.is_available(), drop_last=True
     )
 
-    logger.info(f"BEN-14K Batches: {len(ben14k_loader)} | DSRSID Batches: {len(dsrsid_loader)}")
+    logger.info(f"BEN-14K Batches: {len(ben14k_loader)} | DSRSID Batches: {len(dsrsid_loader)} (Batch Size: {batch_size})")
 
     # 3. Instantiate SINGLE UNIFIED SABER MODEL (DOFA ViT + LoRA + Shared Projection)
     model = SABER(config=config, in_channels=14).to(device)
@@ -170,12 +172,20 @@ def train_unified(config_path: str = "Saber/configs/config.yaml", epochs_overrid
             x_pan = images_dsr[:, :1, :, :]
             x_ms = images_dsr[:, 1:, :, :]
 
+            # Sequential Forward + Backward to prevent VRAM spikes
+            # 1. Forward & Backward for BEN-14K
             with torch.amp.autocast("cuda", enabled=use_amp, dtype=torch.bfloat16 if torch.cuda.is_bf16_supported() else torch.float16):
-                # 1. Forward BEN-14K (S1/S2)
                 z1_ben, z2_ben, z1_pred_ben, logits1_ben, logits2_ben = model(x_s1, x_s2)
                 loss_dict_ben = loss_fn(z1_ben, z2_ben, z1_pred_ben, labels_ben, logits_s1=logits1_ben, logits_s2=logits2_ben)
+                loss_ben = loss_dict_ben["total_loss"] / 2.0
 
-                # 2. Forward DSRSID (PAN/MS)
+            if scaler is not None:
+                scaler.scale(loss_ben).backward()
+            else:
+                loss_ben.backward()
+
+            # 2. Forward & Backward for DSRSID (VRAM for BEN-14K graph is freed!)
+            with torch.amp.autocast("cuda", enabled=use_amp, dtype=torch.bfloat16 if torch.cuda.is_bf16_supported() else torch.float16):
                 feats_pan = model.backbone(x_pan, [0.675])
                 z_pan = model.projection_head(feats_pan)
                 z_pan_pred = model.predictor(z_pan)
@@ -184,18 +194,16 @@ def train_unified(config_path: str = "Saber/configs/config.yaml", epochs_overrid
                 z_ms = model.projection_head(feats_ms)
 
                 loss_dict_dsr = loss_fn(z_pan, z_ms, z_pan_pred, labels_dsr)
-
-                # Aggregated Joint Loss
-                batch_loss = loss_dict_ben["total_loss"] + loss_dict_dsr["total_loss"]
+                loss_dsr = loss_dict_dsr["total_loss"] / 2.0
 
             if scaler is not None:
-                scaler.scale(batch_loss).backward()
+                scaler.scale(loss_dsr).backward()
                 scaler.unscale_(optimizer)
                 torch.nn.utils.clip_grad_norm_(trainable_params, grad_clip)
                 scaler.step(optimizer)
                 scaler.update()
             else:
-                batch_loss.backward()
+                loss_dsr.backward()
                 torch.nn.utils.clip_grad_norm_(trainable_params, grad_clip)
                 optimizer.step()
 
@@ -204,10 +212,11 @@ def train_unified(config_path: str = "Saber/configs/config.yaml", epochs_overrid
                 for p_online, p_target in zip(model.parameters(), ema_model.parameters()):
                     p_target.data.mul_(ema_decay).add_(p_online.data, alpha=1.0 - ema_decay)
 
-            total_loss += batch_loss.item()
+            batch_loss_val = loss_ben.item() + loss_dsr.item()
+            total_loss += batch_loss_val
 
             if (batch_idx + 1) % 50 == 0 or (batch_idx + 1) == max_batches:
-                logger.info(f"Phase 1 Epoch [{epoch}/{epochs}] Batch [{batch_idx+1}/{max_batches}] | Joint Loss: {batch_loss.item():.4f}")
+                logger.info(f"Phase 1 Epoch [{epoch}/{epochs}] Batch [{batch_idx+1}/{max_batches}] | Joint Loss: {batch_loss_val:.4f}")
 
         elapsed = time.time() - start_time
         avg_loss = total_loss / max_batches
