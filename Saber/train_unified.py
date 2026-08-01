@@ -179,6 +179,8 @@ def train_unified(
 
         epochs = epochs_override if epochs_override is not None else config.train.get("epochs", 5)
         grad_clip = config.train.get("grad_clip", 1.0)
+        
+        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=epochs, eta_min=1e-6)
 
         logger.info("="*60)
         logger.info(f" PHASE 1: MASTER ENCODER JOINT TRAINING ({epochs} Epochs | SPEED OPTIMIZED)")
@@ -286,6 +288,7 @@ def train_unified(
                     "lr": f"{current_lr:.2e}"
                 })
 
+            scheduler.step()
             elapsed = time.time() - start_time
             avg_loss = total_loss / max_batches
             avg_jacc = sum_jacc / max_batches

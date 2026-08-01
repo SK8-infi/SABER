@@ -169,7 +169,14 @@ class Evaluator:
             embeddings[query_indices] = query_embeds
             embeddings[gallery_indices] = gallery_embeds
 
-        logger.info(f"Retrieval Split: {len(query_indices)} queries, {len(gallery_indices)} gallery items.")
+        # Apply Mean-Centering Vector Calibration (z - mu) / ||z - mu|| to widen dynamic range gap
+        mu = np.mean(gallery_embeds, axis=0, keepdims=True)
+        query_embeds = query_embeds - mu
+        query_embeds = query_embeds / (np.linalg.norm(query_embeds, axis=1, keepdims=True) + 1e-8)
+        gallery_embeds = gallery_embeds - mu
+        gallery_embeds = gallery_embeds / (np.linalg.norm(gallery_embeds, axis=1, keepdims=True) + 1e-8)
+
+        logger.info(f"Retrieval Split: {len(query_indices)} queries, {len(gallery_indices)} gallery items (Mean-Calibrated).")
 
         # Calculate metrics by computing chunked similarities to avoid OOM
         is_multilabel = (self.config.dataset.name.lower() == "ben14k")
