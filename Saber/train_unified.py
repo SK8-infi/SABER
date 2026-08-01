@@ -118,19 +118,19 @@ def train_unified(
         split="train"
     )
 
-    # Multi-Crop generates 6 full 224x224 tensors per item (6x data volume).
-    # Set num_workers=0 to prevent PyTorch IPC shared memory RAM spikes on Colab.
-    num_workers = 0
-    batch_size = batch_size_override or 32
+    num_workers = config.dataset.get("num_workers", 2)
+    batch_size = batch_size_override or 48  # Fast Baseline Default: 48 (uses ~11.8 GB VRAM)
 
     ben14k_loader = DataLoader(
         ben14k_dataset, batch_size=batch_size, shuffle=True,
-        num_workers=num_workers, pin_memory=False,
+        num_workers=num_workers, pin_memory=torch.cuda.is_available(),
+        persistent_workers=(num_workers > 0), prefetch_factor=2 if num_workers > 0 else None,
         drop_last=True
     )
     dsrsid_loader = DataLoader(
         dsrsid_dataset, batch_size=batch_size, shuffle=True,
-        num_workers=num_workers, pin_memory=False,
+        num_workers=num_workers, pin_memory=torch.cuda.is_available(),
+        persistent_workers=(num_workers > 0), prefetch_factor=2 if num_workers > 0 else None,
         drop_last=True
     )
 
@@ -207,45 +207,17 @@ def train_unified(
                         ben_iter = iter(ben14k_loader)
                         ben_batch = next(ben_iter)
 
-                    if "crops" in ben_batch:
-                        crops = ben_batch["crops"]
-                        c0 = crops[0].to(device, non_blocking=True)
-                        c1 = crops[1].to(device, non_blocking=True)
-                        if c0.shape[-1] != 224 or c0.shape[-2] != 224:
-                            c0 = F.interpolate(c0, size=(224, 224), mode="bilinear", align_corners=False)
-                        if c1.shape[-1] != 224 or c1.shape[-2] != 224:
-                            c1 = F.interpolate(c1, size=(224, 224), mode="bilinear", align_corners=False)
+                    images_ben = ben_batch.get("image1", ben_batch.get("image")).to(device, non_blocking=True)
 
-                        x_s1_g1, x_s2_g1 = c0[:, :2], c0[:, 2:]
-                        x_s1_g2, x_s2_g2 = c1[:, :2], c1[:, 2:]
-                        
-                        with torch.amp.autocast("cuda", enabled=use_amp, dtype=torch.bfloat16 if torch.cuda.is_bf16_supported() else torch.float16):
-                            z1_g1, z2_g1, z1_pred_g1 = model(x_s1_g1, x_s2_g1)[:3]
-                            z1_g2, z2_g2, _ = model(x_s1_g2, x_s2_g2)[:3]
-                            loss_dict = loss_fn(z1_g1, z2_g1, z1_pred_g1, targets=None, z1_b=z1_g2, z2_b=z2_g2)
-                            
-                            # Local sub-crops to global target matching
-                            local_loss = torch.tensor(0.0, device=device)
-                            for loc_idx in range(2, min(6, len(crops))):
-                                cloc = crops[loc_idx].to(device, non_blocking=True)
-                                if cloc.shape[-1] != 224 or cloc.shape[-2] != 224:
-                                    cloc = F.interpolate(cloc, size=(224, 224), mode="bilinear", align_corners=False)
-                                z1_loc, z2_loc = model(cloc[:, :2], cloc[:, 2:])[:2]
-                                local_loss = local_loss + F.mse_loss(z1_loc, z2_g1.detach()) + F.mse_loss(z2_loc, z2_g2.detach())
-                            
-                            step_loss = loss_dict.get("loss", loss_dict.get("total_loss")) + 0.05 * local_loss
-                    else:
-                        images_ben = ben_batch.get("image1", ben_batch.get("image")).to(device, non_blocking=True)
-                        if images_ben.shape[-1] != 224 or images_ben.shape[-2] != 224:
-                            images_ben = F.interpolate(images_ben, size=(224, 224), mode="bilinear", align_corners=False)
+                    if images_ben.shape[-1] != 224 or images_ben.shape[-2] != 224:
+                        images_ben = F.interpolate(images_ben, size=(224, 224), mode="bilinear", align_corners=False)
 
-                        x_s1 = images_ben[:, :2, :, :]
-                        x_s2 = images_ben[:, 2:, :, :]
+                    x_s1 = images_ben[:, :2, :, :]
+                    x_s2 = images_ben[:, 2:, :, :]
 
-                        with torch.amp.autocast("cuda", enabled=use_amp, dtype=torch.bfloat16 if torch.cuda.is_bf16_supported() else torch.float16):
-                            z1_ben, z2_ben, z1_pred_ben = model(x_s1, x_s2)[:3]
-                            loss_dict = loss_fn(z1_ben, z2_ben, z1_pred_ben, targets=None)
-                            step_loss = loss_dict.get("loss", loss_dict.get("total_loss"))
+                    with torch.amp.autocast("cuda", enabled=use_amp, dtype=torch.bfloat16 if torch.cuda.is_bf16_supported() else torch.float16):
+                        z1_ben, z2_ben, z1_pred_ben = model(x_s1, x_s2)[:3]
+                        loss_dict = loss_fn(z1_ben, z2_ben, z1_pred_ben, targets=None)
                 else:
                     try:
                         dsr_batch = next(dsr_iter)
@@ -253,61 +225,25 @@ def train_unified(
                         dsr_iter = iter(dsrsid_loader)
                         dsr_batch = next(dsr_iter)
 
-                    if "crops" in dsr_batch:
-                        crops = dsr_batch["crops"]
-                        c0 = crops[0].to(device, non_blocking=True)
-                        c1 = crops[1].to(device, non_blocking=True)
-                        if c0.shape[-1] != 224 or c0.shape[-2] != 224:
-                            c0 = F.interpolate(c0, size=(224, 224), mode="bilinear", align_corners=False)
-                        if c1.shape[-1] != 224 or c1.shape[-2] != 224:
-                            c1 = F.interpolate(c1, size=(224, 224), mode="bilinear", align_corners=False)
+                    images_dsr = dsr_batch.get("image1", dsr_batch.get("image")).to(device, non_blocking=True)
 
-                        x_pan_g1, x_ms_g1 = c0[:, :1], c0[:, 1:]
-                        x_pan_g2, x_ms_g2 = c1[:, :1], c1[:, 1:]
+                    if images_dsr.shape[-1] != 224 or images_dsr.shape[-2] != 224:
+                        images_dsr = F.interpolate(images_dsr, size=(224, 224), mode="bilinear", align_corners=False)
 
-                        with torch.amp.autocast("cuda", enabled=use_amp, dtype=torch.bfloat16 if torch.cuda.is_bf16_supported() else torch.float16):
-                            feats_pan1 = model.backbone(x_pan_g1, [0.675])
-                            z_pan1 = model.projection_head(feats_pan1)
-                            z_pan_pred1 = model.predictor(z_pan1)
+                    x_pan = images_dsr[:, :1, :, :]
+                    x_ms = images_dsr[:, 1:, :, :]
 
-                            feats_ms1 = model.backbone(x_ms_g1, [0.485, 0.555, 0.660, 0.830])
-                            z_ms1 = model.projection_head(feats_ms1)
+                    with torch.amp.autocast("cuda", enabled=use_amp, dtype=torch.bfloat16 if torch.cuda.is_bf16_supported() else torch.float16):
+                        feats_pan = model.backbone(x_pan, [0.675])
+                        z_pan = model.projection_head(feats_pan)
+                        z_pan_pred = model.predictor(z_pan)
 
-                            feats_pan2 = model.backbone(x_pan_g2, [0.675])
-                            z_pan2 = model.projection_head(feats_pan2)
-                            feats_ms2 = model.backbone(x_ms_g2, [0.485, 0.555, 0.660, 0.830])
-                            z_ms2 = model.projection_head(feats_ms2)
+                        feats_ms = model.backbone(x_ms, [0.485, 0.555, 0.660, 0.830])
+                        z_ms = model.projection_head(feats_ms)
 
-                            loss_dict = loss_fn(z_pan1, z_ms1, z_pan_pred1, targets=None, z1_b=z_pan2, z2_b=z_ms2)
-                            
-                            local_loss = torch.tensor(0.0, device=device)
-                            for loc_idx in range(2, min(6, len(crops))):
-                                cloc = crops[loc_idx].to(device, non_blocking=True)
-                                if cloc.shape[-1] != 224:
-                                    cloc = F.interpolate(cloc, size=(224, 224), mode="bilinear", align_corners=False)
-                                feats_loc = model.backbone(cloc[:, 1:], [0.485, 0.555, 0.660, 0.830])
-                                z_loc = model.projection_head(feats_loc)
-                                local_loss = local_loss + F.mse_loss(z_loc, z_ms1.detach())
+                        loss_dict = loss_fn(z_pan, z_ms, z_pan_pred, targets=None)
 
-                            step_loss = loss_dict.get("loss", loss_dict.get("total_loss")) + 0.05 * local_loss
-                    else:
-                        images_dsr = dsr_batch.get("image1", dsr_batch.get("image")).to(device, non_blocking=True)
-                        if images_dsr.shape[-1] != 224 or images_dsr.shape[-2] != 224:
-                            images_dsr = F.interpolate(images_dsr, size=(224, 224), mode="bilinear", align_corners=False)
-
-                        x_pan = images_dsr[:, :1, :, :]
-                        x_ms = images_dsr[:, 1:, :, :]
-
-                        with torch.amp.autocast("cuda", enabled=use_amp, dtype=torch.bfloat16 if torch.cuda.is_bf16_supported() else torch.float16):
-                            feats_pan = model.backbone(x_pan, [0.675])
-                            z_pan = model.projection_head(feats_pan)
-                            z_pan_pred = model.predictor(z_pan)
-
-                            feats_ms = model.backbone(x_ms, [0.485, 0.555, 0.660, 0.830])
-                            z_ms = model.projection_head(feats_ms)
-
-                            loss_dict = loss_fn(z_pan, z_ms, z_pan_pred, targets=None)
-                            step_loss = loss_dict.get("loss", loss_dict.get("total_loss"))
+                step_loss = loss_dict.get("loss", loss_dict.get("total_loss"))
 
                 if scaler is not None:
                     scaler.scale(step_loss).backward()
