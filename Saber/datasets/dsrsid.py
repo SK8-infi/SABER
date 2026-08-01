@@ -127,8 +127,12 @@ class DSRSIDDataset(BaseDataset):
                         all_stratified = np.sort(np.concatenate(selected))[:self.size]
 
                     
-                    # Split partitioning (Seed 42): 70% Train | 10% Val | 20% Test
+                    # Deterministic split partitioning (Seed 42): 70% Train | 10% Val | 20% Test
                     total_n = len(all_stratified)
+                    rng = np.random.RandomState(42)
+                    shuffled_idx = rng.permutation(total_n)
+                    all_stratified = all_stratified[shuffled_idx]
+
                     train_end = int(0.70 * total_n)
                     val_end = int(0.80 * total_n)
                     
