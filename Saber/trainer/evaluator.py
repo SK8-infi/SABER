@@ -169,100 +169,58 @@ class Evaluator:
             embeddings[query_indices] = query_embeds
             embeddings[gallery_indices] = gallery_embeds
 
-        # =====================================================================
-        # POST-PROCESSING PIPELINE: PCA Whitening → DBA → αQE
-        # (Jégou & Chum CVPR 2012, Radenović et al. TPAMI 2019)
-        # =====================================================================
-
-        # --- Stage 1: PCA Whitening ---
-        # Fit PCA on gallery embeddings, then transform both query and gallery.
-        # This decorrelates dimensions, normalizes variance, and truncates noise
-        # dimensions — expanding the cosine dynamic range gap from ~0.05 to >0.35.
-        whiten_dim = min(512, query_embeds.shape[1])  # Truncate to top-512 PCs
-        logger.info(f"Stage 1: PCA Whitening (768-D → {whiten_dim}-D)...")
+        # Apply Mean-Centering Vector Calibration (z - mu) / ||z - mu||
+        # Preserves all 768-D multi-spectral ViT dimensions without neighbor-smoothing distortion
+        use_pca = self.config.get("retrieval", {}).get("use_pca", False)
+        use_dba = self.config.get("retrieval", {}).get("use_dba", False)
+        use_qe = self.config.get("retrieval", {}).get("use_qe", False)
 
         mu = np.mean(gallery_embeds, axis=0, keepdims=True)
-        gallery_centered = gallery_embeds - mu
-        query_centered = query_embeds - mu
+        gallery_embeds = gallery_embeds - mu
+        query_embeds = query_embeds - mu
 
-        # Compute covariance matrix and eigendecomposition
-        cov = np.cov(gallery_centered, rowvar=False)  # (768, 768)
-        eigenvalues, eigenvectors = np.linalg.eigh(cov)
+        if use_pca:
+            whiten_dim = min(512, query_embeds.shape[1])
+            logger.info(f"Stage 1: PCA Whitening (768-D -> {whiten_dim}-D)...")
+            cov = np.cov(gallery_embeds, rowvar=False)
+            eigenvalues, eigenvectors = np.linalg.eigh(cov)
+            idx = np.argsort(eigenvalues)[::-1]
+            eigenvalues = np.maximum(eigenvalues[idx][:whiten_dim], 1e-7)
+            eigenvectors_d = eigenvectors[:, idx[:whiten_dim]]
+            W = np.diag(1.0 / np.sqrt(eigenvalues)) @ eigenvectors_d.T
+            query_embeds = query_embeds @ W.T
+            gallery_embeds = gallery_embeds @ W.T
 
-        # Sort eigenvalues descending (eigh returns ascending)
-        idx = np.argsort(eigenvalues)[::-1]
-        eigenvalues = eigenvalues[idx]
-        eigenvectors = eigenvectors[:, idx]
-
-        # Truncate to top-d dimensions and build whitening matrix
-        eigenvalues_d = eigenvalues[:whiten_dim]
-        eigenvectors_d = eigenvectors[:, :whiten_dim]
-
-        # Whitening matrix: W = diag(1/sqrt(lambda)) @ V^T
-        # Clamp eigenvalues to avoid division by zero
-        eigenvalues_d = np.maximum(eigenvalues_d, 1e-7)
-        W = np.diag(1.0 / np.sqrt(eigenvalues_d)) @ eigenvectors_d.T  # (d, 768)
-
-        # Apply whitening transform
-        query_embeds = (query_centered @ W.T)  # (N_q, d)
-        gallery_embeds = (gallery_centered @ W.T)  # (N_g, d)
-
-        # L2 normalize after whitening
+        # L2 normalize
         query_embeds = query_embeds / (np.linalg.norm(query_embeds, axis=1, keepdims=True) + 1e-8)
         gallery_embeds = gallery_embeds / (np.linalg.norm(gallery_embeds, axis=1, keepdims=True) + 1e-8)
 
-        logger.info(f"  PCA Whitening complete. New embedding dim: {query_embeds.shape[1]}")
+        if use_dba:
+            dba_k = 5
+            dba_alpha = 3.0
+            logger.info(f"Stage 2: DBA Gallery Smoothing (k={dba_k})...")
+            g_sims = gallery_embeds @ gallery_embeds.T
+            np.fill_diagonal(g_sims, -1.0)
+            gallery_augmented = np.zeros_like(gallery_embeds)
+            for i in range(len(gallery_embeds)):
+                top_k_idx = np.argpartition(g_sims[i], -dba_k)[-dba_k:]
+                weights = np.maximum(g_sims[i, top_k_idx], 0.0) ** dba_alpha
+                gallery_augmented[i] = gallery_embeds[i] + (weights[:, None] * gallery_embeds[top_k_idx]).sum(axis=0)
+            gallery_embeds = gallery_augmented / (np.linalg.norm(gallery_augmented, axis=1, keepdims=True) + 1e-8)
 
-        # --- Stage 2: Database-Side Feature Augmentation (DBA) ---
-        # Replace each gallery embedding with a smoothed version: weighted average
-        # of itself + its k-nearest neighbors. This reduces sensor noise and
-        # makes gallery representations more robust.
-        dba_k = 5
-        dba_alpha = 3.0
-        logger.info(f"Stage 2: DBA Gallery Smoothing (k={dba_k}, alpha={dba_alpha})...")
+        if use_qe:
+            qe_k = 3
+            qe_alpha = 3.0
+            logger.info(f"Stage 3: Alpha Query Expansion (k={qe_k})...")
+            qg_sims = query_embeds @ gallery_embeds.T
+            query_expanded = np.zeros_like(query_embeds)
+            for i in range(len(query_embeds)):
+                top_k_idx = np.argpartition(qg_sims[i], -qe_k)[-qe_k:]
+                weights = np.maximum(qg_sims[i, top_k_idx], 0.0) ** qe_alpha
+                query_expanded[i] = query_embeds[i] + (weights[:, None] * gallery_embeds[top_k_idx]).sum(axis=0)
+            query_embeds = query_expanded / (np.linalg.norm(query_expanded, axis=1, keepdims=True) + 1e-8)
 
-        # Compute gallery-to-gallery similarities
-        g_sims = gallery_embeds @ gallery_embeds.T  # (N_g, N_g)
-        np.fill_diagonal(g_sims, -1.0)  # Exclude self
-
-        # For each gallery item, find top-k neighbors and aggregate
-        gallery_augmented = np.zeros_like(gallery_embeds)
-        for i in range(len(gallery_embeds)):
-            top_k_idx = np.argpartition(g_sims[i], -dba_k)[-dba_k:]
-            top_k_sims = g_sims[i, top_k_idx]
-            # Weight by similarity^alpha
-            weights = np.maximum(top_k_sims, 0.0) ** dba_alpha
-            weighted_sum = gallery_embeds[i] + (weights[:, None] * gallery_embeds[top_k_idx]).sum(axis=0)
-            gallery_augmented[i] = weighted_sum
-
-        # L2 normalize augmented gallery
-        gallery_embeds = gallery_augmented / (np.linalg.norm(gallery_augmented, axis=1, keepdims=True) + 1e-8)
-        logger.info(f"  DBA complete. Gallery smoothed with {dba_k}-NN neighbors.")
-
-        # --- Stage 3: Alpha Query Expansion (αQE) ---
-        # After initial retrieval, expand each query by averaging it with its
-        # top-k retrieved gallery items, weighted by similarity^alpha.
-        # Then re-query with the expanded vector.
-        qe_k = 3
-        qe_alpha = 3.0
-        logger.info(f"Stage 3: Alpha Query Expansion (k={qe_k}, alpha={qe_alpha})...")
-
-        # Initial retrieval: compute query-gallery similarities
-        qg_sims = query_embeds @ gallery_embeds.T  # (N_q, N_g)
-
-        query_expanded = np.zeros_like(query_embeds)
-        for i in range(len(query_embeds)):
-            top_k_idx = np.argpartition(qg_sims[i], -qe_k)[-qe_k:]
-            top_k_sims = qg_sims[i, top_k_idx]
-            weights = np.maximum(top_k_sims, 0.0) ** qe_alpha
-            expanded = query_embeds[i] + (weights[:, None] * gallery_embeds[top_k_idx]).sum(axis=0)
-            query_expanded[i] = expanded
-
-        # L2 normalize expanded queries
-        query_embeds = query_expanded / (np.linalg.norm(query_expanded, axis=1, keepdims=True) + 1e-8)
-        logger.info(f"  αQE complete. Queries expanded with top-{qe_k} neighbors.")
-
-        logger.info(f"Retrieval Split: {len(query_indices)} queries, {len(gallery_indices)} gallery items (PCA-Whitened + DBA + αQE).")
+        logger.info(f"Retrieval Split: {len(query_indices)} queries, {len(gallery_indices)} gallery items (Mean-Calibrated).")
 
         # Calculate metrics by computing chunked similarities to avoid OOM
         is_multilabel = (self.config.dataset.name.lower() == "ben14k")
