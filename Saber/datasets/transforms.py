@@ -85,7 +85,7 @@ def get_transforms(image_size: int = 224, is_train: bool = True, multi_crop: boo
 
     if is_train:
         if multi_crop:
-            return MultiCropTransform(global_size=image_size, local_size=96, num_global=2, num_local=4)
+            return MultiCropTransform(global_size=224, local_size=96, num_global=2, num_local=4)
             
         return A.Compose([
             A.Resize(image_size, image_size),

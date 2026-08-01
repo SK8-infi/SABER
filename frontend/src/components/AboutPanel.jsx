@@ -1,7 +1,5 @@
 import { useState } from 'react';
 import { AlertCircle, Layers, ShieldCheck, Cpu, ArrowRight } from 'lucide-react';
-import SponsorsSection from './SponsorsSection';
-
 
 const NODES = [
   {
@@ -234,10 +232,6 @@ export default function AboutPanel() {
         )}
       </div>
 
-      {/* Supporters & Sponsors */}
-      <SponsorsSection />
-
     </div>
   );
 }
-

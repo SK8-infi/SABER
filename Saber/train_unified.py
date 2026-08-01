@@ -211,6 +211,11 @@ def train_unified(
                         crops = ben_batch["crops"]
                         c0 = crops[0].to(device, non_blocking=True)
                         c1 = crops[1].to(device, non_blocking=True)
+                        if c0.shape[-1] != 224 or c0.shape[-2] != 224:
+                            c0 = F.interpolate(c0, size=(224, 224), mode="bilinear", align_corners=False)
+                        if c1.shape[-1] != 224 or c1.shape[-2] != 224:
+                            c1 = F.interpolate(c1, size=(224, 224), mode="bilinear", align_corners=False)
+
                         x_s1_g1, x_s2_g1 = c0[:, :2], c0[:, 2:]
                         x_s1_g2, x_s2_g2 = c1[:, :2], c1[:, 2:]
                         
@@ -223,7 +228,7 @@ def train_unified(
                             local_loss = torch.tensor(0.0, device=device)
                             for loc_idx in range(2, min(6, len(crops))):
                                 cloc = crops[loc_idx].to(device, non_blocking=True)
-                                if cloc.shape[-1] != 224:
+                                if cloc.shape[-1] != 224 or cloc.shape[-2] != 224:
                                     cloc = F.interpolate(cloc, size=(224, 224), mode="bilinear", align_corners=False)
                                 z1_loc, z2_loc = model(cloc[:, :2], cloc[:, 2:])[:2]
                                 local_loss = local_loss + F.mse_loss(z1_loc, z2_g1.detach()) + F.mse_loss(z2_loc, z2_g2.detach())
@@ -252,6 +257,11 @@ def train_unified(
                         crops = dsr_batch["crops"]
                         c0 = crops[0].to(device, non_blocking=True)
                         c1 = crops[1].to(device, non_blocking=True)
+                        if c0.shape[-1] != 224 or c0.shape[-2] != 224:
+                            c0 = F.interpolate(c0, size=(224, 224), mode="bilinear", align_corners=False)
+                        if c1.shape[-1] != 224 or c1.shape[-2] != 224:
+                            c1 = F.interpolate(c1, size=(224, 224), mode="bilinear", align_corners=False)
+
                         x_pan_g1, x_ms_g1 = c0[:, :1], c0[:, 1:]
                         x_pan_g2, x_ms_g2 = c1[:, :1], c1[:, 1:]
 
