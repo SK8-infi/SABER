@@ -169,8 +169,8 @@ def main() -> None:
 
         if resolved_bridge_path:
             logger.info(f"Loading CFM Latent Bridge checkpoint from: '{resolved_bridge_path}'")
-            model.bridge.cfm_bridge.load_state_dict(torch.load(resolved_bridge_path, map_location=str(device), weights_only=True))
-            logger.info("Successfully loaded bridge model parameters.")
+            model.bridge.cfm_bridge.load_state_dict(torch.load(resolved_bridge_path, map_location=str(device), weights_only=True), strict=False)
+            logger.info("Successfully loaded bridge model parameters (strict=False).")
         else:
             logger.warning(f"CFM Latent Bridge checkpoint not found at '{configured_bridge_path}'. Using random bridge weights.")
 

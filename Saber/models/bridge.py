@@ -73,7 +73,7 @@ class CFMBridge(nn.Module):
     Stochastic Latent Bridge using Flow Matching.
     Supports both 2D pooled global latents (B, D) and 3D spatial patch sequences (B, L, D).
     """
-    def __init__(self, dim: int = 768, hidden_dim: int = 768, num_blocks: int = 5, dropout: float = 0.1) -> None:
+    def __init__(self, dim: int = 768, hidden_dim: int = 768, num_blocks: int = 4, dropout: float = 0.1) -> None:
         super().__init__()
         self.dim = dim
         self.hidden_dim = hidden_dim
