@@ -150,13 +150,26 @@ def main() -> None:
 
     # Load separate bridge checkpoint if enabled
     if getattr(model, "bridge", None) is not None:
-        bridge_checkpoint = config.get("bridge", {}).get("checkpoint", "checkpoints/bridge_best.pth")
-        if os.path.exists(bridge_checkpoint):
-            logger.info(f"Loading CFM Latent Bridge checkpoint from: '{bridge_checkpoint}'")
-            model.bridge.cfm_bridge.load_state_dict(torch.load(bridge_checkpoint, map_location=str(device), weights_only=True))
+        configured_bridge_path = config.get("bridge", {}).get("checkpoint", "checkpoints/bridge_best.pth")
+        bridge_candidates = [
+            configured_bridge_path,
+            "checkpoints/bridge_unified.pth",
+            "checkpoints/bridge_best.pth",
+            "checkpoints/bridge_best_ben14k.pth",
+            "/content/drive/MyDrive/SABER_Data/checkpoints/bridge_unified.pth"
+        ]
+        resolved_bridge_path = ""
+        for cand in bridge_candidates:
+            if cand and os.path.exists(cand):
+                resolved_bridge_path = cand
+                break
+
+        if resolved_bridge_path:
+            logger.info(f"Loading CFM Latent Bridge checkpoint from: '{resolved_bridge_path}'")
+            model.bridge.cfm_bridge.load_state_dict(torch.load(resolved_bridge_path, map_location=str(device), weights_only=True))
             logger.info("Successfully loaded bridge model parameters.")
         else:
-            logger.warning(f"CFM Latent Bridge checkpoint not found at '{bridge_checkpoint}'. Using random bridge weights.")
+            logger.warning(f"CFM Latent Bridge checkpoint not found at '{configured_bridge_path}'. Using random bridge weights.")
 
     # Initialize Evaluator
     evaluator = Evaluator(
