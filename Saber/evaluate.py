@@ -158,9 +158,10 @@ def main() -> None:
         configured_bridge_path = config.get("bridge", {}).get("checkpoint", "checkpoints/bridge_best.pth")
         bridge_candidates = [
             configured_bridge_path,
+            "checkpoints/40epochs/bridge_unified.pth",
+            "/content/drive/MyDrive/SABER_Data/checkpoints_40epochs/bridge_unified.pth",
             "checkpoints/bridge_unified.pth",
             "checkpoints/bridge_best.pth",
-            "checkpoints/bridge_best_ben14k.pth",
             "/content/drive/MyDrive/SABER_Data/checkpoints/bridge_unified.pth"
         ]
         resolved_bridge_path = ""

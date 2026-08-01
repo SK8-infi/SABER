@@ -146,15 +146,19 @@ def train_unified(
         p.requires_grad = False
     ema_decay = config.train.get("ema_decay", 0.996)
 
+    # Checkpoint output directories (Local & Google Drive 40 Epochs folder)
+    local_40_dir = os.path.join(config.checkpoint_dir, "40epochs")
+    os.makedirs(local_40_dir, exist_ok=True)
     os.makedirs(config.checkpoint_dir, exist_ok=True)
-    unified_ckpt_path = os.path.join(config.checkpoint_dir, "saber_unified.pth")
-    latest_ckpt_path = os.path.join(config.checkpoint_dir, "latest.pth")
-    unified_bridge_path = os.path.join(config.checkpoint_dir, "bridge_unified.pth")
-    legacy_bridge_path = os.path.join(config.checkpoint_dir, "bridge_best.pth")
 
-    # Google Drive Sync Directory Setup
+    unified_ckpt_path = os.path.join(local_40_dir, "saber_unified.pth")
+    latest_ckpt_path = os.path.join(local_40_dir, "latest.pth")
+    unified_bridge_path = os.path.join(local_40_dir, "bridge_unified.pth")
+    legacy_bridge_path = os.path.join(local_40_dir, "bridge_best.pth")
+
+    # Google Drive Sync Directory Setup (Dedicated 40epochs Folder)
     drive_data_dir = "/content/drive/MyDrive/SABER_Data"
-    drive_ckpt_dir = os.path.join(drive_data_dir, "checkpoints")
+    drive_ckpt_dir = os.path.join(drive_data_dir, "checkpoints_40epochs")
     is_drive_available = os.path.exists("/content/drive/MyDrive")
     if is_drive_available:
         os.makedirs(drive_ckpt_dir, exist_ok=True)
