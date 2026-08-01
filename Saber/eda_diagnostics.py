@@ -140,6 +140,26 @@ def run_eda_diagnostics(
     g_embeds = embeddings[gallery_idx]
     g_labels = labels[gallery_idx]
     g_names = names[gallery_idx]
+
+    # Apply PCA Whitening (same pipeline as evaluator.py)
+    print("Applying PCA Whitening (768-D → 512-D)...")
+    whiten_dim = min(512, g_embeds.shape[1])
+    mu = np.mean(g_embeds, axis=0, keepdims=True)
+    g_centered = g_embeds - mu
+    q_centered = q_embeds - mu
+    cov = np.cov(g_centered, rowvar=False)
+    eigenvalues, eigenvectors = np.linalg.eigh(cov)
+    idx_sort = np.argsort(eigenvalues)[::-1]
+    eigenvalues = eigenvalues[idx_sort]
+    eigenvectors = eigenvectors[:, idx_sort]
+    eigenvalues_d = np.maximum(eigenvalues[:whiten_dim], 1e-7)
+    eigenvectors_d = eigenvectors[:, :whiten_dim]
+    W = np.diag(1.0 / np.sqrt(eigenvalues_d)) @ eigenvectors_d.T
+    q_embeds = (q_centered @ W.T)
+    g_embeds = (g_centered @ W.T)
+    q_embeds = q_embeds / (np.linalg.norm(q_embeds, axis=1, keepdims=True) + 1e-8)
+    g_embeds = g_embeds / (np.linalg.norm(g_embeds, axis=1, keepdims=True) + 1e-8)
+    print(f"PCA Whitening complete. New dim: {q_embeds.shape[1]}")
     
     # Compute similarity matrix (Q x G)
     print("Computing cosine similarity matrix...")
