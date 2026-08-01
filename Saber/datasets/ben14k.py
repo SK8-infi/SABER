@@ -305,17 +305,29 @@ class BEN14KDataset(BaseDataset):
         # Apply augmentations
         if self.is_train:
             if self.transform:
-                img_tensor1 = self.transform(image=img)["image"]
-                img_tensor2 = self.transform(image=img)["image"]
+                res1 = self.transform(image=img)
+                res2 = self.transform(image=img)
+                if "crops" in res1:
+                    crops = res1["crops"] + res2["crops"]
+                    img_tensor1 = crops[0]
+                    img_tensor2 = crops[1]
+                else:
+                    crops = None
+                    img_tensor1 = res1["image"]
+                    img_tensor2 = res2["image"]
             else:
+                crops = None
                 img_tensor1 = torch.tensor(img, dtype=torch.float32).permute(2, 0, 1)
                 img_tensor2 = torch.tensor(img, dtype=torch.float32).permute(2, 0, 1)
+
             out = {
                 "image1": img_tensor1,
                 "image2": img_tensor2,
                 "label": torch.tensor(label, dtype=torch.float32),
                 "name": name
             }
+            if crops is not None:
+                out["crops"] = crops
             if self.modality == "both":
                 out["image1_s1"] = img_tensor1[:2]
                 out["image1_s2"] = img_tensor1[2:]

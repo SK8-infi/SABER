@@ -1,6 +1,15 @@
-from typing import Any
-import torch
-import numpy as np
+import os
+os.environ["OMP_NUM_THREADS"] = "1"
+os.environ["OPENBLAS_NUM_THREADS"] = "1"
+os.environ["MKL_NUM_THREADS"] = "1"
+os.environ["VECLIB_MAXIMUM_THREADS"] = "1"
+os.environ["NUMEXPR_NUM_THREADS"] = "1"
+
+try:
+    import cv2
+    cv2.setNumThreads(0)
+except ImportError:
+    pass
 
 try:
     import albumentations as A
@@ -21,7 +30,48 @@ class DummyTransform:
             img_t = img_t.permute(2, 0, 1)
         return {"image": img_t}
 
-def get_transforms(image_size: int = 224, is_train: bool = True) -> Any:
+class MultiCropTransform:
+    """
+    Multi-Crop Self-Supervised Data Augmentation:
+    Generates 2 Global Crops (224x224, scale 0.4-1.0) + 4 Local Sub-Crops (96x96, scale 0.15-0.4).
+    """
+    def __init__(self, global_size: int = 224, local_size: int = 96, num_global: int = 2, num_local: int = 4) -> None:
+        self.num_global = num_global
+        self.num_local = num_local
+        
+        if ALBUMENTATIONS_AVAILABLE:
+            self.global_transform = A.Compose([
+                A.RandomResizedCrop(size=(global_size, global_size), scale=(0.4, 1.0), p=1.0),
+                A.HorizontalFlip(p=0.5),
+                A.VerticalFlip(p=0.5),
+                A.RandomRotate90(p=0.5),
+                A.RandomBrightnessContrast(brightness_limit=0.15, contrast_limit=0.15, p=0.4),
+                ToTensorV2()
+            ])
+            self.local_transform = A.Compose([
+                A.RandomResizedCrop(size=(local_size, local_size), scale=(0.15, 0.4), p=1.0),
+                A.HorizontalFlip(p=0.5),
+                A.VerticalFlip(p=0.5),
+                A.RandomRotate90(p=0.5),
+                ToTensorV2()
+            ])
+        else:
+            self.global_transform = DummyTransform()
+            self.local_transform = DummyTransform()
+
+    def __call__(self, image=None, **kwargs):
+        crops = []
+        for _ in range(self.num_global):
+            res = self.global_transform(image=image)
+            img = res.get("image", res)
+            crops.append(img)
+        for _ in range(self.num_local):
+            res = self.local_transform(image=image)
+            img = res.get("image", res)
+            crops.append(img)
+        return {"crops": crops}
+
+def get_transforms(image_size: int = 224, is_train: bool = True, multi_crop: bool = False) -> Any:
     """
     Get spatial transform pipelines.
     Supports multi-channel remote sensing images.
@@ -30,17 +80,14 @@ def get_transforms(image_size: int = 224, is_train: bool = True) -> Any:
         return DummyTransform()
 
     if is_train:
+        if multi_crop:
+            return MultiCropTransform(global_size=image_size, local_size=96, num_global=2, num_local=4)
+            
         return A.Compose([
             A.Resize(image_size, image_size),
             A.HorizontalFlip(p=0.5),
             A.VerticalFlip(p=0.5),
             A.RandomRotate90(p=0.5),
-            A.ShiftScaleRotate(
-                shift_limit=0.05, scale_limit=0.15, rotate_limit=15,
-                border_mode=0, p=0.5
-            ),
-
-
             A.RandomResizedCrop(
                 size=(image_size, image_size),
                 scale=(0.7, 1.0), ratio=(0.85, 1.15), p=0.5
@@ -50,7 +97,6 @@ def get_transforms(image_size: int = 224, is_train: bool = True) -> Any:
             A.RandomBrightnessContrast(
                 brightness_limit=0.15, contrast_limit=0.15, p=0.4
             ),
-            A.ChannelDropout(channel_drop_range=(1, 1), p=0.1),
             ToTensorV2()
         ])
     else:
