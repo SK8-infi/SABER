@@ -53,7 +53,7 @@ class MultiCropTransform:
                 ToTensorV2()
             ])
             self.local_transform = A.Compose([
-                A.RandomResizedCrop(size=(local_size, local_size), scale=(0.15, 0.4), p=1.0),
+                A.RandomResizedCrop(size=(global_size, global_size), scale=(0.15, 0.4), p=1.0),
                 A.HorizontalFlip(p=0.5),
                 A.VerticalFlip(p=0.5),
                 A.RandomRotate90(p=0.5),
