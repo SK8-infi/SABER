@@ -140,9 +140,12 @@ def main() -> None:
             logger.info(f"Loading checkpoint parameters from: '{args.checkpoint}'")
             checkpoint_state = load_checkpoint(args.checkpoint, map_location=str(device))
             state_dict = checkpoint_state["model_state_dict"]
-            state_dict = {k: v for k, v in state_dict.items() if not k.startswith("bridge.")}
+            state_dict = {
+                k: v for k, v in state_dict.items()
+                if not k.startswith("bridge.") and not k.startswith("classifier.")
+            }
             model.load_state_dict(state_dict, strict=False)
-            logger.info("Successfully loaded encoder and projection parameters (strict=False).")
+            logger.info("Successfully loaded master encoder, LoRA, and projection parameters (strict=False).")
         except Exception as e:
             logger.error(f"Failed to load checkpoint: {e}. Proceeding with initialized weights.")
     else:
