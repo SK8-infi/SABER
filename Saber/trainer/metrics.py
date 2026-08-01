@@ -16,11 +16,11 @@ def compute_retrieval_metrics(
     exclude_self_matches: bool = False
 ) -> Dict[str, float]:
     """
-    Computes retrieval metrics exactly matching the paper specifications.
+    Computes retrieval metrics exactly matching paper specifications.
     Uses GPU-accelerated PyTorch operations if CUDA is available for massive speedups.
     Falls back to CPU/numpy if reranking is enabled.
     """
-    rerank_enabled = rerank_config is not None and rerank_config.get("rerank_enabled", False)
+    rerank_enabled = rerank_config is not None and isinstance(rerank_config, dict) and rerank_config.get("rerank_enabled", False)
     
     # If rerank is enabled, use the original CPU/numpy implementation
     if rerank_enabled:
@@ -44,47 +44,34 @@ def compute_retrieval_metrics(
     sims = torch.matmul(q_emb, g_emb.t())
     
     # Mask out self-matches if needed
+    mask = None
     if exclude_self_matches and query_names is not None and gallery_names is not None:
         mask_cpu = query_names[:, None] != gallery_names[None, :]
         mask = torch.tensor(mask_cpu, dtype=torch.bool, device=device)
         sims = sims.masked_fill(~mask, float('-inf'))
-    else:
-        mask = None
         
-    # Sort similarity scores
-    sorted_sims, sorted_indices = torch.sort(sims, dim=1, descending=True)
-    top_k_indices = sorted_indices[:, :top_k]
+    # Sort similarities along gallery axis
+    sorted_indices = torch.argsort(sims, dim=1, descending=True)
     
     if is_multilabel:
-        q_lbl = to_tensor(query_labels, torch.float32, device=device)
-        g_lbl = to_tensor(gallery_labels, torch.float32, device=device)
+        q_lbl = to_tensor(query_labels, torch.float32, device)
+        g_lbl = to_tensor(gallery_labels, torch.float32, device)
         
         q_active_counts = q_lbl.sum(dim=1, keepdim=True)
-        valid_queries = (q_active_counts.squeeze(1) > 0)
+        valid_queries = (q_active_counts.flatten() > 0)
         
-        if not valid_queries.any():
-            return {
-                f"precision@{top_k}": 0.0,
-                f"recall@{top_k}": 0.0,
-                f"f1@{top_k}": 0.0,
-                f"map@{top_k}": 0.0
-            }
-            
-        # Gather labels for top-k retrieved gallery items
-        retrieved_lbl = g_lbl[top_k_indices] # shape: (Q, top_k, C)
+        top_k_indices = sorted_indices[:, :top_k]
+        retrieved_lbl = g_lbl[top_k_indices]
         
-        # Calculate intersection counts
-        intersection = q_lbl.unsqueeze(1) * retrieved_lbl
+        q_lbl_expanded = q_lbl.unsqueeze(1)
+        intersection = (q_lbl_expanded * retrieved_lbl)
         num_inter = intersection.sum(dim=2)
-        
         num_ret_active = retrieved_lbl.sum(dim=2)
         
-        # Precision, Recall, and F1 per rank per query
         p_qr = num_inter / (num_ret_active + 1e-8)
         r_qr = num_inter / (q_active_counts + 1e-8)
         f1_qr = (2 * p_qr * r_qr) / (p_qr + r_qr + 1e-8)
         
-        # Mean scores over top-k per query
         q_prec = p_qr.mean(dim=1)
         q_rec = r_qr.mean(dim=1)
         q_f1 = f1_qr.mean(dim=1)
@@ -93,7 +80,6 @@ def compute_retrieval_metrics(
         mean_recall = q_rec[valid_queries].mean().item()
         mean_f1 = q_f1[valid_queries].mean().item()
         
-        # Compute Average Precision (AP) for each query over the full gallery ranking
         relevance_matrix = (q_lbl @ g_lbl.t() > 0.5).float()
         if exclude_self_matches and mask is not None:
             relevance_matrix = relevance_matrix.masked_fill(~mask, 0.0)
@@ -183,10 +169,10 @@ def _compute_retrieval_metrics_numpy(
     aps = []
 
     from Saber.retrieval.rerank import ReciprocalReranker
-    shortlist_k = rerank_config.get("rerank_shortlist_k", 100)
-    neighbor_k = rerank_config.get("rerank_neighbor_k", 10)
-    reciprocal_weight = rerank_config.get("reciprocal_weight", 0.15)
-    label_weight = rerank_config.get("label_weight", 0.05)
+    shortlist_k = rerank_config.get("rerank_shortlist_k", 100) if rerank_config else 100
+    neighbor_k = rerank_config.get("rerank_neighbor_k", 10) if rerank_config else 10
+    reciprocal_weight = rerank_config.get("reciprocal_weight", 0.15) if rerank_config else 0.15
+    label_weight = rerank_config.get("label_weight", 0.05) if rerank_config else 0.05
     
     reranker = ReciprocalReranker(
         shortlist_k=shortlist_k,
@@ -288,6 +274,9 @@ def _compute_retrieval_metrics_numpy(
             recall_denominator = min(total_relevant, top_k)
             recall_val = num_hits / recall_denominator
             recalls.append(recall_val)
+
+            f1_val = (2.0 * precision_val * recall_val) / (precision_val + recall_val + 1e-8)
+            f1s.append(f1_val)
 
             all_relevance = relevance[ranked_indices]
             relevant_ranks = np.where(all_relevance)[0]
