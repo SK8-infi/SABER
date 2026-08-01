@@ -118,19 +118,19 @@ def train_unified(
         split="train"
     )
 
-    num_workers = config.dataset.get("num_workers", 2)
-    batch_size = batch_size_override or 48  # Optimized Speed Default: 48 (uses ~11.8 GB VRAM)
+    # Multi-Crop generates 6 full 224x224 tensors per item (6x data volume).
+    # Set num_workers=0 to prevent PyTorch IPC shared memory RAM spikes on Colab.
+    num_workers = 0
+    batch_size = batch_size_override or 32
 
     ben14k_loader = DataLoader(
         ben14k_dataset, batch_size=batch_size, shuffle=True,
-        num_workers=num_workers, pin_memory=torch.cuda.is_available(),
-        persistent_workers=(num_workers > 0), prefetch_factor=2 if num_workers > 0 else None,
+        num_workers=num_workers, pin_memory=False,
         drop_last=True
     )
     dsrsid_loader = DataLoader(
         dsrsid_dataset, batch_size=batch_size, shuffle=True,
-        num_workers=num_workers, pin_memory=torch.cuda.is_available(),
-        persistent_workers=(num_workers > 0), prefetch_factor=2 if num_workers > 0 else None,
+        num_workers=num_workers, pin_memory=False,
         drop_last=True
     )
 
