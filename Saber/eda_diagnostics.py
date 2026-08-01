@@ -181,8 +181,8 @@ def run_eda_diagnostics(
         hits = (c_retrieved > 0).float()
         
         c_precision = hits.mean().item()
-        c_active_total = q_lbl_t[c_query_mask].sum(dim=1, keepdim=True)
-        c_recall = (hits.sum(dim=1, keepdim=True) / (c_active_total + 1e-8)).mean().item()
+        # Recall@5 for single class c in top 5 retrieval slots: fraction of query tiles that retrieved at least one hit in top 5
+        c_recall = hits.any(dim=1).float().mean().item()
         c_f1 = (2 * c_precision * c_recall) / (c_precision + c_recall + 1e-8)
         
         class_results.append({
