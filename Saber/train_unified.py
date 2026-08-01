@@ -539,10 +539,30 @@ def train_unified(
                 except Exception as sync_e:
                     logger.warning(f"Google Drive bridge sync warning: {sync_e}")
 
+    # -------------------------------------------------------------
+    # SAVE LIGHTWEIGHT CLEAN INFERENCE CHECKPOINT (STRIP OPTIMIZER & EMA BLOAT)
+    # -------------------------------------------------------------
+    clean_payload = {
+        "model_state_dict": model.state_dict(),
+        "config": config
+    }
+    clean_local_path = os.path.join(local_40_dir, "saber_unified_clean.pth")
+    torch.save(clean_payload, clean_local_path)
+    logger.info(f"🧹 Saved lightweight clean inference checkpoint to '{clean_local_path}'")
+
+    if is_drive_available:
+        try:
+            import shutil
+            shutil.copy2(clean_local_path, os.path.join(drive_ckpt_dir, "saber_unified_clean.pth"))
+            logger.info(f"💾 Synced lightweight clean inference checkpoint (~340 MB) to Google Drive: '{drive_ckpt_dir}/saber_unified_clean.pth'")
+        except Exception as sync_e:
+            logger.warning(f"Google Drive clean checkpoint sync warning: {sync_e}")
+
     print("="*80)
     print(" 🎉 MASTER UNIFIED TRAINING COMPLETED SUCCESSFULLY (SPEED OPTIMIZED)!")
-    print(f" Master Model Checkpoint : '{unified_ckpt_path}'")
-    print(f" Master Bridge Checkpoint: '{unified_bridge_path}'")
+    print(f" Master Model Checkpoint (Full Resume): '{unified_ckpt_path}' (~1.05 GB)")
+    print(f" Master Model Checkpoint (Clean Eval):  '{clean_local_path}' (~340 MB)")
+    print(f" Master Bridge Checkpoint            : '{unified_bridge_path}' (~76 MB)")
     print("="*80)
 
 def main():

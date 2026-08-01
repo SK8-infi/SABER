@@ -136,11 +136,22 @@ def main() -> None:
         raise ValueError(f"Unknown architecture target: '{arch}'")
 
     # Load checkpoint parameters if provided
+    ckpt_target = resolve_existing_path(
+        args.checkpoint,
+        [
+            "checkpoints/40epochs/saber_unified_clean.pth",
+            "/content/drive/MyDrive/SABER_Data/checkpoints_40epochs/saber_unified_clean.pth",
+            "checkpoints/40epochs/saber_unified.pth",
+            "/content/drive/MyDrive/SABER_Data/checkpoints_40epochs/saber_unified.pth",
+            "checkpoints/saber_unified.pth",
+            "/content/drive/MyDrive/SABER_Data/checkpoints/saber_unified.pth"
+        ]
+    )
     checkpoint_state = None
-    if args.checkpoint and os.path.exists(args.checkpoint):
+    if ckpt_target and os.path.exists(ckpt_target):
         try:
-            logger.info(f"Loading checkpoint parameters from: '{args.checkpoint}'")
-            checkpoint_state = load_checkpoint(args.checkpoint, map_location=str(device))
+            logger.info(f"Loading checkpoint parameters from: '{ckpt_target}'")
+            checkpoint_state = load_checkpoint(ckpt_target, map_location=str(device))
             state_dict = checkpoint_state["model_state_dict"]
             state_dict = {
                 k: v for k, v in state_dict.items()
