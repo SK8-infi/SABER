@@ -77,12 +77,12 @@ loss:
   prediction_weight: 1.0
   vicreg_invariance_weight: 15.0
   vicreg_variance_weight: 25.0
-  vicreg_covariance_weight: 2.0
+  vicreg_covariance_weight: 5.0
   vicreg_epsilon: 0.0001
 
 # Training Details
 train:
-  learning_rate: 0.0005
+  learning_rate: 0.0003
   weight_decay: 0.01
   epochs: 5
   grad_clip: 1.0
