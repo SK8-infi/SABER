@@ -16,7 +16,19 @@ from Saber.datasets.ben14k import BEN14KDataset, BIGEARTHNET_19_CLASSES
 from Saber.datasets.transforms import get_transforms
 from Saber.models.saber import SABER
 
-def run_eda_diagnostics(checkpoint_path: str = "checkpoints/saber_unified.pth", config_path: str = "Saber/configs/config.yaml"):
+def resolve_existing_path(path: str, candidate_paths: list) -> str:
+    if path and os.path.exists(path):
+        return path
+    for candidate in candidate_paths:
+        if os.path.exists(candidate):
+            return candidate
+    return path or ""
+
+def run_eda_diagnostics(
+    checkpoint_path: str = "checkpoints/saber_unified.pth",
+    config_path: str = "Saber/configs/config.yaml",
+    data_dir_override: str = None
+):
     candidate_paths = [
         checkpoint_path,
         "checkpoints/saber_unified.pth",
@@ -24,11 +36,7 @@ def run_eda_diagnostics(checkpoint_path: str = "checkpoints/saber_unified.pth", 
         "checkpoints/latest_ben14k.pth",
         "/content/drive/MyDrive/SABER_Data/checkpoints/saber_unified.pth"
     ]
-    resolved_path = checkpoint_path
-    for cand in candidate_paths:
-        if cand and os.path.exists(cand):
-            resolved_path = cand
-            break
+    resolved_path = resolve_existing_path(checkpoint_path, candidate_paths)
 
     print(f"=== Running SABER Comprehensive EDA Diagnostics on '{resolved_path}' ===")
     checkpoint_path = resolved_path
@@ -38,10 +46,22 @@ def run_eda_diagnostics(checkpoint_path: str = "checkpoints/saber_unified.pth", 
     device = torch.device("cuda" if torch.cuda.is_available() and config.device == "cuda" else "cpu")
     print(f"Computation Device: {device}")
     
+    ben_raw_path = data_dir_override or config.dataset.data_dir
+    ben_resolved_path = resolve_existing_path(
+        ben_raw_path,
+        [
+            "Datasets/benv1_14k",
+            "datasets/benv1_14k",
+            "Datasets/ben14k",
+            "datasets/ben14k",
+            "/content/SABER/Datasets/benv1_14k"
+        ]
+    )
+
     # Load dataset
     eval_transform = get_transforms(image_size=config.dataset.image_size, is_train=False)
     dataset = BEN14KDataset(
-        data_dir=config.dataset.data_dir,
+        data_dir=ben_resolved_path,
         use_synthetic=config.dataset.use_synthetic,
         size=config.dataset.get("size", 14832),
         image_size=config.dataset.image_size,
@@ -322,4 +342,15 @@ def run_eda_diagnostics(checkpoint_path: str = "checkpoints/saber_unified.pth", 
     print("="*80)
 
 if __name__ == "__main__":
-    run_eda_diagnostics()
+    import argparse
+    parser = argparse.ArgumentParser(description="Run SABER Comprehensive EDA Diagnostics")
+    parser.add_argument("--checkpoint", type=str, default="checkpoints/saber_unified.pth", help="Path to SABER model checkpoint")
+    parser.add_argument("--config", type=str, default="Saber/configs/config.yaml", help="Path to config yaml")
+    parser.add_argument("--data_dir", type=str, default=None, help="Path to BEN-14K dataset directory")
+    args = parser.parse_args()
+
+    run_eda_diagnostics(
+        checkpoint_path=args.checkpoint,
+        config_path=args.config,
+        data_dir_override=args.data_dir
+    )
