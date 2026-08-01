@@ -34,7 +34,7 @@ def main() -> None:
     parser.add_argument("--batch_size", type=int, default=None, help="Override batch size")
     parser.add_argument("--direction", type=str, default="s1_to_s2", choices=["s1_to_s2", "s2_to_s1"], help="Cross-modal retrieval direction")
     parser.add_argument("--split", type=str, default="all", choices=["train", "val", "test", "all"], help="Dataset split partition for evaluation ('all', 'test', 'val', 'train')")
-
+    parser.add_argument("--rerank", type=str, default=None, help="Enable/disable k-reciprocal reranking ('true' or 'false')")
     parser.add_argument("--viz", action="store_true", help="Generate and save t-SNE and UMAP visualizations")
     args = parser.parse_args()
 
@@ -45,6 +45,8 @@ def main() -> None:
     if not hasattr(config, "retrieval"):
         config.retrieval = {}
     config.retrieval.direction = args.direction
+    if args.rerank is not None:
+        config.retrieval.rerank_enabled = (args.rerank.lower() == "true")
 
     # CLI Overrides
     if args.architecture is not None:
