@@ -149,6 +149,15 @@ def train_unified(
     os.makedirs(config.checkpoint_dir, exist_ok=True)
     unified_ckpt_path = os.path.join(config.checkpoint_dir, "saber_unified.pth")
     latest_ckpt_path = os.path.join(config.checkpoint_dir, "latest.pth")
+    unified_bridge_path = os.path.join(config.checkpoint_dir, "bridge_unified.pth")
+    legacy_bridge_path = os.path.join(config.checkpoint_dir, "bridge_best.pth")
+
+    # Google Drive Sync Directory Setup
+    drive_data_dir = "/content/drive/MyDrive/SABER_Data"
+    drive_ckpt_dir = os.path.join(drive_data_dir, "checkpoints")
+    is_drive_available = os.path.exists("/content/drive/MyDrive")
+    if is_drive_available:
+        os.makedirs(drive_ckpt_dir, exist_ok=True)
 
     mode_clean = mode.lower().strip()
 
@@ -182,11 +191,48 @@ def train_unified(
         
         scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=epochs, eta_min=1e-6)
 
+        # 🔍 Auto-Resume Detection for Phase 1 Encoder (Google Drive or Local)
+        start_epoch = 1
+        resume_candidates = [
+            os.path.join(drive_ckpt_dir, "saber_unified.pth") if is_drive_available else None,
+            os.path.join(drive_ckpt_dir, "latest.pth") if is_drive_available else None,
+            unified_ckpt_path,
+            latest_ckpt_path
+        ]
+        resume_path = None
+        for candidate in resume_candidates:
+            if candidate and os.path.exists(candidate):
+                resume_path = candidate
+                break
+
+        if resume_path:
+            try:
+                logger.info(f"🔍 Found existing Master Checkpoint at '{resume_path}'. Auto-resuming Phase 1...")
+                ckpt = torch.load(resume_path, map_location=device)
+                if "model_state_dict" in ckpt:
+                    model.load_state_dict(ckpt["model_state_dict"])
+                if "ema_state_dict" in ckpt:
+                    ema_model.load_state_dict(ckpt["ema_state_dict"])
+                if "optimizer_state_dict" in ckpt:
+                    optimizer.load_state_dict(ckpt["optimizer_state_dict"])
+                
+                last_epoch = ckpt.get("epoch", 0)
+                if last_epoch >= epochs:
+                    logger.info(f"✅ Phase 1 Encoder training already completed ({last_epoch}/{epochs} epochs). Skipping to Phase 2!")
+                    start_epoch = epochs + 1
+                else:
+                    start_epoch = last_epoch + 1
+                    for _ in range(last_epoch):
+                        scheduler.step()
+                    logger.info(f"⏩ Auto-resuming Phase 1 Encoder training from Epoch {start_epoch}/{epochs}!")
+            except Exception as e:
+                logger.warning(f"Failed to auto-resume from '{resume_path}': {e}. Starting Phase 1 fresh.")
+
         logger.info("="*60)
         logger.info(f" PHASE 1: MASTER ENCODER JOINT TRAINING ({epochs} Epochs | SPEED OPTIMIZED)")
         logger.info("="*60)
 
-        for epoch in range(1, epochs + 1):
+        for epoch in range(start_epoch, epochs + 1):
             model.train()
             total_loss = 0.0
             sum_jacc, sum_rank, sum_inv, sum_var, sum_cov = 0.0, 0.0, 0.0, 0.0, 0.0
@@ -307,7 +353,7 @@ def train_unified(
                 f"Cov: {avg_cov:.4f}"
             )
 
-            # Save Master Unified Checkpoint directly using torch.save
+            # Save Master Unified Checkpoint locally
             checkpoint_payload = {
                 "epoch": epoch,
                 "model_state_dict": model.state_dict(),
@@ -318,7 +364,16 @@ def train_unified(
             }
             torch.save(checkpoint_payload, unified_ckpt_path)
             torch.save(checkpoint_payload, latest_ckpt_path)
-            logger.info(f"Saved Master Unified SABER checkpoint to '{unified_ckpt_path}' and '{latest_ckpt_path}'")
+            
+            # Immediately sync checkpoint to Google Drive after each epoch
+            if is_drive_available:
+                try:
+                    import shutil
+                    shutil.copy2(unified_ckpt_path, os.path.join(drive_ckpt_dir, "saber_unified.pth"))
+                    shutil.copy2(latest_ckpt_path, os.path.join(drive_ckpt_dir, "latest.pth"))
+                    logger.info(f"💾 Synced Epoch [{epoch}/{epochs}] checkpoint to Google Drive: '{drive_ckpt_dir}'")
+                except Exception as sync_e:
+                    logger.warning(f"Google Drive sync warning: {sync_e}")
 
     # Clear VRAM cache between Phase 1 and Phase 2
     if torch.cuda.is_available():
@@ -337,8 +392,8 @@ def train_unified(
             encoder_path = resolve_existing_path(
                 "",
                 [
-                    "/content/drive/MyDrive/SABER_Data/checkpoints/saber_unified.pth",
-                    "/content/drive/MyDrive/SABER_Data/checkpoints/latest.pth",
+                    os.path.join(drive_ckpt_dir, "saber_unified.pth") if is_drive_available else "",
+                    os.path.join(drive_ckpt_dir, "latest.pth") if is_drive_available else "",
                     unified_ckpt_path,
                     latest_ckpt_path
                 ]
@@ -354,15 +409,47 @@ def train_unified(
         bridge_net = CFMBridge(dim=768, hidden_dim=768, num_blocks=4, dropout=0.1).to(device)
         bridge_opt = torch.optim.AdamW(bridge_net.parameters(), lr=0.0003, weight_decay=0.01)
 
-        bridge_epochs = bridge_epochs_override if bridge_epochs_override is not None else 5
+        bridge_epochs = bridge_epochs_override if bridge_epochs_override is not None else 10
         model.eval()
 
-        unified_bridge_path = os.path.join(config.checkpoint_dir, "bridge_unified.pth")
-        legacy_bridge_path = os.path.join(config.checkpoint_dir, "bridge_best.pth")
+        # 🔍 Auto-Resume Detection for Phase 2 CFM Bridge
+        start_b_epoch = 1
+        bridge_resume_candidates = [
+            os.path.join(drive_ckpt_dir, "bridge_unified.pth") if is_drive_available else None,
+            unified_bridge_path,
+            legacy_bridge_path
+        ]
+        bridge_resume_path = None
+        for b_cand in bridge_resume_candidates:
+            if b_cand and os.path.exists(b_cand):
+                bridge_resume_path = b_cand
+                break
+
+        if bridge_resume_path:
+            try:
+                logger.info(f"🔍 Found existing Bridge Checkpoint at '{bridge_resume_path}'. Auto-resuming Phase 2...")
+                b_ckpt = torch.load(bridge_resume_path, map_location=device)
+                if isinstance(b_ckpt, dict) and "bridge_state_dict" in b_ckpt:
+                    bridge_net.load_state_dict(b_ckpt["bridge_state_dict"])
+                    if "optimizer_state_dict" in b_ckpt:
+                        bridge_opt.load_state_dict(b_ckpt["optimizer_state_dict"])
+                    last_b_epoch = b_ckpt.get("epoch", 0)
+                    if last_b_epoch >= bridge_epochs:
+                        logger.info(f"✅ Phase 2 Bridge training already completed ({last_b_epoch}/{bridge_epochs} epochs).")
+                        start_b_epoch = bridge_epochs + 1
+                    else:
+                        start_b_epoch = last_b_epoch + 1
+                        logger.info(f"⏩ Auto-resuming Phase 2 Bridge training from Epoch {start_b_epoch}/{bridge_epochs}!")
+                elif isinstance(b_ckpt, dict) and "state_dict" in b_ckpt:
+                    bridge_net.load_state_dict(b_ckpt["state_dict"])
+                elif isinstance(b_ckpt, dict):
+                    bridge_net.load_state_dict(b_ckpt)
+            except Exception as e:
+                logger.warning(f"Failed to load bridge checkpoint from '{bridge_resume_path}': {e}")
 
         logger.info(f"Training Master CFM Bridge for {bridge_epochs} Epochs on Cross-Modal Pair Features...")
 
-        for b_epoch in range(1, bridge_epochs + 1):
+        for b_epoch in range(start_b_epoch, bridge_epochs + 1):
             bridge_net.train()
             total_bridge_loss = 0.0
 
@@ -426,13 +513,27 @@ def train_unified(
                 pbar_b.set_postfix({"flow_loss": f"{b_loss.item():.6f}"})
 
             avg_b_loss = total_bridge_loss / max_batches
-            if b_epoch % 5 == 0 or b_epoch == bridge_epochs:
-                logger.info(f"Phase 2 Bridge Epoch [{b_epoch}/{bridge_epochs}] | Flow Matching Loss: {avg_b_loss:.6f}")
+            logger.info(f"Phase 2 Bridge Epoch [{b_epoch}/{bridge_epochs}] | Flow Matching Loss: {avg_b_loss:.6f}")
 
-        # Save Unified CFM Bridge Checkpoints
-        torch.save(bridge_net.state_dict(), unified_bridge_path)
-        torch.save(bridge_net.state_dict(), legacy_bridge_path)
-        logger.info(f"Saved Master Unified CFM Bridge to '{unified_ckpt_path}' and '{latest_ckpt_path}'")
+            # Save local Bridge checkpoint
+            b_payload = {
+                "epoch": b_epoch,
+                "bridge_state_dict": bridge_net.state_dict(),
+                "optimizer_state_dict": bridge_opt.state_dict(),
+                "loss": avg_b_loss
+            }
+            torch.save(b_payload, unified_bridge_path)
+            torch.save(b_payload, legacy_bridge_path)
+
+            # Immediately sync Bridge checkpoint to Google Drive after each epoch
+            if is_drive_available:
+                try:
+                    import shutil
+                    shutil.copy2(unified_bridge_path, os.path.join(drive_ckpt_dir, "bridge_unified.pth"))
+                    shutil.copy2(legacy_bridge_path, os.path.join(drive_ckpt_dir, "bridge_best.pth"))
+                    logger.info(f"💾 Synced Bridge Epoch [{b_epoch}/{bridge_epochs}] to Google Drive: '{drive_ckpt_dir}'")
+                except Exception as sync_e:
+                    logger.warning(f"Google Drive bridge sync warning: {sync_e}")
 
     print("="*80)
     print(" 🎉 MASTER UNIFIED TRAINING COMPLETED SUCCESSFULLY (SPEED OPTIMIZED)!")
