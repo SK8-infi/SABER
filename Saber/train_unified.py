@@ -198,6 +198,7 @@ def train_unified(
 
         epochs = epochs_override if epochs_override is not None else config.train.get("epochs", 5)
         grad_clip = config.train.get("grad_clip", 1.0)
+        grad_accum_steps = config.train.get("grad_accumulation_steps", 4)
         
         scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=epochs, eta_min=1e-6)
 
@@ -243,10 +244,12 @@ def train_unified(
 
         logger.info("="*60)
         logger.info(f" PHASE 1: MASTER ENCODER JOINT TRAINING ({epochs} Epochs | SPEED OPTIMIZED)")
+        logger.info(f" ⚡ Gradient Accumulation: ACTIVE ({grad_accum_steps} steps | Effective Batch Size = {48 * grad_accum_steps})")
         logger.info("="*60)
 
         for epoch in range(start_epoch, epochs + 1):
             model.train()
+            optimizer.zero_grad()
             total_loss = 0.0
             sum_jacc, sum_rank, sum_inv, sum_var, sum_cov, sum_sigreg = 0.0, 0.0, 0.0, 0.0, 0.0, 0.0
             start_time = time.time()
@@ -258,7 +261,6 @@ def train_unified(
             pbar = tqdm(range(max_batches), desc=f"Phase 1 Epoch {epoch}/{epochs}", leave=True, dynamic_ncols=True)
 
             for step in pbar:
-                optimizer.zero_grad()
                 is_ben_step = (step % 2 == 0)
 
                 if is_ben_step:
@@ -305,22 +307,28 @@ def train_unified(
                         loss_dict = loss_fn(z_pan, z_ms, z_pan_pred, targets=None)
 
                 step_loss = loss_dict.get("loss", loss_dict.get("total_loss"))
+                accum_loss = step_loss / grad_accum_steps
 
                 if scaler is not None:
-                    scaler.scale(step_loss).backward()
-                    scaler.unscale_(optimizer)
-                    torch.nn.utils.clip_grad_norm_(trainable_params, grad_clip)
-                    scaler.step(optimizer)
-                    scaler.update()
+                    scaler.scale(accum_loss).backward()
                 else:
-                    step_loss.backward()
-                    torch.nn.utils.clip_grad_norm_(trainable_params, grad_clip)
-                    optimizer.step()
+                    accum_loss.backward()
 
-                # Update EMA target model
-                with torch.no_grad():
-                    for p_online, p_target in zip(model.parameters(), ema_model.parameters()):
-                        p_target.data.mul_(ema_decay).add_(p_online.data, alpha=1.0 - ema_decay)
+                if (step + 1) % grad_accum_steps == 0 or (step + 1) == max_batches:
+                    if scaler is not None:
+                        scaler.unscale_(optimizer)
+                        torch.nn.utils.clip_grad_norm_(trainable_params, grad_clip)
+                        scaler.step(optimizer)
+                        scaler.update()
+                    else:
+                        torch.nn.utils.clip_grad_norm_(trainable_params, grad_clip)
+                        optimizer.step()
+                    optimizer.zero_grad()
+
+                    # Update EMA target model after weight update
+                    with torch.no_grad():
+                        for p_online, p_target in zip(model.parameters(), ema_model.parameters()):
+                            p_target.data.mul_(ema_decay).add_(p_online.data, alpha=1.0 - ema_decay)
 
                 # Accumulate pure SSL loss sub-components
                 v_loss = step_loss.item()
@@ -475,6 +483,7 @@ def train_unified(
 
         for b_epoch in range(start_b_epoch, bridge_epochs + 1):
             bridge_net.train()
+            bridge_opt.zero_grad()
             total_bridge_loss = 0.0
 
             ben_iter = iter(ben14k_loader)
@@ -483,7 +492,6 @@ def train_unified(
 
             pbar_b = tqdm(range(max_batches), desc=f"Phase 2 Bridge Epoch {b_epoch}/{bridge_epochs}", leave=True, dynamic_ncols=True)
             for step in pbar_b:
-                bridge_opt.zero_grad()
                 is_ben_step = (step % 2 == 0)
 
                 if is_ben_step:
@@ -529,9 +537,13 @@ def train_unified(
                 v_pred, logvar = bridge_net(z_tau, tau, z1)
                 b_loss = F.mse_loss(v_pred, target_velocity)
 
-                b_loss.backward()
-                torch.nn.utils.clip_grad_norm_(bridge_net.parameters(), 1.0)
-                bridge_opt.step()
+                b_accum_loss = b_loss / grad_accum_steps
+                b_accum_loss.backward()
+
+                if (step + 1) % grad_accum_steps == 0 or (step + 1) == max_batches:
+                    torch.nn.utils.clip_grad_norm_(bridge_net.parameters(), 1.0)
+                    bridge_opt.step()
+                    bridge_opt.zero_grad()
 
                 total_bridge_loss += b_loss.item()
                 pbar_b.set_postfix({"flow_loss": f"{b_loss.item():.6f}"})

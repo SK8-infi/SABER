@@ -3,7 +3,7 @@
 # General
 seed: 42
 device: "cuda"  # "cuda" or "cpu"
-checkpoint_dir: "checkpoints_sigreg"
+checkpoint_dir: "checkpoints_gradaccu"
 log_dir: "logs"
 viz_dir: "visualizations"
 
@@ -52,7 +52,7 @@ bridge:
   num_blocks: 4
   ode_steps: 3
   dropout: 0.1
-  checkpoint: "checkpoints_sigreg/bridge_best_ben14k.pth"
+  checkpoint: "checkpoints_gradaccu/bridge_best_ben14k.pth"
 
 # Embedding Geometry Optimization (Dev 3)
 geometry:
