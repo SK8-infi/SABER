@@ -1,4 +1,5 @@
-from typing import Any
+import os
+from typing import Any, List, Dict, Tuple
 import torch
 import numpy as np
 
@@ -21,7 +22,7 @@ class DummyTransform:
             img_t = img_t.permute(2, 0, 1)
         return {"image": img_t}
 
-def get_transforms(image_size: int = 224, is_train: bool = True) -> Any:
+def get_transforms(image_size: int = 224, is_train: bool = True, multi_crop: bool = False) -> Any:
     """
     Get spatial transform pipelines.
     Supports multi-channel remote sensing images.
@@ -35,12 +36,6 @@ def get_transforms(image_size: int = 224, is_train: bool = True) -> Any:
             A.HorizontalFlip(p=0.5),
             A.VerticalFlip(p=0.5),
             A.RandomRotate90(p=0.5),
-            A.ShiftScaleRotate(
-                shift_limit=0.05, scale_limit=0.15, rotate_limit=15,
-                border_mode=0, p=0.5
-            ),
-
-
             A.RandomResizedCrop(
                 size=(image_size, image_size),
                 scale=(0.7, 1.0), ratio=(0.85, 1.15), p=0.5
@@ -50,7 +45,6 @@ def get_transforms(image_size: int = 224, is_train: bool = True) -> Any:
             A.RandomBrightnessContrast(
                 brightness_limit=0.15, contrast_limit=0.15, p=0.4
             ),
-            A.ChannelDropout(channel_drop_range=(1, 1), p=0.1),
             ToTensorV2()
         ])
     else:

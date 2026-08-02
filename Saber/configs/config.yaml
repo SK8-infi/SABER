@@ -49,7 +49,7 @@ model:
 bridge:
   enabled: true
   hidden_dim: 768
-  num_blocks: 5
+  num_blocks: 4
   ode_steps: 3
   dropout: 0.1
   checkpoint: "checkpoints/bridge_best_ben14k.pth"
@@ -63,7 +63,7 @@ geometry:
   ranking_temp_p: 0.05
   triplet_weight: 0.5
   sigreg_weight: 0.1
-  classification_weight: 1.0
+  classification_weight: 0.0
 
 # Hashing Configuration (Dev 4)
 hashing:
@@ -77,12 +77,12 @@ loss:
   prediction_weight: 1.0
   vicreg_invariance_weight: 15.0
   vicreg_variance_weight: 25.0
-  vicreg_covariance_weight: 2.0
+  vicreg_covariance_weight: 5.0
   vicreg_epsilon: 0.0001
 
 # Training Details
 train:
-  learning_rate: 0.0005
+  learning_rate: 0.0003
   weight_decay: 0.01
   epochs: 5
   grad_clip: 1.0

@@ -68,12 +68,22 @@ class OFAViT(nn.Module):
         cls_tokens = cls_token.expand(x.shape[0], -1, -1)
         x = torch.cat((cls_tokens, x), dim=1)
 
-        # apply Transformer blocks
-        for block in self.blocks:
+        # apply Transformer blocks and capture intermediate features at Block 6, Block 9, and Block 12
+        intermediate_features = []
+        for idx, block in enumerate(self.blocks):
             x = block(x)
+            if idx in [5, 8, 11]:  # 0-indexed ViT blocks 6, 9, 12
+                if self.global_pool:
+                    feat_i = x[:, 1:, :].mean(dim=1)
+                    feat_i = self.fc_norm(feat_i)
+                else:
+                    feat_i = self.norm(x)[:, 0]
+                intermediate_features.append(feat_i)
 
-        if self.global_pool:
-            x = x[:, 1:, :].mean(dim=1)  # global pool without cls token
+        if intermediate_features:
+            outcome = torch.stack(intermediate_features, dim=0).mean(dim=0)
+        elif self.global_pool:
+            x = x[:, 1:, :].mean(dim=1)
             outcome = self.fc_norm(x)
         else:
             x = self.norm(x)

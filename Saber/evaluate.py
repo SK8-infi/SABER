@@ -33,8 +33,8 @@ def main() -> None:
     parser.add_argument("--size", type=int, default=None, help="Override dataset size")
     parser.add_argument("--batch_size", type=int, default=None, help="Override batch size")
     parser.add_argument("--direction", type=str, default="s1_to_s2", choices=["s1_to_s2", "s2_to_s1"], help="Cross-modal retrieval direction")
-    parser.add_argument("--split", type=str, default="all", choices=["train", "val", "test", "all"], help="Dataset split partition for evaluation ('all', 'test', 'val', 'train')")
-
+    parser.add_argument("--split", type=str, default="test", choices=["train", "val", "test", "all"], help="Dataset split partition for evaluation ('test', 'val', 'train', 'all')")
+    parser.add_argument("--rerank", type=str, default=None, help="Enable/disable k-reciprocal reranking ('true' or 'false')")
     parser.add_argument("--viz", action="store_true", help="Generate and save t-SNE and UMAP visualizations")
     args = parser.parse_args()
 
@@ -45,6 +45,8 @@ def main() -> None:
     if not hasattr(config, "retrieval"):
         config.retrieval = {}
     config.retrieval.direction = args.direction
+    if args.rerank is not None:
+        config.retrieval.rerank_enabled = (args.rerank.lower() == "true")
 
     # CLI Overrides
     if args.architecture is not None:
@@ -134,15 +136,29 @@ def main() -> None:
         raise ValueError(f"Unknown architecture target: '{arch}'")
 
     # Load checkpoint parameters if provided
+    ckpt_target = resolve_existing_path(
+        args.checkpoint,
+        [
+            "checkpoints/40epochs/saber_unified_clean.pth",
+            "/content/drive/MyDrive/SABER_Data/checkpoints_40epochs/saber_unified_clean.pth",
+            "checkpoints/40epochs/saber_unified.pth",
+            "/content/drive/MyDrive/SABER_Data/checkpoints_40epochs/saber_unified.pth",
+            "checkpoints/saber_unified.pth",
+            "/content/drive/MyDrive/SABER_Data/checkpoints/saber_unified.pth"
+        ]
+    )
     checkpoint_state = None
-    if args.checkpoint and os.path.exists(args.checkpoint):
+    if ckpt_target and os.path.exists(ckpt_target):
         try:
-            logger.info(f"Loading checkpoint parameters from: '{args.checkpoint}'")
-            checkpoint_state = load_checkpoint(args.checkpoint, map_location=str(device))
+            logger.info(f"Loading checkpoint parameters from: '{ckpt_target}'")
+            checkpoint_state = load_checkpoint(ckpt_target, map_location=str(device))
             state_dict = checkpoint_state["model_state_dict"]
-            state_dict = {k: v for k, v in state_dict.items() if not k.startswith("bridge.")}
+            state_dict = {
+                k: v for k, v in state_dict.items()
+                if not k.startswith("bridge.") and not k.startswith("classifier.")
+            }
             model.load_state_dict(state_dict, strict=False)
-            logger.info("Successfully loaded encoder and projection parameters (strict=False).")
+            logger.info("Successfully loaded master encoder, LoRA, and projection parameters (strict=False).")
         except Exception as e:
             logger.error(f"Failed to load checkpoint: {e}. Proceeding with initialized weights.")
     else:
@@ -150,13 +166,27 @@ def main() -> None:
 
     # Load separate bridge checkpoint if enabled
     if getattr(model, "bridge", None) is not None:
-        bridge_checkpoint = config.get("bridge", {}).get("checkpoint", "checkpoints/bridge_best.pth")
-        if os.path.exists(bridge_checkpoint):
-            logger.info(f"Loading CFM Latent Bridge checkpoint from: '{bridge_checkpoint}'")
-            model.bridge.cfm_bridge.load_state_dict(torch.load(bridge_checkpoint, map_location=str(device), weights_only=True))
-            logger.info("Successfully loaded bridge model parameters.")
+        configured_bridge_path = config.get("bridge", {}).get("checkpoint", "checkpoints/bridge_best.pth")
+        bridge_candidates = [
+            configured_bridge_path,
+            "checkpoints/40epochs/bridge_unified.pth",
+            "/content/drive/MyDrive/SABER_Data/checkpoints_40epochs/bridge_unified.pth",
+            "checkpoints/bridge_unified.pth",
+            "checkpoints/bridge_best.pth",
+            "/content/drive/MyDrive/SABER_Data/checkpoints/bridge_unified.pth"
+        ]
+        resolved_bridge_path = ""
+        for cand in bridge_candidates:
+            if cand and os.path.exists(cand):
+                resolved_bridge_path = cand
+                break
+
+        if resolved_bridge_path:
+            logger.info(f"Loading CFM Latent Bridge checkpoint from: '{resolved_bridge_path}'")
+            model.bridge.cfm_bridge.load_state_dict(torch.load(resolved_bridge_path, map_location=str(device), weights_only=True), strict=False)
+            logger.info("Successfully loaded bridge model parameters (strict=False).")
         else:
-            logger.warning(f"CFM Latent Bridge checkpoint not found at '{bridge_checkpoint}'. Using random bridge weights.")
+            logger.warning(f"CFM Latent Bridge checkpoint not found at '{configured_bridge_path}'. Using random bridge weights.")
 
     # Initialize Evaluator
     evaluator = Evaluator(

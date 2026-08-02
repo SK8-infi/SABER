@@ -169,7 +169,58 @@ class Evaluator:
             embeddings[query_indices] = query_embeds
             embeddings[gallery_indices] = gallery_embeds
 
-        logger.info(f"Retrieval Split: {len(query_indices)} queries, {len(gallery_indices)} gallery items.")
+        # Apply Mean-Centering Vector Calibration (z - mu) / ||z - mu||
+        # Preserves all 768-D multi-spectral ViT dimensions without neighbor-smoothing distortion
+        use_pca = self.config.get("retrieval", {}).get("use_pca", False)
+        use_dba = self.config.get("retrieval", {}).get("use_dba", False)
+        use_qe = self.config.get("retrieval", {}).get("use_qe", False)
+
+        mu = np.mean(gallery_embeds, axis=0, keepdims=True)
+        gallery_embeds = gallery_embeds - mu
+        query_embeds = query_embeds - mu
+
+        if use_pca:
+            whiten_dim = min(512, query_embeds.shape[1])
+            logger.info(f"Stage 1: PCA Whitening (768-D -> {whiten_dim}-D)...")
+            cov = np.cov(gallery_embeds, rowvar=False)
+            eigenvalues, eigenvectors = np.linalg.eigh(cov)
+            idx = np.argsort(eigenvalues)[::-1]
+            eigenvalues = np.maximum(eigenvalues[idx][:whiten_dim], 1e-7)
+            eigenvectors_d = eigenvectors[:, idx[:whiten_dim]]
+            W = np.diag(1.0 / np.sqrt(eigenvalues)) @ eigenvectors_d.T
+            query_embeds = query_embeds @ W.T
+            gallery_embeds = gallery_embeds @ W.T
+
+        # L2 normalize
+        query_embeds = query_embeds / (np.linalg.norm(query_embeds, axis=1, keepdims=True) + 1e-8)
+        gallery_embeds = gallery_embeds / (np.linalg.norm(gallery_embeds, axis=1, keepdims=True) + 1e-8)
+
+        if use_dba:
+            dba_k = 5
+            dba_alpha = 3.0
+            logger.info(f"Stage 2: DBA Gallery Smoothing (k={dba_k})...")
+            g_sims = gallery_embeds @ gallery_embeds.T
+            np.fill_diagonal(g_sims, -1.0)
+            gallery_augmented = np.zeros_like(gallery_embeds)
+            for i in range(len(gallery_embeds)):
+                top_k_idx = np.argpartition(g_sims[i], -dba_k)[-dba_k:]
+                weights = np.maximum(g_sims[i, top_k_idx], 0.0) ** dba_alpha
+                gallery_augmented[i] = gallery_embeds[i] + (weights[:, None] * gallery_embeds[top_k_idx]).sum(axis=0)
+            gallery_embeds = gallery_augmented / (np.linalg.norm(gallery_augmented, axis=1, keepdims=True) + 1e-8)
+
+        if use_qe:
+            qe_k = 3
+            qe_alpha = 3.0
+            logger.info(f"Stage 3: Alpha Query Expansion (k={qe_k})...")
+            qg_sims = query_embeds @ gallery_embeds.T
+            query_expanded = np.zeros_like(query_embeds)
+            for i in range(len(query_embeds)):
+                top_k_idx = np.argpartition(qg_sims[i], -qe_k)[-qe_k:]
+                weights = np.maximum(qg_sims[i, top_k_idx], 0.0) ** qe_alpha
+                query_expanded[i] = query_embeds[i] + (weights[:, None] * gallery_embeds[top_k_idx]).sum(axis=0)
+            query_embeds = query_expanded / (np.linalg.norm(query_expanded, axis=1, keepdims=True) + 1e-8)
+
+        logger.info(f"Retrieval Split: {len(query_indices)} queries, {len(gallery_indices)} gallery items (Mean-Calibrated).")
 
         # Calculate metrics by computing chunked similarities to avoid OOM
         is_multilabel = (self.config.dataset.name.lower() == "ben14k")

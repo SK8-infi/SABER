@@ -75,19 +75,23 @@ class SaberCombinedLoss(nn.Module):
             Dictionary with aggregated total loss and sub-components.
         """
         # 1. Compute soft target Jaccard overlap s_ij
-        if targets.ndim == 1:
-            # Single-label targets (e.g. DSRSID): class index equality
-            s_ij = (targets.unsqueeze(0) == targets.unsqueeze(1)).float()
-        else:
-            # Multi-label targets (e.g. BEN-14K): multi-hot vectors
-            intersection = torch.matmul(targets, targets.t())  # (B, B)
-            sum_y = torch.sum(targets, dim=1, keepdim=True)  # (B, 1)
-            union = sum_y + sum_y.t() - intersection  # (B, B)
-            s_ij = intersection / (union + 1e-8)
-            s_ij = torch.where(union == 0, torch.ones_like(s_ij), s_ij)
-
         B = z1.shape[0]
         device = z1.device
+
+        if targets is not None:
+            if targets.ndim == 1:
+                # Single-label targets (e.g. DSRSID): class index equality
+                s_ij = (targets.unsqueeze(0) == targets.unsqueeze(1)).float()
+            else:
+                # Multi-label targets (e.g. BEN-14K): multi-hot vectors
+                intersection = torch.matmul(targets, targets.t())  # (B, B)
+                sum_y = torch.sum(targets, dim=1, keepdim=True)  # (B, 1)
+                union = sum_y + sum_y.t() - intersection  # (B, B)
+                s_ij = intersection / (union + 1e-8)
+                s_ij = torch.where(union == 0, torch.ones_like(s_ij), s_ij)
+        else:
+            # Pure Self-Supervised Mode: Identity matrix (each sample pairs strictly with its cross-modal view)
+            s_ij = torch.eye(B, device=device)
         
         # Identity mask to exclude self-similarity
         mask = ~torch.eye(B, dtype=torch.bool, device=device)
@@ -274,7 +278,7 @@ class SaberCombinedLoss(nn.Module):
 
         # 2.5 Compute Multi-Label / Multi-Class Classification Loss
         classification_loss = torch.tensor(0.0, device=device)
-        if logits_s1 is not None and targets is not None:
+        if self.classification_weight > 0.0 and logits_s1 is not None and targets is not None:
             if targets.ndim == 1 or targets.dtype in (torch.int64, torch.long):
                 targets_long = targets.long()
                 bce_s1 = F.cross_entropy(logits_s1, targets_long)
