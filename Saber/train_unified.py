@@ -212,7 +212,10 @@ def train_unified(
         if resume_path:
             try:
                 logger.info(f"🔍 Found existing Master Checkpoint at '{resume_path}'. Auto-resuming Phase 1...")
-                ckpt = torch.load(resume_path, map_location=device)
+                try:
+                    ckpt = torch.load(resume_path, map_location=device, weights_only=False)
+                except TypeError:
+                    ckpt = torch.load(resume_path, map_location=device)
                 if "model_state_dict" in ckpt:
                     model.load_state_dict(ckpt["model_state_dict"])
                 if "ema_state_dict" in ckpt:
@@ -404,7 +407,10 @@ def train_unified(
             )
             if encoder_path:
                 logger.info(f"Loading master encoder weights from '{encoder_path}' for CFM bridge training...")
-                ckpt = torch.load(encoder_path, map_location=device)
+                try:
+                    ckpt = torch.load(encoder_path, map_location=device, weights_only=False)
+                except TypeError:
+                    ckpt = torch.load(encoder_path, map_location=device)
                 if "model_state_dict" in ckpt:
                     model.load_state_dict(ckpt["model_state_dict"])
             else:
@@ -432,7 +438,10 @@ def train_unified(
         if bridge_resume_path:
             try:
                 logger.info(f"🔍 Found existing Bridge Checkpoint at '{bridge_resume_path}'. Auto-resuming Phase 2...")
-                b_ckpt = torch.load(bridge_resume_path, map_location=device)
+                try:
+                    b_ckpt = torch.load(bridge_resume_path, map_location=device, weights_only=False)
+                except TypeError:
+                    b_ckpt = torch.load(bridge_resume_path, map_location=device)
                 if isinstance(b_ckpt, dict) and "bridge_state_dict" in b_ckpt:
                     bridge_net.load_state_dict(b_ckpt["bridge_state_dict"])
                     if "optimizer_state_dict" in b_ckpt:
