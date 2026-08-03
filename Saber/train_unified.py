@@ -156,9 +156,14 @@ def train_unified(
     unified_bridge_path = os.path.join(local_40_dir, "bridge_unified.pth")
     legacy_bridge_path = os.path.join(local_40_dir, "bridge_best.pth")
 
-    # Google Drive Sync Directory Setup (Dedicated 40epochs Folder)
+    # Google Drive Sync Directory Setup (Dynamic Folder based on checkpoint_dir)
     drive_data_dir = "/content/drive/MyDrive/SABER_Data"
-    drive_ckpt_dir = os.path.join(drive_data_dir, "checkpoints_40epochs")
+    ckpt_dir_name = getattr(config, "checkpoint_dir", "checkpoints_sigreg").strip("/").replace("/", "_")
+    if ckpt_dir_name == "checkpoints":
+        drive_folder_name = "checkpoints_40epochs"
+    else:
+        drive_folder_name = ckpt_dir_name
+    drive_ckpt_dir = os.path.join(drive_data_dir, drive_folder_name)
     is_drive_available = os.path.exists("/content/drive/MyDrive")
     if is_drive_available:
         os.makedirs(drive_ckpt_dir, exist_ok=True)
@@ -176,6 +181,7 @@ def train_unified(
             invariance_weight=config.loss.get("vicreg_invariance_weight", 15.0),
             variance_weight=config.loss.get("vicreg_variance_weight", 25.0),
             covariance_weight=config.loss.get("vicreg_covariance_weight", 2.0),
+            sigreg_weight=config.geometry.get("sigreg_weight", 2.0),
             classification_weight=0.0  # PURE UNSUPERVISED (NO LABELS)
         ).to(device)
 
@@ -242,7 +248,7 @@ def train_unified(
         for epoch in range(start_epoch, epochs + 1):
             model.train()
             total_loss = 0.0
-            sum_jacc, sum_rank, sum_inv, sum_var, sum_cov = 0.0, 0.0, 0.0, 0.0, 0.0
+            sum_jacc, sum_rank, sum_inv, sum_var, sum_cov, sum_sigreg = 0.0, 0.0, 0.0, 0.0, 0.0, 0.0
             start_time = time.time()
 
             ben_iter = iter(ben14k_loader)
@@ -323,6 +329,7 @@ def train_unified(
                 v_inv = loss_dict.get("invariance_loss", torch.tensor(0.0)).item()
                 v_var = loss_dict.get("variance_loss", torch.tensor(0.0)).item()
                 v_cov = loss_dict.get("covariance_loss", torch.tensor(0.0)).item()
+                v_sigreg = loss_dict.get("sigreg_loss", torch.tensor(0.0)).item()
 
                 total_loss += v_loss
                 sum_jacc += v_jacc
@@ -330,6 +337,7 @@ def train_unified(
                 sum_inv += v_inv
                 sum_var += v_var
                 sum_cov += v_cov
+                sum_sigreg += v_sigreg
 
                 current_lr = optimizer.param_groups[0]["lr"]
                 pbar.set_postfix({
@@ -338,6 +346,7 @@ def train_unified(
                     "invar": f"{v_inv:.3f}",
                     "var": f"{v_var:.3f}",
                     "cov": f"{v_cov:.3f}",
+                    "sigreg": f"{v_sigreg:.3f}",
                     "lr": f"{current_lr:.2e}"
                 })
 
@@ -349,6 +358,7 @@ def train_unified(
             avg_inv = sum_inv / max_batches
             avg_var = sum_var / max_batches
             avg_cov = sum_cov / max_batches
+            avg_sigreg = sum_sigreg / max_batches
 
             logger.info(
                 f"Epoch [{epoch}/{epochs}] completed in {elapsed:.1f}s | "
@@ -357,7 +367,8 @@ def train_unified(
                 f"Rank: {avg_rank:.4f} | "
                 f"Invar: {avg_inv:.4f} | "
                 f"Var: {avg_var:.4f} | "
-                f"Cov: {avg_cov:.4f}"
+                f"Cov: {avg_cov:.4f} | "
+                f"SigReg: {avg_sigreg:.4f}"
             )
 
             # Save Master Unified Checkpoint locally

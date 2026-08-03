@@ -147,6 +147,10 @@ def main() -> None:
     ckpt_target = resolve_existing_path(
         args.checkpoint,
         [
+            "checkpoints_sigreg/40epochs/saber_unified_clean.pth",
+            "/content/drive/MyDrive/SABER_Data/checkpoints_sigreg/saber_unified_clean.pth",
+            "checkpoints_sigreg/40epochs/saber_unified.pth",
+            "/content/drive/MyDrive/SABER_Data/checkpoints_sigreg/saber_unified.pth",
             "checkpoints/40epochs/saber_unified_clean.pth",
             "/content/drive/MyDrive/SABER_Data/checkpoints_40epochs/saber_unified_clean.pth",
             "checkpoints/40epochs/saber_unified.pth",
@@ -174,9 +178,11 @@ def main() -> None:
 
     # Load separate bridge checkpoint if enabled
     if getattr(model, "bridge", None) is not None:
-        configured_bridge_path = config.get("bridge", {}).get("checkpoint", "checkpoints/bridge_best.pth")
+        configured_bridge_path = config.get("bridge", {}).get("checkpoint", "checkpoints_sigreg/bridge_best_ben14k.pth")
         bridge_candidates = [
             configured_bridge_path,
+            "checkpoints_sigreg/40epochs/bridge_unified.pth",
+            "/content/drive/MyDrive/SABER_Data/checkpoints_sigreg/bridge_unified.pth",
             "checkpoints/40epochs/bridge_unified.pth",
             "/content/drive/MyDrive/SABER_Data/checkpoints_40epochs/bridge_unified.pth",
             "checkpoints/bridge_unified.pth",
