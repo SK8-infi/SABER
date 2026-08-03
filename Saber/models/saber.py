@@ -14,6 +14,7 @@ from Saber.models.predictor import Predictor
 from Saber.models.retrieval_head import RetrievalHead
 from Saber.models.bridge import CFMBridge, CFMBridgeWrapper
 from Saber.models.hashing_head import HashingHead
+from Saber.models.hyperbolic import PoincareProjectionHead, get_poincare_ball
 
 logger = logging.getLogger("saber")
 
@@ -71,12 +72,23 @@ class SABER(nn.Module):
         else:
             logger.warning("PEFT module not installed. Running DOFA ViT backbone without LoRA adapters.")
 
-        # 3. Projection Head
-        self.projection_head = ProjectionHead(
-            in_dim=self.backbone.embed_dim,
-            hidden_dim=config.model.projection_head.hidden_dim,
-            out_dim=config.model.projection_head.out_dim
-        )
+        # 3. Projection Head (Standard Euclidean or Hyperbolic Poincaré Ball)
+        self.use_hyperbolic = getattr(config.model, "use_hyperbolic", False) or config.get("use_hyperbolic", False)
+        if self.use_hyperbolic:
+            c_val = getattr(config.model, "hyperbolic_curvature", 1.0)
+            self.projection_head = PoincareProjectionHead(
+                in_dim=self.backbone.embed_dim,
+                hidden_dim=config.model.projection_head.hidden_dim,
+                out_dim=config.model.projection_head.out_dim,
+                c=c_val
+            )
+            logger.info(f"Successfully instantiated Hyperbolic Poincaré Ball Projection Head (geoopt c={c_val}).")
+        else:
+            self.projection_head = ProjectionHead(
+                in_dim=self.backbone.embed_dim,
+                hidden_dim=config.model.projection_head.hidden_dim,
+                out_dim=config.model.projection_head.out_dim
+            )
         self.s1_projection = self.projection_head
         self.s2_projection = self.projection_head
 

@@ -182,16 +182,34 @@ def train_unified(
             variance_weight=config.loss.get("vicreg_variance_weight", 25.0),
             covariance_weight=config.loss.get("vicreg_covariance_weight", 2.0),
             sigreg_weight=config.geometry.get("sigreg_weight", 2.0),
-            classification_weight=0.0  # PURE UNSUPERVISED (NO LABELS)
+            classification_weight=0.0,  # PURE UNSUPERVISED (NO LABELS)
+            use_hyperbolic=getattr(model, "use_hyperbolic", False)
         ).to(device)
 
-        # Optimizer
+        # Optimizer (RiemannianAdam for geoopt Poincaré Ball or AdamW for Euclidean)
         trainable_params = [p for p in model.parameters() if p.requires_grad]
-        optimizer = torch.optim.AdamW(
-            trainable_params,
-            lr=config.train.get("learning_rate", 0.0005),
-            weight_decay=config.train.get("weight_decay", 0.01)
-        )
+        if getattr(model, "use_hyperbolic", False):
+            try:
+                import geoopt
+                optimizer = geoopt.optim.RiemannianAdam(
+                    trainable_params,
+                    lr=config.train.get("learning_rate", 0.0003),
+                    weight_decay=config.train.get("weight_decay", 0.01)
+                )
+                logger.info("Using geoopt.optim.RiemannianAdam optimizer for Hyperbolic Poincaré training.")
+            except ImportError:
+                optimizer = torch.optim.AdamW(
+                    trainable_params,
+                    lr=config.train.get("learning_rate", 0.0003),
+                    weight_decay=config.train.get("weight_decay", 0.01)
+                )
+                logger.info("geoopt package not installed. Using native PyTorch AdamW for Hyperbolic training.")
+        else:
+            optimizer = torch.optim.AdamW(
+                trainable_params,
+                lr=config.train.get("learning_rate", 0.0003),
+                weight_decay=config.train.get("weight_decay", 0.01)
+            )
 
         use_amp = config.train.get("amp", True) and torch.cuda.is_available()
         scaler = torch.amp.GradScaler("cuda") if use_amp else None

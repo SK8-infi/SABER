@@ -5,6 +5,7 @@ from typing import Dict, Optional
 from Saber.losses.vicreg_loss import VICRegLoss
 from Saber.losses.sigreg import sigreg_strong_loss
 from Saber.models.hashing_head import similarity_preserving_hash_loss
+from Saber.models.hyperbolic import poincare_loss
 
 class SaberCombinedLoss(nn.Module):
     """
@@ -28,7 +29,8 @@ class SaberCombinedLoss(nn.Module):
         hashing_weight: float = 0.1,
         triplet_weight: float = 0.5,
         sigreg_weight: float = 0.1,
-        classification_weight: float = 1.0
+        classification_weight: float = 1.0,
+        use_hyperbolic: bool = False
     ) -> None:
         super().__init__()
         self.jaccard_weight = jaccard_weight
@@ -39,6 +41,7 @@ class SaberCombinedLoss(nn.Module):
         self.triplet_weight = triplet_weight
         self.sigreg_weight = sigreg_weight
         self.classification_weight = classification_weight
+        self.use_hyperbolic = use_hyperbolic
         
         self.vicreg_loss_fn = VICRegLoss(
             invariance_weight=invariance_weight,

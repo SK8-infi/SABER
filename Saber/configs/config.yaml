@@ -32,6 +32,10 @@ model:
   # Type options: "conv1x1", "cnn"
   input_adapter_type: "conv1x1"
   
+  # Hyperbolic Poincaré Geometry (geoopt)
+  use_hyperbolic: false           # Set to true to enable Poincaré Ball manifold embeddings
+  hyperbolic_curvature: 1.0       # Manifold curvature c (default 1.0)
+
   # Projection Head: 3-layer MLP + LayerNorm + GELU + Residual
   projection_head:
     hidden_dim: 768
