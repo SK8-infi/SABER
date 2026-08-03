@@ -147,6 +147,11 @@ def main() -> None:
     ckpt_target = resolve_existing_path(
         args.checkpoint,
         [
+            "checkpoints_v10/saber_unified_clean.pth",
+            "/content/drive/MyDrive/SABER_Data/checkpoints_v10/saber_unified_clean.pth",
+            "checkpoints_v10/40epochs/saber_unified_clean.pth",
+            "checkpoints_v10/saber_unified.pth",
+            "/content/drive/MyDrive/SABER_Data/checkpoints_v10/saber_unified.pth",
             "checkpoints_sigreg/40epochs/saber_unified_clean.pth",
             "/content/drive/MyDrive/SABER_Data/checkpoints_sigreg/saber_unified_clean.pth",
             "checkpoints_sigreg/40epochs/saber_unified.pth",
