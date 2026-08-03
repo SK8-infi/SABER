@@ -3,7 +3,7 @@
 # General
 seed: 42
 device: "cuda"  # "cuda" or "cpu"
-checkpoint_dir: "checkpoints_sigreg"
+checkpoint_dir: "checkpoints_geoopt"
 log_dir: "logs"
 viz_dir: "visualizations"
 
@@ -33,7 +33,7 @@ model:
   input_adapter_type: "conv1x1"
   
   # Hyperbolic Poincaré Geometry (geoopt)
-  use_hyperbolic: false           # Set to true to enable Poincaré Ball manifold embeddings
+  use_hyperbolic: true           # Set to true to enable Poincaré Ball manifold embeddings
   hyperbolic_curvature: 1.0       # Manifold curvature c (default 1.0)
 
   # Projection Head: 3-layer MLP + LayerNorm + GELU + Residual
