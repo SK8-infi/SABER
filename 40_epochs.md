@@ -4,7 +4,7 @@ This document tracks the 40-epoch Master Unified Training execution of SABER acr
 
 ---
 
-## 📊 Training Progress Summary (Epochs 1 – 31 Completed)
+## 📊 Phase 1 Progress Summary (Epochs 1 – 40 Fully Completed)
 
 | Epoch | Phase 1 Loss | Soft Jaccard | Ranking Loss | Invariance | Variance | Covariance | Learning Rate | Drive Sync Status |
 | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
@@ -39,6 +39,28 @@ This document tracks the 40-epoch Master Unified Training execution of SABER acr
 | **Epoch 29** | `18.5042` | `0.0495` | `0.2254` | `0.0414` | `0.6097` | `0.4240` | `8.18e-06` | 💾 Synced (`checkpoints_40epochs`) |
 | **Epoch 30** | `18.4967` | `0.0482` | `0.2189` | `0.0418` | `0.6096` | `0.4245` | `7.10e-06` | 💾 Synced (`checkpoints_40epochs`) |
 | **Epoch 31** | `18.4913` | `0.0477` | `0.2202` | `0.0414` | `0.6094` | `0.4252` | `6.10e-06` | 💾 Synced (`checkpoints_40epochs`) |
+| **Epoch 32** | `18.4900` | `0.0475` | `0.2210` | `0.0415` | `0.6093` | `0.4255` | `5.17e-06` | 💾 Synced (`checkpoints_40epochs`) |
+| **Epoch 33** | `18.4970` | `0.0473` | `0.2226` | `0.0416` | `0.6093` | `0.4259` | `1.32e-06` | 💾 Synced (`checkpoints_40epochs`) |
+| **Epoch 34** | `18.4971` | `0.0472` | `0.2204` | `0.0418` | `0.6091` | `0.4265` | `1.24e-06` | 💾 Synced (`checkpoints_40epochs`) |
+| **Epoch 35** | `18.4839` | `0.0472` | `0.2186` | `0.0413` | `0.6093` | `0.4248` | `1.18e-06` | 💾 Synced (`checkpoints_40epochs`) |
+| **Epoch 36** | `18.4823` | `0.0471` | `0.2203` | `0.0412` | `0.6093` | `0.4248` | `1.13e-06` | 💾 Synced (`checkpoints_40epochs`) |
+| **Epoch 37** | `18.5036` | `0.0472` | `0.2235` | `0.0415` | `0.6094` | `0.4262` | `1.08e-06` | 💾 Synced (`checkpoints_40epochs`) |
+| **Epoch 38** | `18.4769` | `0.0472` | `0.2185` | `0.0412` | `0.6094` | `0.4242` | `1.05e-06` | 💾 Synced (`checkpoints_40epochs`) |
+| **Epoch 39** | `18.4866` | `0.0471` | `0.2254` | `0.0412` | `0.6094` | `0.4242` | `1.02e-06` | 💾 Synced (`checkpoints_40epochs`) |
+| **Epoch 40** | `18.4897` | `0.0471` | `0.2228` | `0.0414` | `0.6090` | `0.4262` | `1.01e-06` | 💾 Synced (`checkpoints_40epochs`) |
+
+---
+
+## 🌉 Phase 2: Master Patch-Projected CFM Bridge Training Summary (10 Epochs)
+
+| Bridge Epoch | Flow Matching Loss | Batch Loss (Last) | Execution Time | Drive Sync Status |
+| :---: | :---: | :---: | :---: | :---: |
+| **Bridge Epoch 1** | `0.107545` | `0.051606` | `634.6s` | 💾 Synced (`checkpoints_40epochs`) |
+| **Bridge Epoch 2** | `0.066324` | `0.053734` | `627.0s` | 💾 Synced (`checkpoints_40epochs`) |
+| **Bridge Epoch 3** | `0.055056` | `0.036566` | `626.0s` | 💾 Synced (`checkpoints_40epochs`) |
+| **Bridge Epoch 4** | `0.046870` | `0.036542` | `627.0s` | 💾 Synced (`checkpoints_40epochs`) |
+| **Bridge Epoch 5** | `0.040982` | `0.030804` | `627.0s` | 💾 Synced (`checkpoints_40epochs`) |
+| **Bridge Epoch 6** | `0.035964` | `0.021075` | `627.0s` | 💾 Synced (`checkpoints_40epochs`) |
 
 ---
 
@@ -162,4 +184,65 @@ Phase 1 Epoch 31/40: 100% 420/420 [29:06<00:00,  4.16s/it, loss=18.5021, jacc=0.
 [2026-08-02 21:45:29] [INFO] [train_unified.py:353]: Epoch [31/40] completed in 1746.3s | Loss: 18.4913 | Jacc: 0.0477 | Rank: 0.2202 | Invar: 0.0414 | Var: 0.6094 | Cov: 0.4252
 [2026-08-02 21:46:45] [INFO] [train_unified.py:381]: 💾 Synced Epoch [31/40] checkpoint to Google Drive: '/content/drive/MyDrive/SABER_Data/checkpoints_40epochs'
 Phase 1 Epoch 32/40:  92% 388/420 [26:53<02:12,  4.15s/it, loss=18.8580, jacc=0.057, invar=0.044, var=0.616, cov=0.452, lr=5.17e-06]
+================================================================================
+ 🚀 UNIFIED SENSOR-AGNOSTIC SABER MASTER TRAINING ENGINE (SPEED OPTIMIZED)
+================================================================================
+[2026-08-03 08:00:23] [INFO] [train_unified.py:62]: Computation Device: cuda | Execution Mode: 'ALL' | CuDNN Benchmark: ACTIVE
+[2026-08-03 08:00:23] [INFO] [train_unified.py:96]: Initializing BEN-14K Sentinel-1/2 dataset from 'Datasets/benv1_14k'...
+[2026-08-03 08:00:23] [INFO] [train_unified.py:109]: Initializing DSRSID Gaofen PAN/MS dataset from 'Datasets/DSRSID'...
+[2026-08-03 08:00:24] [INFO] [train_unified.py:137]: BEN-14K Batches: 216 | DSRSID Batches: 204 (Batch Size: 48)
+[2026-08-03 08:00:29] [INFO] [train_unified.py:214]: 🔍 Found existing Master Checkpoint at '/content/drive/MyDrive/SABER_Data/checkpoints_40epochs/saber_unified.pth'. Auto-resuming Phase 1...
+/content/SABER/Saber/train_unified.py:233: UserWarning: Detected call of `lr_scheduler.step()` before `optimizer.step()`. In PyTorch 1.1.0 and later, you should call them in the opposite order: `optimizer.step()` before `lr_scheduler.step()`.  Failure to do this will result in PyTorch skipping the first value of the learning rate schedule. See more details at https://pytorch.org/docs/stable/optim.html#how-to-adjust-learning-rate
+  scheduler.step()
+[2026-08-03 08:00:56] [INFO] [train_unified.py:234]: ⏩ Auto-resuming Phase 1 Encoder training from Epoch 33/40!
+[2026-08-03 08:00:56] [INFO] [train_unified.py:238]: ============================================================
+[2026-08-03 08:00:56] [INFO] [train_unified.py:239]:  PHASE 1: MASTER ENCODER JOINT TRAINING (40 Epochs | SPEED OPTIMIZED)
+[2026-08-03 08:00:56] [INFO] [train_unified.py:240]: ============================================================
+Phase 1 Epoch 33/40: 100% 420/420 [30:43<00:00,  4.39s/it, loss=18.7857, jacc=0.054, invar=0.042, var=0.607, cov=0.485, lr=1.32e-06]
+[2026-08-03 08:31:40] [INFO] [train_unified.py:353]: Epoch [33/40] completed in 1843.9s | Loss: 18.4970 | Jacc: 0.0473 | Rank: 0.2226 | Invar: 0.0416 | Var: 0.6093 | Cov: 0.4259
+[2026-08-03 08:33:02] [INFO] [train_unified.py:381]: 💾 Synced Epoch [33/40] checkpoint to Google Drive: '/content/drive/MyDrive/SABER_Data/checkpoints_40epochs'
+Phase 1 Epoch 34/40: 100% 420/420 [30:42<00:00,  4.39s/it, loss=18.4673, jacc=0.054, invar=0.038, var=0.609, cov=0.439, lr=1.24e-06]
+[2026-08-03 09:03:44] [INFO] [train_unified.py:353]: Epoch [34/40] completed in 1842.7s | Loss: 18.4971 | Jacc: 0.0472 | Rank: 0.2204 | Invar: 0.0418 | Var: 0.6091 | Cov: 0.4265
+[2026-08-03 09:04:46] [INFO] [train_unified.py:381]: 💾 Synced Epoch [34/40] checkpoint to Google Drive: '/content/drive/MyDrive/SABER_Data/checkpoints_40epochs'
+Phase 1 Epoch 35/40: 100% 420/420 [30:58<00:00,  4.43s/it, loss=18.5213, jacc=0.053, invar=0.039, var=0.609, cov=0.444, lr=1.18e-06]
+[2026-08-03 09:35:45] [INFO] [train_unified.py:353]: Epoch [35/40] completed in 1858.7s | Loss: 18.4839 | Jacc: 0.0472 | Rank: 0.2186 | Invar: 0.0413 | Var: 0.6093 | Cov: 0.4248
+[2026-08-03 09:36:44] [INFO] [train_unified.py:381]: 💾 Synced Epoch [35/40] checkpoint to Google Drive: '/content/drive/MyDrive/SABER_Data/checkpoints_40epochs'
+Phase 1 Epoch 36/40: 100% 420/420 [30:58<00:00,  4.43s/it, loss=18.4158, jacc=0.050, invar=0.031, var=0.605, cov=0.444, lr=1.13e-06]
+[2026-08-03 10:07:42] [INFO] [train_unified.py:353]: Epoch [36/40] completed in 1858.6s | Loss: 18.4823 | Jacc: 0.0471 | Rank: 0.2203 | Invar: 0.0412 | Var: 0.6093 | Cov: 0.4248
+[2026-08-03 10:08:50] [INFO] [train_unified.py:381]: 💾 Synced Epoch [36/40] checkpoint to Google Drive: '/content/drive/MyDrive/SABER_Data/checkpoints_40epochs'
+Phase 1 Epoch 37/40: 100% 420/420 [30:57<00:00,  4.42s/it, loss=18.6326, jacc=0.056, invar=0.041, var=0.614, cov=0.422, lr=1.08e-06]
+[2026-08-03 10:39:47] [INFO] [train_unified.py:353]: Epoch [37/40] completed in 1857.7s | Loss: 18.5036 | Jacc: 0.0472 | Rank: 0.2235 | Invar: 0.0415 | Var: 0.6094 | Cov: 0.4262
+[2026-08-03 10:41:12] [INFO] [train_unified.py:381]: 💾 Synced Epoch [37/40] checkpoint to Google Drive: '/content/drive/MyDrive/SABER_Data/checkpoints_40epochs'
+Phase 1 Epoch 38/40: 100% 420/420 [30:54<00:00,  4.42s/it, loss=18.4738, jacc=0.051, invar=0.034, var=0.609, cov=0.441, lr=1.05e-06]
+[2026-08-03 11:12:07] [INFO] [train_unified.py:353]: Epoch [38/40] completed in 1854.9s | Loss: 18.4769 | Jacc: 0.0472 | Rank: 0.2185 | Invar: 0.0412 | Var: 0.6094 | Cov: 0.4242
+[2026-08-03 11:13:17] [INFO] [train_unified.py:381]: 💾 Synced Epoch [38/40] checkpoint to Google Drive: '/content/drive/MyDrive/SABER_Data/checkpoints_40epochs'
+Phase 1 Epoch 39/40: 100% 420/420 [30:54<00:00,  4.42s/it, loss=18.2708, jacc=0.050, invar=0.028, var=0.609, cov=0.413, lr=1.02e-06]
+[2026-08-03 11:44:12] [INFO] [train_unified.py:353]: Epoch [39/40] completed in 1855.0s | Loss: 18.4866 | Jacc: 0.0471 | Rank: 0.2254 | Invar: 0.0412 | Var: 0.6094 | Cov: 0.4242
+[2026-08-03 11:46:35] [INFO] [train_unified.py:381]: 💾 Synced Epoch [39/40] checkpoint to Google Drive: '/content/drive/MyDrive/SABER_Data/checkpoints_40epochs'
+Phase 1 Epoch 40/40: 100% 420/420 [30:53<00:00,  4.41s/it, loss=18.6142, jacc=0.056, invar=0.036, var=0.614, cov=0.439, lr=1.01e-06]
+[2026-08-03 12:17:28] [INFO] [train_unified.py:353]: Epoch [40/40] completed in 1853.4s | Loss: 18.4897 | Jacc: 0.0471 | Rank: 0.2228 | Invar: 0.0414 | Var: 0.6090 | Cov: 0.4262
+[2026-08-03 12:18:45] [INFO] [train_unified.py:381]: 💾 Synced Epoch [40/40] checkpoint to Google Drive: '/content/drive/MyDrive/SABER_Data/checkpoints_40epochs'
+[2026-08-03 12:18:45] [INFO] [train_unified.py:393]: ============================================================
+[2026-08-03 12:18:45] [INFO] [train_unified.py:394]:  PHASE 2: MASTER PATCH-PROJECTED CFM BRIDGE TRAINING (SPEED OPTIMIZED)
+[2026-08-03 12:18:45] [INFO] [train_unified.py:395]: ============================================================
+[2026-08-03 12:18:46] [INFO] [train_unified.py:463]: Training Master CFM Bridge for 10 Epochs on Cross-Modal Pair Features...
+Phase 2 Bridge Epoch 1/10: 100% 420/420 [10:34<00:00,  1.51s/it, flow_loss=0.051606]
+[2026-08-03 12:29:21] [INFO] [train_unified.py:529]: Phase 2 Bridge Epoch [1/10] | Flow Matching Loss: 0.107545
+[2026-08-03 12:29:43] [INFO] [train_unified.py:547]: 💾 Synced Bridge Epoch [1/10] to Google Drive: '/content/drive/MyDrive/SABER_Data/checkpoints_40epochs'
+Phase 2 Bridge Epoch 2/10: 100% 420/420 [10:27<00:00,  1.49s/it, flow_loss=0.053734]
+[2026-08-03 12:40:10] [INFO] [train_unified.py:529]: Phase 2 Bridge Epoch [2/10] | Flow Matching Loss: 0.066324
+[2026-08-03 12:40:23] [INFO] [train_unified.py:547]: 💾 Synced Bridge Epoch [2/10] to Google Drive: '/content/drive/MyDrive/SABER_Data/checkpoints_40epochs'
+Phase 2 Bridge Epoch 3/10: 100% 420/420 [10:26<00:00,  1.49s/it, flow_loss=0.036566]
+[2026-08-03 12:50:49] [INFO] [train_unified.py:529]: Phase 2 Bridge Epoch [3/10] | Flow Matching Loss: 0.055056
+[2026-08-03 12:51:03] [INFO] [train_unified.py:547]: 💾 Synced Bridge Epoch [3/10] to Google Drive: '/content/drive/MyDrive/SABER_Data/checkpoints_40epochs'
+Phase 2 Bridge Epoch 4/10: 100% 420/420 [10:27<00:00,  1.49s/it, flow_loss=0.036542]
+[2026-08-03 13:01:31] [INFO] [train_unified.py:529]: Phase 2 Bridge Epoch [4/10] | Flow Matching Loss: 0.046870
+[2026-08-03 13:01:39] [INFO] [train_unified.py:547]: 💾 Synced Bridge Epoch [4/10] to Google Drive: '/content/drive/MyDrive/SABER_Data/checkpoints_40epochs'
+Phase 2 Bridge Epoch 5/10: 100% 420/420 [10:27<00:00,  1.49s/it, flow_loss=0.030804]
+[2026-08-03 13:12:07] [INFO] [train_unified.py:529]: Phase 2 Bridge Epoch [5/10] | Flow Matching Loss: 0.040982
+[2026-08-03 13:12:13] [INFO] [train_unified.py:547]: 💾 Synced Bridge Epoch [5/10] to Google Drive: '/content/drive/MyDrive/SABER_Data/checkpoints_40epochs'
+Phase 2 Bridge Epoch 6/10: 100% 420/420 [10:27<00:00,  1.49s/it, flow_loss=0.021075]
+[2026-08-03 13:22:40] [INFO] [train_unified.py:529]: Phase 2 Bridge Epoch [6/10] | Flow Matching Loss: 0.035964
+[2026-08-03 13:22:51] [INFO] [train_unified.py:547]: 💾 Synced Bridge Epoch [6/10] to Google Drive: '/content/drive/MyDrive/SABER_Data/checkpoints_40epochs'
+Phase 2 Bridge Epoch 7/10:  86% 361/420 [08:58<01:27,  1.49s/it, flow_loss=0.040755]
 ```
