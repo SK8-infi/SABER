@@ -88,7 +88,7 @@ loss:
 train:
   learning_rate: 0.0003
   weight_decay: 0.01
-  epochs: 5
+  epochs: 40
   grad_clip: 1.0
   grad_accumulation_steps: 4  # Effective batch = 64 * 4 = 256
   amp: true              # Automated Mixed Precision
