@@ -21,6 +21,15 @@ from Saber.visualization.tsne import plot_tsne
 from Saber.visualization.umap import plot_umap
 from Saber.visualization.similarity import plot_similarity_matrix
 
+def resolve_existing_path(path: str, candidate_paths: list) -> str:
+    """Smart path resolver for Linux case-sensitive filesystems (Google Colab / Kaggle)."""
+    if path and os.path.exists(path):
+        return path
+    for candidate in candidate_paths:
+        if candidate and os.path.exists(candidate):
+            return candidate
+    return path
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Evaluate REJEPA/SABER Retrieval performance and build FAISS Index")
     parser.add_argument("--config", type=str, default="Saber/configs/config.yaml", help="Path to config file")
