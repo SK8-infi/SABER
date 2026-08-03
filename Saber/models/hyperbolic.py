@@ -130,8 +130,126 @@ class PoincareProjectionHead(nn.Module):
 def poincare_loss(z1: torch.Tensor, z2: torch.Tensor, c: float = 1.0) -> torch.Tensor:
     """Computes mean Hyperbolic Poincaré distance loss d_H(z1, z2)^2."""
     ball = get_poincare_ball(c=c)
-    if HAS_GEOOPT and hasattr(ball, "dist"):
-        d = ball.dist(z1, z2)
-    else:
-        d = ball.dist(z1, z2)
+    d = ball.dist(z1, z2)
     return torch.mean(d.pow(2))
+
+
+def hyperbolic_neg_sim_matrix(z1: torch.Tensor, z2: torch.Tensor, c: float = 1.0) -> torch.Tensor:
+    """
+    Computes pairwise negative-distance similarity matrix in Poincaré Ball.
+    Returns sim(i,j) = -d_H(z1_i, z2_j) so higher = more similar.
+    Replaces cosine similarity for Jaccard/Ranking losses.
+    """
+    ball = NativePoincareBall(c=c)
+    return -ball.dist_matrix(z1, z2)  # (N, M)
+
+
+def hyperbolic_alignment_loss(z1: torch.Tensor, z2: torch.Tensor, c: float = 1.0) -> torch.Tensor:
+    """
+    Replaces VICReg Invariance: d_H(z1_i, z2_i)^2 averaged over batch.
+    Pulls matching cross-modal pairs together in hyperbolic space.
+    """
+    ball = NativePoincareBall(c=c)
+    d = ball.dist(z1, z2)
+    return torch.mean(d.pow(2))
+
+
+def hyperbolic_dispersion_loss(z: torch.Tensor, c: float = 1.0, target_spread: float = 2.0) -> torch.Tensor:
+    """
+    Replaces VICReg Variance Hinge: encourages pairwise hyperbolic distances 
+    in the batch to be large (prevents collapse to a single point).
+    
+    L_disp = max(0, target_spread - mean(d_H(z_i, z_j)))^2  for i != j
+    """
+    ball = NativePoincareBall(c=c)
+    B = z.shape[0]
+    if B <= 1:
+        return torch.tensor(0.0, device=z.device, dtype=torch.float32)
+    
+    dist_mat = ball.dist_matrix(z, z)  # (B, B)
+    # Exclude diagonal (self-distance = 0)
+    mask = ~torch.eye(B, dtype=torch.bool, device=z.device)
+    mean_pairwise_dist = dist_mat[mask].mean()
+    
+    loss = F.relu(target_spread - mean_pairwise_dist).pow(2)
+    return loss
+
+
+def hyperbolic_covariance_loss(z: torch.Tensor, c: float = 1.0) -> torch.Tensor:
+    """
+    Replaces VICReg Covariance: operates in tangent space at origin via logmap0.
+    Maps Poincaré embeddings back to flat tangent space, then decorrelates dimensions.
+    """
+    ball = NativePoincareBall(c=c)
+    v = ball.logmap0(z).float()  # Map to tangent space T_0 B^d
+    B, D = v.shape
+    if B <= 1:
+        return torch.tensor(0.0, device=z.device, dtype=torch.float32)
+    
+    v_centered = v - v.mean(dim=0, keepdim=True)
+    cov = (v_centered.T @ v_centered) / (B - 1)  # (D, D)
+    
+    # Off-diagonal penalty
+    off_diag = cov.pow(2)
+    off_diag.fill_diagonal_(0.0)
+    return off_diag.sum() / D
+
+
+def hyperbolic_sigreg(z: torch.Tensor, c: float = 1.0, sketch_dim: int = 64, num_points: int = 17) -> torch.Tensor:
+    """
+    SigReg in tangent space: maps Poincaré embeddings to T_0 B^d via logmap0,
+    then applies Sketched Isotropic Gaussian Regularization on the flat tangent vectors.
+    """
+    from Saber.losses.sigreg import sigreg_strong_loss
+    ball = NativePoincareBall(c=c)
+    v = ball.logmap0(z).float()  # Map to tangent space
+    return sigreg_strong_loss(v, sketch_dim=sketch_dim, num_points=num_points)
+
+
+def hyperbolic_jaccard_loss(z1: torch.Tensor, z2: torch.Tensor, s_ij: torch.Tensor, 
+                            mask: torch.Tensor, c: float = 1.0) -> torch.Tensor:
+    """
+    Jaccard soft-target regression using hyperbolic negative distance as similarity.
+    Replaces cosine-similarity-based Jaccard loss.
+    """
+    sim1 = hyperbolic_neg_sim_matrix(z1, z1, c=c)  # (B, B) self-similarity
+    sim2 = hyperbolic_neg_sim_matrix(z2, z2, c=c)
+    
+    # Normalize to [0, 1] range for comparison with Jaccard targets
+    sim1_min = sim1[mask].min()
+    sim1_max = sim1[mask].max()
+    sim2_min = sim2[mask].min()
+    sim2_max = sim2[mask].max()
+    
+    sim1_norm = (sim1 - sim1_min) / (sim1_max - sim1_min + 1e-8)
+    sim2_norm = (sim2 - sim2_min) / (sim2_max - sim2_min + 1e-8)
+    
+    jacc_1 = ((sim1_norm - s_ij) * mask).pow(2).sum() / (mask.sum() + 1e-8)
+    jacc_2 = ((sim2_norm - s_ij) * mask).pow(2).sum() / (mask.sum() + 1e-8)
+    return 0.5 * (jacc_1 + jacc_2)
+
+
+def hyperbolic_ranking_loss(z1: torch.Tensor, z2: torch.Tensor, s_ij: torch.Tensor,
+                            mask: torch.Tensor, temp_s: float = 0.07, temp_p: float = 0.05,
+                            c: float = 1.0) -> torch.Tensor:
+    """
+    Listwise neighborhood ranking using hyperbolic negative distance.
+    Replaces cosine-similarity-based KL divergence ranking.
+    """
+    sim1 = hyperbolic_neg_sim_matrix(z1, z1, c=c)
+    sim2 = hyperbolic_neg_sim_matrix(z2, z2, c=c)
+    
+    s_ij_masked = s_ij.masked_fill(~mask, float('-inf'))
+    sim1_masked = sim1.masked_fill(~mask, float('-inf'))
+    sim2_masked = sim2.masked_fill(~mask, float('-inf'))
+    
+    p_target = F.softmax(s_ij_masked / temp_s, dim=1)
+    p_1_logits = F.log_softmax(sim1_masked / temp_p, dim=1).masked_fill(~mask, 0.0)
+    p_2_logits = F.log_softmax(sim2_masked / temp_p, dim=1).masked_fill(~mask, 0.0)
+    
+    log_p_target = torch.log(p_target + 1e-8)
+    kl_1 = p_target * (log_p_target - p_1_logits)
+    kl_2 = p_target * (log_p_target - p_2_logits)
+    
+    return 0.5 * (kl_1.sum(dim=1).mean() + kl_2.sum(dim=1).mean())
+
