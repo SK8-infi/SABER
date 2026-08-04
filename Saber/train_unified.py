@@ -41,7 +41,8 @@ def train_unified(
     bridge_epochs_override: Optional[int] = None,
     mode: str = "all",
     synthetic_override: Optional[bool] = None,
-    joint: bool = False
+    joint: bool = False,
+    force_retrain_bridge: bool = False
 ) -> None:
     print("="*80)
     print(" 🚀 SABER MASTER TRAINING ENGINE (SPEED OPTIMIZED)")
@@ -449,30 +450,41 @@ def train_unified(
                 bridge_resume_path = b_cand
                 break
 
-        if bridge_resume_path:
+        if bridge_resume_path and not force_retrain_bridge:
             try:
-                logger.info(f"🔍 Found existing Bridge Checkpoint at '{bridge_resume_path}'. Auto-resuming Phase 2...")
+                logger.info(f"🔍 Found existing Bridge Checkpoint at '{bridge_resume_path}'. Checking architecture compatibility...")
                 try:
                     b_ckpt = torch.load(bridge_resume_path, map_location=device, weights_only=False)
                 except TypeError:
                     b_ckpt = torch.load(bridge_resume_path, map_location=device)
-                if isinstance(b_ckpt, dict) and "bridge_state_dict" in b_ckpt:
-                    bridge_net.load_state_dict(b_ckpt["bridge_state_dict"])
-                    if "optimizer_state_dict" in b_ckpt:
-                        bridge_opt.load_state_dict(b_ckpt["optimizer_state_dict"])
-                    last_b_epoch = b_ckpt.get("epoch", 0)
-                    if last_b_epoch >= bridge_epochs:
-                        logger.info(f"✅ Phase 2 Bridge training already completed ({last_b_epoch}/{bridge_epochs} epochs).")
-                        start_b_epoch = bridge_epochs + 1
-                    else:
-                        start_b_epoch = last_b_epoch + 1
-                        logger.info(f"⏩ Auto-resuming Phase 2 Bridge training from Epoch {start_b_epoch}/{bridge_epochs}!")
-                elif isinstance(b_ckpt, dict) and "state_dict" in b_ckpt:
-                    bridge_net.load_state_dict(b_ckpt["state_dict"])
-                elif isinstance(b_ckpt, dict):
-                    bridge_net.load_state_dict(b_ckpt)
+                
+                raw_sd = b_ckpt.get("bridge_state_dict", b_ckpt.get("state_dict", b_ckpt)) if isinstance(b_ckpt, dict) else b_ckpt
+                has_new_arch = isinstance(raw_sd, dict) and any("shared_queries" in k for k in raw_sd.keys())
+
+                if not has_new_arch:
+                    logger.warning(f"⚠️ Bridge Checkpoint at '{bridge_resume_path}' is from OLD architecture (missing shared_queries & distilled_p). Retraining Phase 2 Bridge from scratch!")
+                    start_b_epoch = 1
+                else:
+                    if isinstance(b_ckpt, dict) and "bridge_state_dict" in b_ckpt:
+                        bridge_net.load_state_dict(b_ckpt["bridge_state_dict"])
+                        if "optimizer_state_dict" in b_ckpt:
+                            bridge_opt.load_state_dict(b_ckpt["optimizer_state_dict"])
+                        last_b_epoch = b_ckpt.get("epoch", 0)
+                        if last_b_epoch >= bridge_epochs:
+                            logger.info(f"✅ Phase 2 Bridge training already completed ({last_b_epoch}/{bridge_epochs} epochs).")
+                            start_b_epoch = bridge_epochs + 1
+                        else:
+                            start_b_epoch = last_b_epoch + 1
+                            logger.info(f"⏩ Auto-resuming Phase 2 Bridge training from Epoch {start_b_epoch}/{bridge_epochs}!")
+                    elif isinstance(b_ckpt, dict) and "state_dict" in b_ckpt:
+                        bridge_net.load_state_dict(b_ckpt["state_dict"])
+                    elif isinstance(b_ckpt, dict):
+                        bridge_net.load_state_dict(b_ckpt)
             except Exception as e:
                 logger.warning(f"Failed to load bridge checkpoint from '{bridge_resume_path}': {e}")
+        elif force_retrain_bridge:
+            logger.info("🔄 '--force_retrain_bridge' flag set. Retraining Phase 2 CFM Bridge from scratch!")
+            start_b_epoch = 1
         logger.info(f"Training Master CFM Bridge for {bridge_epochs} Epochs on Cross-Modal Pair Features...")
 
         for b_epoch in range(start_b_epoch, bridge_epochs + 1):
@@ -599,6 +611,7 @@ def main():
     parser.add_argument("--mode", type=str, default="all", choices=["all", "encoder", "bridge"], help="Training mode: 'all' (Encoder + Bridge), 'encoder' (Encoder only), 'bridge' (Bridge only)")
     parser.add_argument("--synthetic", type=str, default=None)
     parser.add_argument("--joint", action="store_true", help="Enable joint multi-dataset training (BEN-14K + DSRSID). Default: False (BEN-14K only)")
+    parser.add_argument("--force_retrain_bridge", action="store_true", help="Force retraining Phase 2 CFM Bridge from scratch even if checkpoint exists")
     args = parser.parse_args()
 
     synthetic_bool = (args.synthetic.lower() == "true") if args.synthetic is not None else None
@@ -611,7 +624,8 @@ def main():
         bridge_epochs_override=args.bridge_epochs,
         mode=args.mode,
         synthetic_override=synthetic_bool,
-        joint=args.joint
+        joint=args.joint,
+        force_retrain_bridge=args.force_retrain_bridge
     )
 
 if __name__ == "__main__":

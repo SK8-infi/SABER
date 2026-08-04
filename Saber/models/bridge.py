@@ -106,6 +106,8 @@ class CFMBridge(nn.Module):
             if (i + 1) % 2 == 0:
                 self.blocks.append(AttentionBlockCFM(hidden_dim, num_heads=4, dropout=dropout))
 
+        self.is_queries_trained = False
+
         # Heads
         self.out_v = nn.Linear(hidden_dim, dim)
         self.out_logvar = nn.Linear(hidden_dim, dim)
@@ -119,11 +121,23 @@ class CFMBridge(nn.Module):
             nn.Linear(hidden_dim, dim)
         )
 
+    def load_state_dict(self, state_dict: dict, strict: bool = True):
+        # Check if loaded state dict actually includes trained shared_queries
+        if any("shared_queries" in k for k in state_dict.keys()):
+            self.is_queries_trained = True
+        else:
+            self.is_queries_trained = False
+        return super().load_state_dict(state_dict, strict=strict)
+
     def _condition_context(self, c_a: torch.Tensor) -> torch.Tensor:
         """
         Conditions context c_a on shared learnable queries s.
         Computes v_phi(z_tau, tau, c_a, s).
         """
+        # If shared queries are untrained and in eval mode, bypass to prevent noise corruption
+        if not getattr(self, "is_queries_trained", False) and not self.training:
+            return c_a
+
         B = c_a.shape[0]
         s = self.shared_queries.unsqueeze(0).expand(B, -1, -1)  # (B, N_q, D)
         
