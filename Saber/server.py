@@ -596,7 +596,7 @@ def execute_query(req: QueryRequest):
             if req.enable_bridge and getattr(state.saber_model, "bridge", None) is not None:
                 original_steps = state.saber_model.bridge.ode_steps
                 state.saber_model.bridge.ode_steps = req.ode_steps
-                z_query_tensor, u_q = state.saber_model.bridge.predict_with_uncertainty(z1, use_distilled=(req.ode_steps == 1))
+                z_query_tensor, u_q = state.saber_model.bridge.predict_with_uncertainty(z1)
                 query_uncertainty = float(u_q.cpu().numpy()[0])
                 state.saber_model.bridge.ode_steps = original_steps
                 z_query = z_query_tensor

@@ -113,15 +113,6 @@ class CFMBridge(nn.Module):
         self.out_v = nn.Linear(hidden_dim, dim)
         self.out_logvar = nn.Linear(hidden_dim, dim)
 
-        # Feature 2: Single-Step Distilled Predictor P_phi
-        self.distilled_p = nn.Sequential(
-            nn.Linear(hidden_dim, hidden_dim),
-            nn.LayerNorm(hidden_dim),
-            nn.GELU(),
-            nn.Dropout(dropout),
-            nn.Linear(hidden_dim, dim)
-        )
-
     def load_state_dict(self, state_dict: dict, strict: bool = True):
         # Check if loaded state dict actually includes trained shared_queries
         if any("shared_queries" in k for k in state_dict.keys()):
@@ -152,12 +143,11 @@ class CFMBridge(nn.Module):
 
     def forward(
         self, z_tau: torch.Tensor, tau: torch.Tensor, c_a: torch.Tensor
-    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
         """
         Returns:
             v: Predicted velocity field v_phi(z_tau, tau, c_a, s)
             logvar: Residual log-variance for per-query uncertainty u(q)
-            p_single: Distilled 1-step predictor output P_phi(z_a, c_a, s)
         """
         t_emb = self.time_emb(tau)
         c_cond = self._condition_context(c_a)
@@ -170,14 +160,13 @@ class CFMBridge(nn.Module):
 
         v = self.out_v(h)
         logvar = torch.clamp(self.out_logvar(h), min=-10.0, max=5.0)
-        p_single = self.distilled_p(h)
 
-        return v, logvar, p_single
+        return v, logvar
 
 
 class CFMBridgeWrapper(nn.Module):
     """
-    Distilled Single-step / Multi-step predictor wrapper for CFM Bridge with Calibrated Uncertainty u(q).
+    Multi-step / 1-step Euler predictor wrapper for CFM Bridge with Calibrated Uncertainty u(q).
     Supports (B, D) pooled features and (B, L, D) spatial patch token sequences.
     """
     def __init__(self, cfm_bridge: CFMBridge, ode_steps: int = 1) -> None:
@@ -186,7 +175,7 @@ class CFMBridgeWrapper(nn.Module):
         self.ode_steps = ode_steps
 
     def predict_with_uncertainty(
-        self, x: torch.Tensor, use_distilled: bool = False
+        self, x: torch.Tensor
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         """
         Translates source context x -> target manifold latent z_pred, 
@@ -200,13 +189,13 @@ class CFMBridgeWrapper(nn.Module):
         device = x.device
         B = x.shape[0]
 
-        if use_distilled or self.ode_steps == 1:
-            # Single-step Distilled Predictor P_phi (BAH.pdf Section 4.3)
+        if self.ode_steps == 1:
+            # 1-step Euler integration
             tau = torch.zeros(B, 1, device=device)
-            v, logvar, p_single = self.cfm_bridge(z, tau, x)
-            z_pred = z + p_single
+            v, logvar = self.cfm_bridge(z, tau, x)
+            z_pred = z + v
             
-            # Feature 3: Calibrated Uncertainty u(q) = sigmoid(mean(logvar))
+            # Calibrated Uncertainty u(q) = sigmoid(mean(logvar))
             mean_logvar = logvar.mean(dim=-1) if logvar.ndim == 2 else logvar.mean(dim=(-1, -2))
             u_q = torch.sigmoid(mean_logvar)
         else:
@@ -215,7 +204,7 @@ class CFMBridgeWrapper(nn.Module):
             accum_logvar = torch.zeros(B, device=device)
             for step in range(self.ode_steps):
                 tau = torch.ones(B, 1, device=device) * (step * dt)
-                v, logvar, _ = self.cfm_bridge(z, tau, x)
+                v, logvar = self.cfm_bridge(z, tau, x)
                 z = z + v * dt
                 accum_logvar = accum_logvar + (logvar.mean(dim=-1) if logvar.ndim == 2 else logvar.mean(dim=(-1, -2)))
             
