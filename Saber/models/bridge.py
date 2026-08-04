@@ -106,6 +106,7 @@ class CFMBridge(nn.Module):
             if (i + 1) % 2 == 0:
                 self.blocks.append(AttentionBlockCFM(hidden_dim, num_heads=4, dropout=dropout))
 
+        self.query_scale = nn.Parameter(torch.tensor(0.0))
         self.is_queries_trained = False
 
         # Heads
@@ -146,7 +147,7 @@ class CFMBridge(nn.Module):
 
         # Cross-attend source context with shared query semantic anchors
         q_ctx, _ = self.query_attn(c_seq, s, s)
-        c_cond = c_seq + q_ctx
+        c_cond = c_seq + self.query_scale * q_ctx
         return c_cond.squeeze(1) if is_2d else c_cond
 
     def forward(
@@ -185,7 +186,7 @@ class CFMBridgeWrapper(nn.Module):
         self.ode_steps = ode_steps
 
     def predict_with_uncertainty(
-        self, x: torch.Tensor, use_distilled: bool = True
+        self, x: torch.Tensor, use_distilled: bool = False
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         """
         Translates source context x -> target manifold latent z_pred, 
