@@ -206,7 +206,12 @@ def main() -> None:
 
         if resolved_bridge_path:
             logger.info(f"Loading CFM Latent Bridge checkpoint from: '{resolved_bridge_path}'")
-            model.bridge.cfm_bridge.load_state_dict(torch.load(resolved_bridge_path, map_location=str(device), weights_only=True), strict=False)
+            try:
+                b_data = torch.load(resolved_bridge_path, map_location=str(device), weights_only=False)
+            except TypeError:
+                b_data = torch.load(resolved_bridge_path, map_location=str(device))
+            b_sd = b_data.get("bridge_state_dict", b_data.get("state_dict", b_data)) if isinstance(b_data, dict) else b_data
+            model.bridge.cfm_bridge.load_state_dict(b_sd, strict=False)
             logger.info("Successfully loaded bridge model parameters (strict=False).")
         else:
             logger.warning(f"CFM Latent Bridge checkpoint not found at '{configured_bridge_path}'. Using random bridge weights.")
