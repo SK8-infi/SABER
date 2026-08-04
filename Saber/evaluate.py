@@ -143,20 +143,26 @@ def main() -> None:
     else:
         raise ValueError(f"Unknown architecture target: '{arch}'")
 
-    # Load checkpoint parameters if provided
+    # Derive candidate paths from config.checkpoint_dir (e.g. 'checkpoints_sigreg')
+    configured_dir = config.get("checkpoint_dir", "checkpoints_sigreg")
+    configured_clean = os.path.join(configured_dir, "saber_unified_clean.pth")
+    configured_full = os.path.join(configured_dir, "saber_unified.pth")
+    drive_clean = f"/content/drive/MyDrive/SABER_Data/{configured_dir}/saber_unified_clean.pth"
+    drive_full = f"/content/drive/MyDrive/SABER_Data/{configured_dir}/saber_unified.pth"
+
     ckpt_target = resolve_existing_path(
         args.checkpoint,
         [
+            configured_clean,
+            drive_clean,
+            configured_full,
+            drive_full,
             "checkpoints_sigreg/saber_unified_clean.pth",
             "/content/drive/MyDrive/SABER_Data/checkpoints_sigreg/saber_unified_clean.pth",
             "checkpoints_sigreg/saber_unified.pth",
             "/content/drive/MyDrive/SABER_Data/checkpoints_sigreg/saber_unified.pth",
             "checkpoints_sigreg/40epochs/saber_unified_clean.pth",
-            "/content/drive/MyDrive/SABER_Data/checkpoints_sigreg/40epochs/saber_unified_clean.pth",
-            "checkpoints/40epochs/saber_unified_clean.pth",
-            "/content/drive/MyDrive/SABER_Data/checkpoints_40epochs/saber_unified_clean.pth",
-            "checkpoints/saber_unified.pth",
-            "/content/drive/MyDrive/SABER_Data/checkpoints/saber_unified.pth"
+            "/content/drive/MyDrive/SABER_Data/checkpoints_sigreg/40epochs/saber_unified_clean.pth"
         ]
     )
     checkpoint_state = None
@@ -178,18 +184,16 @@ def main() -> None:
 
     # Load separate bridge checkpoint if enabled
     if getattr(model, "bridge", None) is not None:
-        configured_bridge_path = config.get("bridge", {}).get("checkpoint", "checkpoints_sigreg/bridge_unified.pth")
+        configured_bridge_path = config.get("bridge", {}).get("checkpoint", os.path.join(configured_dir, "bridge_unified.pth"))
+        drive_bridge = f"/content/drive/MyDrive/SABER_Data/{configured_dir}/bridge_unified.pth"
         bridge_candidates = [
             configured_bridge_path,
+            os.path.join(configured_dir, "bridge_unified.pth"),
+            drive_bridge,
             "checkpoints_sigreg/bridge_unified.pth",
             "/content/drive/MyDrive/SABER_Data/checkpoints_sigreg/bridge_unified.pth",
             "checkpoints_sigreg/40epochs/bridge_unified.pth",
-            "/content/drive/MyDrive/SABER_Data/checkpoints_sigreg/40epochs/bridge_unified.pth",
-            "checkpoints/40epochs/bridge_unified.pth",
-            "/content/drive/MyDrive/SABER_Data/checkpoints_40epochs/bridge_unified.pth",
-            "checkpoints/bridge_unified.pth",
-            "checkpoints/bridge_best.pth",
-            "/content/drive/MyDrive/SABER_Data/checkpoints/bridge_unified.pth"
+            "/content/drive/MyDrive/SABER_Data/checkpoints_sigreg/40epochs/bridge_unified.pth"
         ]
         resolved_bridge_path = ""
         for cand in bridge_candidates:
