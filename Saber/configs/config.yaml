@@ -50,7 +50,7 @@ bridge:
   enabled: true
   hidden_dim: 768
   num_blocks: 4
-  ode_steps: 3
+  ode_steps: 10
   dropout: 0.1
   checkpoint: "checkpoints_v10/bridge_unified.pth"
 
