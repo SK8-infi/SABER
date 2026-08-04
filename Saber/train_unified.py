@@ -227,9 +227,9 @@ def train_unified(
                 except TypeError:
                     ckpt = torch.load(resume_path, map_location=device)
                 if "model_state_dict" in ckpt:
-                    model.load_state_dict(ckpt["model_state_dict"])
+                    model.load_state_dict(ckpt["model_state_dict"], strict=False)
                 if "ema_state_dict" in ckpt:
-                    ema_model.load_state_dict(ckpt["ema_state_dict"])
+                    ema_model.load_state_dict(ckpt["ema_state_dict"], strict=False)
                 if "optimizer_state_dict" in ckpt:
                     optimizer.load_state_dict(ckpt["optimizer_state_dict"])
                 
