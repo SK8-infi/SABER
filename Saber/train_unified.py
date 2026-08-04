@@ -528,8 +528,10 @@ def train_unified(
                 v_target = z2 - z1
                 z_tau = (1.0 - tau) * z1 + tau * z2
 
-                v_pred = bridge_net(z1, tau)
-                loss_b = F.mse_loss(v_pred, v_target)
+                v_pred, logvar, p_single = bridge_net(z_tau, tau, z1)
+                loss_flow = F.mse_loss(v_pred, v_target)
+                loss_distill = F.mse_loss(p_single, v_target)
+                loss_b = loss_flow + 0.5 * loss_distill
 
                 loss_b.backward()
                 torch.nn.utils.clip_grad_norm_(bridge_net.parameters(), 1.0)
