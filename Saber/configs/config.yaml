@@ -52,7 +52,7 @@ bridge:
   num_blocks: 4
   ode_steps: 3
   dropout: 0.1
-  checkpoint: "checkpoints_v10/bridge_best_ben14k.pth"
+  checkpoint: "checkpoints_v10/bridge_unified.pth"
 
 # Embedding Geometry Optimization (Dev 3)
 geometry:

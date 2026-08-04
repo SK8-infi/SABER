@@ -183,9 +183,13 @@ def main() -> None:
 
     # Load separate bridge checkpoint if enabled
     if getattr(model, "bridge", None) is not None:
-        configured_bridge_path = config.get("bridge", {}).get("checkpoint", "checkpoints_sigreg/bridge_best_ben14k.pth")
+        configured_bridge_path = config.get("bridge", {}).get("checkpoint", "checkpoints_v10/bridge_unified.pth")
         bridge_candidates = [
             configured_bridge_path,
+            "checkpoints_v10/bridge_unified.pth",
+            "/content/drive/MyDrive/SABER_Data/checkpoints_v10/bridge_unified.pth",
+            "checkpoints_v10/bridge_best_ben14k.pth",
+            "/content/drive/MyDrive/SABER_Data/checkpoints_v10/bridge_best_ben14k.pth",
             "checkpoints_sigreg/40epochs/bridge_unified.pth",
             "/content/drive/MyDrive/SABER_Data/checkpoints_sigreg/bridge_unified.pth",
             "checkpoints/40epochs/bridge_unified.pth",
