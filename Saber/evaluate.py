@@ -144,25 +144,30 @@ def main() -> None:
         raise ValueError(f"Unknown architecture target: '{arch}'")
 
     # Load checkpoint parameters if provided
+    configured_dir = config.get("checkpoint_dir", "checkpoints_v10")
+    local_encoder_candidates = [
+        os.path.join(configured_dir, "saber_unified_clean.pth"),
+        os.path.join(configured_dir, "saber_unified.pth"),
+        "checkpoints_v10/saber_unified_clean.pth",
+        "checkpoints_v10/saber_unified.pth",
+        "checkpoints_sigreg/saber_unified_clean.pth",
+        "checkpoints_sigreg/saber_unified.pth",
+        "checkpoints/saber_unified_clean.pth",
+        "checkpoints/saber_unified.pth",
+    ]
+    drive_encoder_candidates = [
+        f"/content/drive/MyDrive/SABER_Data/{configured_dir}/saber_unified_clean.pth",
+        f"/content/drive/MyDrive/SABER_Data/{configured_dir}/saber_unified.pth",
+        "/content/drive/MyDrive/SABER_Data/checkpoints_v10/saber_unified_clean.pth",
+        "/content/drive/MyDrive/SABER_Data/checkpoints_v10/saber_unified.pth",
+        "/content/drive/MyDrive/SABER_Data/checkpoints_sigreg/saber_unified_clean.pth",
+        "/content/drive/MyDrive/SABER_Data/checkpoints_sigreg/saber_unified.pth",
+        "/content/drive/MyDrive/SABER_Data/checkpoints/saber_unified.pth",
+    ]
+
     ckpt_target = resolve_existing_path(
         args.checkpoint,
-        [
-            "checkpoints_v10/saber_unified_clean.pth",
-            "/content/drive/MyDrive/SABER_Data/checkpoints_v10/saber_unified_clean.pth",
-            "checkpoints_v10/40epochs/saber_unified_clean.pth",
-            "checkpoints_v10/saber_unified.pth",
-            "/content/drive/MyDrive/SABER_Data/checkpoints_v10/saber_unified.pth",
-            "checkpoints_sigreg/40epochs/saber_unified_clean.pth",
-            "/content/drive/MyDrive/SABER_Data/checkpoints_sigreg/saber_unified_clean.pth",
-            "checkpoints_sigreg/40epochs/saber_unified.pth",
-            "/content/drive/MyDrive/SABER_Data/checkpoints_sigreg/saber_unified.pth",
-            "checkpoints/40epochs/saber_unified_clean.pth",
-            "/content/drive/MyDrive/SABER_Data/checkpoints_40epochs/saber_unified_clean.pth",
-            "checkpoints/40epochs/saber_unified.pth",
-            "/content/drive/MyDrive/SABER_Data/checkpoints_40epochs/saber_unified.pth",
-            "checkpoints/saber_unified.pth",
-            "/content/drive/MyDrive/SABER_Data/checkpoints/saber_unified.pth"
-        ]
+        local_encoder_candidates + drive_encoder_candidates
     )
     checkpoint_state = None
     if ckpt_target and os.path.exists(ckpt_target):
@@ -183,21 +188,26 @@ def main() -> None:
 
     # Load separate bridge checkpoint if enabled
     if getattr(model, "bridge", None) is not None:
-        configured_bridge_path = config.get("bridge", {}).get("checkpoint", "checkpoints_v10/bridge_unified.pth")
-        bridge_candidates = [
+        configured_bridge_path = config.get("bridge", {}).get("checkpoint", os.path.join(configured_dir, "bridge_unified.pth"))
+        local_bridge_candidates = [
             configured_bridge_path,
+            os.path.join(configured_dir, "bridge_unified.pth"),
+            os.path.join(configured_dir, "bridge_best_ben14k.pth"),
             "checkpoints_v10/bridge_unified.pth",
-            "/content/drive/MyDrive/SABER_Data/checkpoints_v10/bridge_unified.pth",
             "checkpoints_v10/bridge_best_ben14k.pth",
-            "/content/drive/MyDrive/SABER_Data/checkpoints_v10/bridge_best_ben14k.pth",
-            "checkpoints_sigreg/40epochs/bridge_unified.pth",
-            "/content/drive/MyDrive/SABER_Data/checkpoints_sigreg/bridge_unified.pth",
-            "checkpoints/40epochs/bridge_unified.pth",
-            "/content/drive/MyDrive/SABER_Data/checkpoints_40epochs/bridge_unified.pth",
+            "checkpoints_sigreg/bridge_unified.pth",
             "checkpoints/bridge_unified.pth",
             "checkpoints/bridge_best.pth",
-            "/content/drive/MyDrive/SABER_Data/checkpoints/bridge_unified.pth"
         ]
+        drive_bridge_candidates = [
+            f"/content/drive/MyDrive/SABER_Data/{configured_dir}/bridge_unified.pth",
+            "/content/drive/MyDrive/SABER_Data/checkpoints_v10/bridge_unified.pth",
+            "/content/drive/MyDrive/SABER_Data/checkpoints_v10/bridge_best_ben14k.pth",
+            "/content/drive/MyDrive/SABER_Data/checkpoints_sigreg/bridge_unified.pth",
+            "/content/drive/MyDrive/SABER_Data/checkpoints/bridge_unified.pth",
+        ]
+
+        bridge_candidates = local_bridge_candidates + drive_bridge_candidates
         resolved_bridge_path = ""
         for cand in bridge_candidates:
             if cand and os.path.exists(cand):
