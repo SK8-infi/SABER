@@ -58,21 +58,28 @@ def similarity_preserving_hash_loss(
     quantization_weight: float = 0.01,
 ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
     """
-    Simple supervised hashing loss for multi-label or single-label batches.
-
-    It aligns code cosine similarity with semantic relevance and adds a
-    quantization penalty that pushes tanh outputs toward binary values.
+    Implements BAH.pdf Eq (4):
+    L_hash = E_{i,j} [ (1/m h(z_i)^T h(z_j) - s_{ij})^2 ] + gamma * E_i [ || |h(z_i)| - 1 ||_2^2 ]
     """
-    codes = F.normalize(soft_codes, dim=1, eps=1e-4)
-    code_similarity = codes @ codes.T
+    m = soft_codes.shape[-1]
+    # Normalized dot product code similarity scaled to [0, 1] range matching s_ij
+    code_sim = (soft_codes @ soft_codes.T) / m  # (B, B) in [-1, 1]
+    code_sim_01 = 0.5 * (code_sim + 1.0)       # scale to [0, 1]
 
-    if labels.ndim == 2:
-        relevance = (labels.float() @ labels.float().T > 0).float()
+    if labels is None:
+        B = soft_codes.shape[0]
+        s_ij = torch.eye(B, device=soft_codes.device)
+    elif labels.ndim == 2:
+        # Multi-label Jaccard similarity target s_ij
+        intersection = labels.float() @ labels.float().T
+        sum_y = torch.sum(labels.float(), dim=1, keepdim=True)
+        union = sum_y + sum_y.T - intersection
+        s_ij = intersection / (union + 1e-8)
+        s_ij = torch.where(union == 0, torch.ones_like(s_ij), s_ij)
     else:
-        relevance = (labels.view(-1, 1) == labels.view(1, -1)).float()
+        s_ij = (labels.view(-1, 1) == labels.view(1, -1)).float()
 
-    target = relevance * 2.0 - 1.0
-    similarity_loss = F.mse_loss(code_similarity, target)
+    similarity_loss = F.mse_loss(code_sim_01, s_ij)
     quantization = torch.mean((soft_codes.abs() - 1.0) ** 2)
     total = similarity_loss + quantization_weight * quantization
     return total, similarity_loss, quantization

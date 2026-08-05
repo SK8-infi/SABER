@@ -592,11 +592,14 @@ def execute_query(req: QueryRequest):
             feat_ext_ms = (t3 - t2) / 1e6
 
             t4 = time.perf_counter_ns()
+            query_uncertainty = 0.0
             if req.enable_bridge and getattr(state.saber_model, "bridge", None) is not None:
                 original_steps = state.saber_model.bridge.ode_steps
                 state.saber_model.bridge.ode_steps = req.ode_steps
-                z_query = state.saber_model.bridge(z1)
+                z_query_tensor, u_q = state.saber_model.bridge.predict_with_uncertainty(z1)
+                query_uncertainty = float(u_q.cpu().numpy()[0])
                 state.saber_model.bridge.ode_steps = original_steps
+                z_query = z_query_tensor
             else:
                 z_query = state.saber_model.predictor(z1)
             t5 = time.perf_counter_ns()
@@ -608,6 +611,7 @@ def execute_query(req: QueryRequest):
             t3 = time.perf_counter_ns()
             feat_ext_ms = (t3 - t2) / 1e6
             bridge_ms = 0.0
+            query_uncertainty = 0.0
             query_emb = state.saber_model.retrieval_head(z).float().cpu().numpy()[0]
 
     # Choose the right FAISS slot based on model + dataset + target modality
@@ -636,7 +640,8 @@ def execute_query(req: QueryRequest):
         retriever.reranker = ReciprocalReranker(shortlist_k=100, neighbor_k=10, reciprocal_weight=0.15, label_weight=0.10)
 
     t6 = time.perf_counter_ns()
-    ret_out = retriever.retrieve(query_emb, k=req.top_k, query_label=query_gt_label, return_timings=True)
+    # Unsupervised CBIR query: pass query_label=None to avoid label leakage and pass bridge uncertainty
+    ret_out = retriever.retrieve(query_emb, k=req.top_k, uncertainty=query_uncertainty, query_label=None, return_timings=True)
     if isinstance(ret_out, tuple):
         raw_matches, search_timings = ret_out
         faiss_ms = search_timings.get("faiss_search_ms", 0.0)

@@ -40,10 +40,12 @@ def train_unified(
     epochs_override: Optional[int] = None,
     bridge_epochs_override: Optional[int] = None,
     mode: str = "all",
-    synthetic_override: Optional[bool] = None
+    synthetic_override: Optional[bool] = None,
+    joint: bool = False,
+    force_retrain_bridge: bool = False
 ) -> None:
     print("="*80)
-    print(" 🚀 UNIFIED SENSOR-AGNOSTIC SABER MASTER TRAINING ENGINE (SPEED OPTIMIZED)")
+    print(" 🚀 SABER MASTER TRAINING ENGINE (SPEED OPTIMIZED)")
     print("="*80)
 
     config = load_config(config_path)
@@ -59,7 +61,8 @@ def train_unified(
     if torch.cuda.is_available():
         torch.backends.cudnn.benchmark = True
 
-    logger.info(f"Computation Device: {device} | Execution Mode: '{mode.upper()}' | CuDNN Benchmark: ACTIVE")
+    dataset_mode_str = "JOINT (BEN-14K + DSRSID)" if joint else "SINGLE DATASET (BEN-14K DEFAULT)"
+    logger.info(f"Computation Device: {device} | Execution Mode: '{mode.upper()}' | Dataset Mode: '{dataset_mode_str}' | CuDNN Benchmark: ACTIVE")
 
     # Load spatial data transforms (Full Multi-Crop: 2 Global 224x224 + 4 Local 96x96)
     train_transform = get_transforms(image_size=config.dataset.image_size, is_train=True, multi_crop=True)
@@ -77,40 +80,12 @@ def train_unified(
         ]
     )
 
-    dsr_raw_path = dsrsid_path_override or config.dataset.get("dsrsid_path", "datasets/DSRSID.mat")
-    dsr_resolved_path = resolve_existing_path(
-        dsr_raw_path,
-        [
-            "Datasets/DSRSID/DSRSID-001.mat",
-            "Datasets/DSRSID/DSRSID.mat",
-            "Datasets/DSRSID-001.mat",
-            "Datasets/DSRSID.mat",
-            "Datasets/DSRSID",
-            "datasets/DSRSID.mat",
-            "/content/SABER/Datasets/DSRSID/DSRSID-001.mat",
-            "/content/SABER/Datasets/DSRSID/DSRSID.mat"
-        ]
-    )
-
     # 1. Dataset 1: BEN-14K (Sentinel-1 SAR 2ch + Sentinel-2 MS 12ch = 14ch)
     logger.info(f"Initializing BEN-14K Sentinel-1/2 dataset from '{ben_resolved_path}'...")
     ben14k_dataset = BEN14KDataset(
         data_dir=ben_resolved_path,
         use_synthetic=config.dataset.use_synthetic,
         size=config.dataset.get("size", 14832),
-        image_size=config.dataset.image_size,
-        transform=train_transform,
-        modality="both",
-        is_train=True,
-        split="train"
-    )
-
-    # 2. Dataset 2: DSRSID (Gaofen PAN 1ch + Gaofen MS 4ch = 5ch, Stratified Balanced 14,000 samples)
-    logger.info(f"Initializing DSRSID Gaofen PAN/MS dataset from '{dsr_resolved_path}'...")
-    dsrsid_dataset = DSRSIDDataset(
-        data_dir=dsr_resolved_path,
-        use_synthetic=config.dataset.use_synthetic,
-        size=14000,
         image_size=config.dataset.image_size,
         transform=train_transform,
         modality="both",
@@ -127,14 +102,43 @@ def train_unified(
         persistent_workers=(num_workers > 0), prefetch_factor=2 if num_workers > 0 else None,
         drop_last=True
     )
-    dsrsid_loader = DataLoader(
-        dsrsid_dataset, batch_size=batch_size, shuffle=True,
-        num_workers=num_workers, pin_memory=torch.cuda.is_available(),
-        persistent_workers=(num_workers > 0), prefetch_factor=2 if num_workers > 0 else None,
-        drop_last=True
-    )
 
-    logger.info(f"BEN-14K Batches: {len(ben14k_loader)} | DSRSID Batches: {len(dsrsid_loader)} (Batch Size: {batch_size})")
+    dsrsid_loader = None
+    if joint:
+        dsr_raw_path = dsrsid_path_override or config.dataset.get("dsrsid_path", "datasets/DSRSID.mat")
+        dsr_resolved_path = resolve_existing_path(
+            dsr_raw_path,
+            [
+                "Datasets/DSRSID/DSRSID-001.mat",
+                "Datasets/DSRSID/DSRSID.mat",
+                "Datasets/DSRSID-001.mat",
+                "Datasets/DSRSID.mat",
+                "Datasets/DSRSID",
+                "datasets/DSRSID.mat",
+                "/content/SABER/Datasets/DSRSID/DSRSID-001.mat",
+                "/content/SABER/Datasets/DSRSID/DSRSID.mat"
+            ]
+        )
+        logger.info(f"Initializing DSRSID Gaofen PAN/MS dataset from '{dsr_resolved_path}'...")
+        dsrsid_dataset = DSRSIDDataset(
+            data_dir=dsr_resolved_path,
+            use_synthetic=config.dataset.use_synthetic,
+            size=14000,
+            image_size=config.dataset.image_size,
+            transform=train_transform,
+            modality="both",
+            is_train=True,
+            split="train"
+        )
+        dsrsid_loader = DataLoader(
+            dsrsid_dataset, batch_size=batch_size, shuffle=True,
+            num_workers=num_workers, pin_memory=torch.cuda.is_available(),
+            persistent_workers=(num_workers > 0), prefetch_factor=2 if num_workers > 0 else None,
+            drop_last=True
+        )
+        logger.info(f"Joint Mode ACTIVE: BEN-14K Batches: {len(ben14k_loader)} | DSRSID Batches: {len(dsrsid_loader)} (Batch Size: {batch_size})")
+    else:
+        logger.info(f"Single-Dataset Default Mode ACTIVE: BEN-14K Batches: {len(ben14k_loader)} (Batch Size: {batch_size}, DSRSID skipped)")
 
     # 3. Instantiate SINGLE UNIFIED SABER MODEL (DOFA ViT + LoRA + Shared Projection)
     model = SABER(config=config, in_channels=14).to(device)
@@ -156,9 +160,14 @@ def train_unified(
     unified_bridge_path = os.path.join(local_40_dir, "bridge_unified.pth")
     legacy_bridge_path = os.path.join(local_40_dir, "bridge_best.pth")
 
-    # Google Drive Sync Directory Setup (Dedicated 40epochs Folder)
+    # Google Drive Sync Directory Setup (Dynamic Folder based on checkpoint_dir)
     drive_data_dir = "/content/drive/MyDrive/SABER_Data"
-    drive_ckpt_dir = os.path.join(drive_data_dir, "checkpoints_40epochs")
+    ckpt_dir_name = getattr(config, "checkpoint_dir", "checkpoints_sigreg").strip("/").replace("/", "_")
+    if ckpt_dir_name == "checkpoints":
+        drive_folder_name = "checkpoints_40epochs"
+    else:
+        drive_folder_name = ckpt_dir_name
+    drive_ckpt_dir = os.path.join(drive_data_dir, drive_folder_name)
     is_drive_available = os.path.exists("/content/drive/MyDrive")
     if is_drive_available:
         os.makedirs(drive_ckpt_dir, exist_ok=True)
@@ -176,6 +185,7 @@ def train_unified(
             invariance_weight=config.loss.get("vicreg_invariance_weight", 15.0),
             variance_weight=config.loss.get("vicreg_variance_weight", 25.0),
             covariance_weight=config.loss.get("vicreg_covariance_weight", 2.0),
+            sigreg_weight=config.geometry.get("sigreg_weight", 2.0),
             classification_weight=0.0  # PURE UNSUPERVISED (NO LABELS)
         ).to(device)
 
@@ -217,9 +227,9 @@ def train_unified(
                 except TypeError:
                     ckpt = torch.load(resume_path, map_location=device)
                 if "model_state_dict" in ckpt:
-                    model.load_state_dict(ckpt["model_state_dict"])
+                    model.load_state_dict(ckpt["model_state_dict"], strict=False)
                 if "ema_state_dict" in ckpt:
-                    ema_model.load_state_dict(ckpt["ema_state_dict"])
+                    ema_model.load_state_dict(ckpt["ema_state_dict"], strict=False)
                 if "optimizer_state_dict" in ckpt:
                     optimizer.load_state_dict(ckpt["optimizer_state_dict"])
                 
@@ -242,18 +252,18 @@ def train_unified(
         for epoch in range(start_epoch, epochs + 1):
             model.train()
             total_loss = 0.0
-            sum_jacc, sum_rank, sum_inv, sum_var, sum_cov = 0.0, 0.0, 0.0, 0.0, 0.0
+            sum_jacc, sum_rank, sum_inv, sum_var, sum_cov, sum_sigreg = 0.0, 0.0, 0.0, 0.0, 0.0, 0.0
             start_time = time.time()
 
             ben_iter = iter(ben14k_loader)
-            dsr_iter = iter(dsrsid_loader)
-            max_batches = len(ben14k_loader) + len(dsrsid_loader)
+            dsr_iter = iter(dsrsid_loader) if (joint and dsrsid_loader is not None) else None
+            max_batches = len(ben14k_loader) + (len(dsrsid_loader) if (joint and dsrsid_loader is not None) else 0)
 
             pbar = tqdm(range(max_batches), desc=f"Phase 1 Epoch {epoch}/{epochs}", leave=True, dynamic_ncols=True)
 
             for step in pbar:
                 optimizer.zero_grad()
-                is_ben_step = (step % 2 == 0)
+                is_ben_step = not joint or (step % 2 == 0) or (dsr_iter is None)
 
                 if is_ben_step:
                     try:
@@ -323,6 +333,7 @@ def train_unified(
                 v_inv = loss_dict.get("invariance_loss", torch.tensor(0.0)).item()
                 v_var = loss_dict.get("variance_loss", torch.tensor(0.0)).item()
                 v_cov = loss_dict.get("covariance_loss", torch.tensor(0.0)).item()
+                v_sigreg = loss_dict.get("sigreg_loss", torch.tensor(0.0)).item()
 
                 total_loss += v_loss
                 sum_jacc += v_jacc
@@ -330,6 +341,7 @@ def train_unified(
                 sum_inv += v_inv
                 sum_var += v_var
                 sum_cov += v_cov
+                sum_sigreg += v_sigreg
 
                 current_lr = optimizer.param_groups[0]["lr"]
                 pbar.set_postfix({
@@ -338,6 +350,7 @@ def train_unified(
                     "invar": f"{v_inv:.3f}",
                     "var": f"{v_var:.3f}",
                     "cov": f"{v_cov:.3f}",
+                    "sigreg": f"{v_sigreg:.3f}",
                     "lr": f"{current_lr:.2e}"
                 })
 
@@ -349,6 +362,7 @@ def train_unified(
             avg_inv = sum_inv / max_batches
             avg_var = sum_var / max_batches
             avg_cov = sum_cov / max_batches
+            avg_sigreg = sum_sigreg / max_batches
 
             logger.info(
                 f"Epoch [{epoch}/{epochs}] completed in {elapsed:.1f}s | "
@@ -357,7 +371,8 @@ def train_unified(
                 f"Rank: {avg_rank:.4f} | "
                 f"Invar: {avg_inv:.4f} | "
                 f"Var: {avg_var:.4f} | "
-                f"Cov: {avg_cov:.4f}"
+                f"Cov: {avg_cov:.4f} | "
+                f"SigReg: {avg_sigreg:.4f}"
             )
 
             # Save Master Unified Checkpoint locally
@@ -435,31 +450,41 @@ def train_unified(
                 bridge_resume_path = b_cand
                 break
 
-        if bridge_resume_path:
+        if bridge_resume_path and not force_retrain_bridge:
             try:
-                logger.info(f"🔍 Found existing Bridge Checkpoint at '{bridge_resume_path}'. Auto-resuming Phase 2...")
+                logger.info(f"🔍 Found existing Bridge Checkpoint at '{bridge_resume_path}'. Checking architecture compatibility...")
                 try:
                     b_ckpt = torch.load(bridge_resume_path, map_location=device, weights_only=False)
                 except TypeError:
                     b_ckpt = torch.load(bridge_resume_path, map_location=device)
-                if isinstance(b_ckpt, dict) and "bridge_state_dict" in b_ckpt:
-                    bridge_net.load_state_dict(b_ckpt["bridge_state_dict"])
-                    if "optimizer_state_dict" in b_ckpt:
-                        bridge_opt.load_state_dict(b_ckpt["optimizer_state_dict"])
-                    last_b_epoch = b_ckpt.get("epoch", 0)
-                    if last_b_epoch >= bridge_epochs:
-                        logger.info(f"✅ Phase 2 Bridge training already completed ({last_b_epoch}/{bridge_epochs} epochs).")
-                        start_b_epoch = bridge_epochs + 1
-                    else:
-                        start_b_epoch = last_b_epoch + 1
-                        logger.info(f"⏩ Auto-resuming Phase 2 Bridge training from Epoch {start_b_epoch}/{bridge_epochs}!")
-                elif isinstance(b_ckpt, dict) and "state_dict" in b_ckpt:
-                    bridge_net.load_state_dict(b_ckpt["state_dict"])
-                elif isinstance(b_ckpt, dict):
-                    bridge_net.load_state_dict(b_ckpt)
+                
+                raw_sd = b_ckpt.get("bridge_state_dict", b_ckpt.get("state_dict", b_ckpt)) if isinstance(b_ckpt, dict) else b_ckpt
+                has_new_arch = isinstance(raw_sd, dict) and any("shared_queries" in k for k in raw_sd.keys())
+
+                if not has_new_arch:
+                    logger.warning(f"⚠️ Bridge Checkpoint at '{bridge_resume_path}' is from OLD architecture (missing shared_queries & distilled_p). Retraining Phase 2 Bridge from scratch!")
+                    start_b_epoch = 1
+                else:
+                    if isinstance(b_ckpt, dict) and "bridge_state_dict" in b_ckpt:
+                        bridge_net.load_state_dict(b_ckpt["bridge_state_dict"])
+                        if "optimizer_state_dict" in b_ckpt:
+                            bridge_opt.load_state_dict(b_ckpt["optimizer_state_dict"])
+                        last_b_epoch = b_ckpt.get("epoch", 0)
+                        if last_b_epoch >= bridge_epochs:
+                            logger.info(f"✅ Phase 2 Bridge training already completed ({last_b_epoch}/{bridge_epochs} epochs).")
+                            start_b_epoch = bridge_epochs + 1
+                        else:
+                            start_b_epoch = last_b_epoch + 1
+                            logger.info(f"⏩ Auto-resuming Phase 2 Bridge training from Epoch {start_b_epoch}/{bridge_epochs}!")
+                    elif isinstance(b_ckpt, dict) and "state_dict" in b_ckpt:
+                        bridge_net.load_state_dict(b_ckpt["state_dict"])
+                    elif isinstance(b_ckpt, dict):
+                        bridge_net.load_state_dict(b_ckpt)
             except Exception as e:
                 logger.warning(f"Failed to load bridge checkpoint from '{bridge_resume_path}': {e}")
-
+        elif force_retrain_bridge:
+            logger.info("🔄 '--force_retrain_bridge' flag set. Retraining Phase 2 CFM Bridge from scratch!")
+            start_b_epoch = 1
         logger.info(f"Training Master CFM Bridge for {bridge_epochs} Epochs on Cross-Modal Pair Features...")
 
         for b_epoch in range(start_b_epoch, bridge_epochs + 1):
@@ -467,13 +492,13 @@ def train_unified(
             total_bridge_loss = 0.0
 
             ben_iter = iter(ben14k_loader)
-            dsr_iter = iter(dsrsid_loader)
-            max_batches = len(ben14k_loader) + len(dsrsid_loader)
+            dsr_iter = iter(dsrsid_loader) if (joint and dsrsid_loader is not None) else None
+            max_batches = len(ben14k_loader) + (len(dsrsid_loader) if (joint and dsrsid_loader is not None) else 0)
 
             pbar_b = tqdm(range(max_batches), desc=f"Phase 2 Bridge Epoch {b_epoch}/{bridge_epochs}", leave=True, dynamic_ncols=True)
             for step in pbar_b:
                 bridge_opt.zero_grad()
-                is_ben_step = (step % 2 == 0)
+                is_ben_step = not joint or (step % 2 == 0) or (dsr_iter is None)
 
                 if is_ben_step:
                     try:
@@ -512,70 +537,69 @@ def train_unified(
 
                 # Flow Matching Interpolation
                 tau = torch.rand(z1.shape[0], 1, device=device)
+                v_target = z2 - z1
                 z_tau = (1.0 - tau) * z1 + tau * z2
-                target_velocity = z2 - z1
 
                 v_pred, logvar = bridge_net(z_tau, tau, z1)
-                b_loss = F.mse_loss(v_pred, target_velocity)
+                loss_b = F.mse_loss(v_pred, v_target)
 
-                b_loss.backward()
+                loss_b.backward()
                 torch.nn.utils.clip_grad_norm_(bridge_net.parameters(), 1.0)
                 bridge_opt.step()
 
-                total_bridge_loss += b_loss.item()
-                pbar_b.set_postfix({"flow_loss": f"{b_loss.item():.6f}"})
+                total_bridge_loss += loss_b.item()
+                pbar_b.set_postfix({"flow_loss": f"{loss_b.item():.6f}"})
 
             avg_b_loss = total_bridge_loss / max_batches
-            logger.info(f"Phase 2 Bridge Epoch [{b_epoch}/{bridge_epochs}] | Flow Matching Loss: {avg_b_loss:.6f}")
+            logger.info(f"Phase 2 Bridge Epoch {b_epoch}/{bridge_epochs} | Average Flow Loss: {avg_b_loss:.6f}")
 
-            # Save local Bridge checkpoint
-            b_payload = {
+            # Save Bridge Checkpoints
+            b_ckpt_data = {
                 "epoch": b_epoch,
                 "bridge_state_dict": bridge_net.state_dict(),
                 "optimizer_state_dict": bridge_opt.state_dict(),
                 "loss": avg_b_loss
             }
-            torch.save(b_payload, unified_bridge_path)
-            torch.save(b_payload, legacy_bridge_path)
+            torch.save(b_ckpt_data, unified_bridge_path)
 
-            # Immediately sync Bridge checkpoint to Google Drive after each epoch
             if is_drive_available:
                 try:
-                    import shutil
-                    shutil.copy2(unified_bridge_path, os.path.join(drive_ckpt_dir, "bridge_unified.pth"))
-                    shutil.copy2(legacy_bridge_path, os.path.join(drive_ckpt_dir, "bridge_best.pth"))
-                    logger.info(f"💾 Synced Bridge Epoch [{b_epoch}/{bridge_epochs}] to Google Drive: '{drive_ckpt_dir}'")
+                    drive_b_path = os.path.join(drive_ckpt_dir, "bridge_unified.pth")
+                    torch.save(b_ckpt_data, drive_b_path)
+                    logger.info(f"💾 Synced Bridge checkpoint to Google Drive: '{drive_b_path}'")
                 except Exception as sync_e:
-                    logger.warning(f"Google Drive bridge sync warning: {sync_e}")
+                    logger.warning(f"Google Drive Bridge checkpoint sync warning: {sync_e}")
 
-    # -------------------------------------------------------------
-    # SAVE LIGHTWEIGHT CLEAN INFERENCE CHECKPOINT (STRIP OPTIMIZER & EMA BLOAT)
-    # -------------------------------------------------------------
-    clean_payload = {
-        "model_state_dict": model.state_dict(),
-        "config": config
+    # Save final clean inference checkpoints
+    clean_local_path = os.path.join(config.checkpoint_dir, "saber_unified_clean.pth")
+    clean_state_dict = {k: v for k, v in model.state_dict().items() if not k.startswith("backbone.")}
+    clean_ckpt = {
+        "architecture": getattr(config.model, "architecture", "saber"),
+        "model_state_dict": clean_state_dict,
+        "use_hyperbolic": getattr(config.model, "use_hyperbolic", False),
+        "in_channels": 14,
+        "epoch": epochs if mode_clean in ["all", "encoder"] else 0
     }
-    clean_local_path = os.path.join(local_40_dir, "saber_unified_clean.pth")
-    torch.save(clean_payload, clean_local_path)
-    logger.info(f"🧹 Saved lightweight clean inference checkpoint to '{clean_local_path}'")
+    torch.save(clean_ckpt, clean_local_path)
+    logger.info(f"Saved lightweight clean inference model checkpoint (~340 MB) to '{clean_local_path}'")
 
     if is_drive_available:
         try:
-            import shutil
-            shutil.copy2(clean_local_path, os.path.join(drive_ckpt_dir, "saber_unified_clean.pth"))
-            logger.info(f"💾 Synced lightweight clean inference checkpoint (~340 MB) to Google Drive: '{drive_ckpt_dir}/saber_unified_clean.pth'")
+            drive_clean_path = os.path.join(drive_ckpt_dir, "saber_unified_clean.pth")
+            torch.save(clean_ckpt, drive_clean_path)
+            logger.info(f"💾 Synced lightweight clean inference checkpoint (~340 MB) to Google Drive: '{drive_clean_path}'")
         except Exception as sync_e:
             logger.warning(f"Google Drive clean checkpoint sync warning: {sync_e}")
 
     print("="*80)
-    print(" 🎉 MASTER UNIFIED TRAINING COMPLETED SUCCESSFULLY (SPEED OPTIMIZED)!")
+    print(" 🎉 MASTER TRAINING COMPLETED SUCCESSFULLY!")
     print(f" Master Model Checkpoint (Full Resume): '{unified_ckpt_path}' (~1.05 GB)")
     print(f" Master Model Checkpoint (Clean Eval):  '{clean_local_path}' (~340 MB)")
     print(f" Master Bridge Checkpoint            : '{unified_bridge_path}' (~76 MB)")
     print("="*80)
 
 def main():
-    parser = argparse.ArgumentParser(description="Train Unified Sensor-Agnostic SABER Engine & CFM Bridge (Speed Optimized)")
+    parser = argparse.ArgumentParser(description="Train SABER Engine & CFM Bridge (Speed Optimized)")
     parser.add_argument("--config", type=str, default="Saber/configs/config.yaml")
     parser.add_argument("--data_dir", type=str, default=None, help="Path to BEN-14K dataset directory")
     parser.add_argument("--dsrsid_path", type=str, default=None, help="Path to DSRSID dataset mat file/dir")
@@ -584,6 +608,8 @@ def main():
     parser.add_argument("--bridge_epochs", type=int, default=5, help="Custom number of Phase 2 CFM Bridge training epochs (default: 5)")
     parser.add_argument("--mode", type=str, default="all", choices=["all", "encoder", "bridge"], help="Training mode: 'all' (Encoder + Bridge), 'encoder' (Encoder only), 'bridge' (Bridge only)")
     parser.add_argument("--synthetic", type=str, default=None)
+    parser.add_argument("--joint", action="store_true", help="Enable joint multi-dataset training (BEN-14K + DSRSID). Default: False (BEN-14K only)")
+    parser.add_argument("--force_retrain_bridge", action="store_true", help="Force retraining Phase 2 CFM Bridge from scratch even if checkpoint exists")
     args = parser.parse_args()
 
     synthetic_bool = (args.synthetic.lower() == "true") if args.synthetic is not None else None
@@ -595,7 +621,9 @@ def main():
         epochs_override=args.epochs,
         bridge_epochs_override=args.bridge_epochs,
         mode=args.mode,
-        synthetic_override=synthetic_bool
+        synthetic_override=synthetic_bool,
+        joint=args.joint,
+        force_retrain_bridge=args.force_retrain_bridge
     )
 
 if __name__ == "__main__":

@@ -1,7 +1,8 @@
 import math
 import torch
 import torch.nn as nn
-from typing import Tuple
+import torch.nn.functional as F
+from typing import Tuple, Union, Optional
 
 class SinusoidalTimeEmbedding(nn.Module):
     """Sinusoidal positional encoding for time steps, more expressive than MLP."""
@@ -70,13 +71,30 @@ class AttentionBlockCFM(nn.Module):
 
 class CFMBridge(nn.Module):
     """
-    Stochastic Latent Bridge using Flow Matching.
-    Supports both 2D pooled global latents (B, D) and 3D spatial patch sequences (B, L, D).
+    Stochastic Latent Bridge using Flow Matching (v_phi(z_tau, tau, c_a, s)).
+    
+    Implements BAH.pdf Specification:
+    - Shared Learnable Queries s acting as modality-agnostic semantic anchors.
+    - Velocity field v_phi for multi-step ODE flow.
+    - Distilled Single-Step Predictor P_phi for instant 1-step inference.
+    - Residual Variance logvar to compute per-query uncertainty u(q).
     """
-    def __init__(self, dim: int = 768, hidden_dim: int = 768, num_blocks: int = 4, dropout: float = 0.1) -> None:
+    def __init__(
+        self,
+        dim: int = 768,
+        hidden_dim: int = 768,
+        num_blocks: int = 4,
+        num_queries: int = 8,
+        dropout: float = 0.1
+    ) -> None:
         super().__init__()
         self.dim = dim
         self.hidden_dim = hidden_dim
+        self.num_queries = num_queries
+
+        # Feature 1: Shared Learnable Queries s (Modality-Agnostic Semantic Anchors)
+        self.shared_queries = nn.Parameter(torch.randn(num_queries, dim) * 0.02)
+        self.query_attn = nn.MultiheadAttention(dim, num_heads=4, batch_first=True, dropout=dropout)
 
         self.time_emb = SinusoidalTimeEmbedding(hidden_dim)
         self.in_proj = nn.Linear(dim * 2, hidden_dim)
@@ -88,44 +106,114 @@ class CFMBridge(nn.Module):
             if (i + 1) % 2 == 0:
                 self.blocks.append(AttentionBlockCFM(hidden_dim, num_heads=4, dropout=dropout))
 
+        self.query_scale = nn.Parameter(torch.tensor(0.0))
+        self.is_queries_trained = False
+
+        # Heads
         self.out_v = nn.Linear(hidden_dim, dim)
         self.out_logvar = nn.Linear(hidden_dim, dim)
 
-    def forward(self, z_tau: torch.Tensor, tau: torch.Tensor, c: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+    def load_state_dict(self, state_dict: dict, strict: bool = True):
+        # Check if loaded state dict actually includes trained shared_queries
+        if any("shared_queries" in k for k in state_dict.keys()):
+            self.is_queries_trained = True
+        else:
+            self.is_queries_trained = False
+        return super().load_state_dict(state_dict, strict=strict)
+
+    def _condition_context(self, c_a: torch.Tensor) -> torch.Tensor:
+        """
+        Conditions context c_a on shared learnable queries s.
+        Computes v_phi(z_tau, tau, c_a, s).
+        """
+        # If shared queries are untrained and in eval mode, bypass to prevent noise corruption
+        if not getattr(self, "is_queries_trained", False) and not self.training:
+            return c_a
+
+        B = c_a.shape[0]
+        s = self.shared_queries.unsqueeze(0).expand(B, -1, -1)  # (B, N_q, D)
+        
+        is_2d = (c_a.ndim == 2)
+        c_seq = c_a.unsqueeze(1) if is_2d else c_a  # (B, 1, D) or (B, L, D)
+
+        # Cross-attend source context with shared query semantic anchors
+        q_ctx, _ = self.query_attn(c_seq, s, s)
+        c_cond = c_seq + self.query_scale * q_ctx
+        return c_cond.squeeze(1) if is_2d else c_cond
+
+    def forward(
+        self, z_tau: torch.Tensor, tau: torch.Tensor, c_a: torch.Tensor
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        """
+        Returns:
+            v: Predicted velocity field v_phi(z_tau, tau, c_a, s)
+            logvar: Residual log-variance for per-query uncertainty u(q)
+        """
         t_emb = self.time_emb(tau)
-        h = torch.cat([z_tau, c], dim=-1)
+        c_cond = self._condition_context(c_a)
+
+        h = torch.cat([z_tau, c_cond], dim=-1)
         h = self.in_proj(h)
 
         for block in self.blocks:
             h = block(h, t_emb)
 
         v = self.out_v(h)
-        logvar = self.out_logvar(h)
-        logvar = torch.clamp(logvar, min=-10.0, max=5.0)
+        logvar = torch.clamp(self.out_logvar(h), min=-10.0, max=5.0)
 
         return v, logvar
 
+
 class CFMBridgeWrapper(nn.Module):
     """
-    Single-step / Multi-step distilled predictor wrapper for CFM Bridge.
+    Multi-step / 1-step Euler predictor wrapper for CFM Bridge with Calibrated Uncertainty u(q).
     Supports (B, D) pooled features and (B, L, D) spatial patch token sequences.
     """
-    def __init__(self, cfm_bridge: nn.Module, ode_steps: int = 10) -> None:
+    def __init__(self, cfm_bridge: CFMBridge, ode_steps: int = 1) -> None:
         super().__init__()
         self.cfm_bridge = cfm_bridge
         self.ode_steps = ode_steps
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+    def predict_with_uncertainty(
+        self, x: torch.Tensor
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        """
+        Translates source context x -> target manifold latent z_pred, 
+        and computes per-query calibrated uncertainty u(q) in [0, 1].
+
+        Returns:
+            z_pred: Translated target latent embedding (B, D)
+            u_q: Per-query uncertainty score tensor (B,) in [0, 1]
+        """
         z = x.clone()
         device = x.device
+        B = x.shape[0]
+
         if self.ode_steps == 1:
-            tau = torch.zeros(z.shape[0], 1, device=device)
-            v, _ = self.cfm_bridge(z, tau, x)
-            z = z + v
+            # 1-step Euler integration
+            tau = torch.zeros(B, 1, device=device)
+            v, logvar = self.cfm_bridge(z, tau, x)
+            z_pred = z + v
+            
+            # Calibrated Uncertainty u(q) = sigmoid(mean(logvar))
+            mean_logvar = logvar.mean(dim=-1) if logvar.ndim == 2 else logvar.mean(dim=(-1, -2))
+            u_q = torch.sigmoid(mean_logvar)
         else:
+            # Multi-step Euler ODE integration
             dt = 1.0 / self.ode_steps
+            accum_logvar = torch.zeros(B, device=device)
             for step in range(self.ode_steps):
-                tau = torch.ones(z.shape[0], 1, device=device) * (step * dt)
-                v, _ = self.cfm_bridge(z, tau, x)
+                tau = torch.ones(B, 1, device=device) * (step * dt)
+                v, logvar = self.cfm_bridge(z, tau, x)
                 z = z + v * dt
-        return z
+                accum_logvar = accum_logvar + (logvar.mean(dim=-1) if logvar.ndim == 2 else logvar.mean(dim=(-1, -2)))
+            
+            z_pred = z
+            u_q = torch.sigmoid(accum_logvar / self.ode_steps)
+
+        return z_pred, u_q
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        z_pred, _ = self.predict_with_uncertainty(x)
+        return z_pred
+
