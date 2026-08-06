@@ -243,7 +243,7 @@ def train_unified(
         for epoch in range(start_epoch, epochs + 1):
             model.train()
             total_loss = 0.0
-            sum_jacc, sum_rank, sum_inv, sum_var, sum_cov, sum_sigreg = 0.0, 0.0, 0.0, 0.0, 0.0, 0.0
+            sum_jacc, sum_rank, sum_inv, sum_var, sum_cov, sum_sigreg, sum_infonce = 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0
             start_time = time.time()
 
             ben_iter = iter(ben14k_loader)
@@ -325,6 +325,7 @@ def train_unified(
                 v_var = loss_dict.get("variance_loss", torch.tensor(0.0)).item()
                 v_cov = loss_dict.get("covariance_loss", torch.tensor(0.0)).item()
                 v_sigreg = loss_dict.get("sigreg_loss", torch.tensor(0.0)).item()
+                v_infonce = loss_dict.get("infonce_loss", torch.tensor(0.0)).item()
 
                 total_loss += v_loss
                 sum_jacc += v_jacc
@@ -333,11 +334,12 @@ def train_unified(
                 sum_var += v_var
                 sum_cov += v_cov
                 sum_sigreg += v_sigreg
+                sum_infonce += v_infonce
 
                 current_lr = optimizer.param_groups[0]["lr"]
                 pbar.set_postfix({
                     "loss": f"{v_loss:.4f}",
-                    "jacc": f"{v_jacc:.3f}",
+                    "infonce": f"{v_infonce:.3f}",
                     "invar": f"{v_inv:.3f}",
                     "var": f"{v_var:.3f}",
                     "cov": f"{v_cov:.3f}",
@@ -354,12 +356,12 @@ def train_unified(
             avg_var = sum_var / max_batches
             avg_cov = sum_cov / max_batches
             avg_sigreg = sum_sigreg / max_batches
+            avg_infonce = sum_infonce / max_batches
 
             logger.info(
                 f"Epoch [{epoch}/{epochs}] completed in {elapsed:.1f}s | "
                 f"Loss: {avg_loss:.4f} | "
-                f"Jacc: {avg_jacc:.4f} | "
-                f"Rank: {avg_rank:.4f} | "
+                f"InfoNCE: {avg_infonce:.4f} | "
                 f"Invar: {avg_inv:.4f} | "
                 f"Var: {avg_var:.4f} | "
                 f"Cov: {avg_cov:.4f} | "
