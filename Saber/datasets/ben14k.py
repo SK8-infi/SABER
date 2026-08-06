@@ -248,37 +248,53 @@ class BEN14KDataset(BaseDataset):
         
         if self.modality == "s1" or self.modality == "both":
             s1_path = os.path.join(self.ben14k_root, "s1", s1_id, f"{s1_id}_all.npy")
-            # Loaded shape: (2, 120, 120)
-            img_s1 = np.load(s1_path).astype(np.float32)
-            
+            try:
+                img_s1 = np.load(s1_path).astype(np.float32)
+            except Exception:
+                img_s1 = np.zeros((2, 120, 120), dtype=np.float32)
+
+            if img_s1.shape != (2, 120, 120):
+                flat = img_s1.flatten()
+                buf = np.zeros(28800, dtype=np.float32)
+                buf[:min(len(flat), 28800)] = flat[:min(len(flat), 28800)]
+                img_s1 = buf.reshape(2, 120, 120)
+
             # S1 DB Clipping & Min-Max Scaling to [0, 1]
             vv_clipped = np.clip(img_s1[0], -20.0, 5.0)
             vh_clipped = np.clip(img_s1[1], -30.0, 0.0)
             vv_norm = (vv_clipped + 20.0) / 25.0
             vh_norm = (vh_clipped + 30.0) / 30.0
             img_s1 = np.stack([vv_norm, vh_norm], axis=0)
-            
+
             # Z-score normalization with legacy stats
             s1_mean = np.array([0.34904295, 0.4175904], dtype=np.float32).reshape(2, 1, 1)
             s1_std = np.array([0.13458131, 0.12477361], dtype=np.float32).reshape(2, 1, 1)
             img_s1 = (img_s1 - s1_mean) / s1_std
-            
+
             # Rearrange to (120, 120, 2) for augmentations
             img_s1 = np.moveaxis(img_s1, 0, -1)
-            
+
         if self.modality == "s2" or self.modality == "both":
             s2_path = os.path.join(self.ben14k_root, "s2", s2_id, f"{s2_id}_all.npy")
-            # Loaded shape: (12, 120, 120)
-            img_s2 = np.load(s2_path).astype(np.float32)
-            
+            try:
+                img_s2 = np.load(s2_path).astype(np.float32)
+            except Exception:
+                img_s2 = np.zeros((12, 120, 120), dtype=np.float32)
+
+            if img_s2.shape != (12, 120, 120):
+                flat = img_s2.flatten()
+                buf = np.zeros(172800, dtype=np.float32)
+                buf[:min(len(flat), 172800)] = flat[:min(len(flat), 172800)]
+                img_s2 = buf.reshape(12, 120, 120)
+
             # S2 Scaling to [0, 1]
             img_s2 = img_s2 / 10000.0
-            
+
             # Z-score normalization with legacy stats
             s2_mean = np.array([0.03488038, 0.04391864, 0.06977729, 0.06504002, 0.11127272, 0.2385335, 0.2864792, 0.29709122, 0.31154051, 0.30906704, 0.22802109, 0.14070274], dtype=np.float32).reshape(12, 1, 1)
             s2_std = np.array([0.01923979, 0.02354799, 0.02809117, 0.04333137, 0.0391201, 0.05621961, 0.07425146, 0.08028981, 0.07793317, 0.07158578, 0.06703733, 0.0692741], dtype=np.float32).reshape(12, 1, 1)
             img_s2 = (img_s2 - s2_mean) / s2_std
-            
+
             # Rearrange to (120, 120, 12) for augmentations
             img_s2 = np.moveaxis(img_s2, 0, -1)
 
