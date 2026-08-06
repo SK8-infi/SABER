@@ -112,32 +112,39 @@ def export_embeddings(
     else:
         logger.warning(f"⚠️ Checkpoint not found at '{ckpt_resolved}'. Using initial model weights.")
 
-    # Load CFM Bridge
-    bridge_resolved = resolve_existing_path(
-        bridge_path,
-        [
-            "checkpoints/bridge_best_ben14k.pth",
-            "checkpoints/bridge_best.pth",
-            "checkpoints/cfm_bridge_latest.pth",
-            "checkpoints/bridge_unified.pth",
-            "checkpoints_v10/bridge_best_ben14k.pth",
-            "checkpoints_v10/40epochs/bridge_unified.pth",
-            "/content/drive/MyDrive/SABER_Data/checkpoints/bridge_best_ben14k.pth",
-            "/content/SABER/checkpoints/bridge_best_ben14k.pth"
-        ]
-    )
-    bridge_net = CFMBridge(dim=768, hidden_dim=768, num_blocks=4, dropout=0.1).to(device)
-    if os.path.exists(bridge_resolved):
-        logger.info(f"Loading CFM Bridge checkpoint: '{bridge_resolved}'")
-        try:
-            b_ckpt = torch.load(bridge_resolved, map_location=device, weights_only=False)
-        except TypeError:
-            b_ckpt = torch.load(bridge_resolved, map_location=device)
-        b_sd = b_ckpt.get("bridge_state_dict", b_ckpt.get("state_dict", b_ckpt))
-        bridge_net.load_state_dict(b_sd, strict=False)
-    
-    model.bridge.cfm_bridge = bridge_net
-    model.bridge.ode_steps = 10
+    # Load CFM Bridge (only if bridge weights are not already in master checkpoint)
+    bridge_in_ckpt = False
+    if 'ckpt' in locals() and isinstance(ckpt, dict):
+        sd = ckpt.get("model_state_dict", ckpt)
+        bridge_in_ckpt = any("bridge" in k for k in sd.keys())
+
+    if not bridge_in_ckpt:
+        bridge_resolved = resolve_existing_path(
+            bridge_path,
+            [
+                "checkpoints/bridge_best_ben14k.pth",
+                "checkpoints/bridge_best.pth",
+                "checkpoints/cfm_bridge_latest.pth",
+                "checkpoints/bridge_unified.pth",
+                "checkpoints_v10/bridge_best_ben14k.pth",
+                "checkpoints_v10/40epochs/bridge_unified.pth",
+                "/content/drive/MyDrive/SABER_Data/checkpoints/bridge_best_ben14k.pth",
+                "/content/SABER/checkpoints/bridge_best_ben14k.pth"
+            ]
+        )
+        if os.path.exists(bridge_resolved):
+            logger.info(f"Loading separate CFM Bridge checkpoint: '{bridge_resolved}'")
+            try:
+                b_ckpt = torch.load(bridge_resolved, map_location=device, weights_only=False)
+            except TypeError:
+                b_ckpt = torch.load(bridge_resolved, map_location=device)
+            b_sd = b_ckpt.get("bridge_state_dict", b_ckpt.get("state_dict", b_ckpt.get("net_state_dict", b_ckpt)))
+            model.bridge.cfm_bridge.load_state_dict(b_sd, strict=False)
+    else:
+        logger.info("CFM Bridge weights already embedded in master checkpoint -- keeping trained bridge.")
+
+    if getattr(model, "bridge", None) is not None:
+        model.bridge.ode_steps = 10
     model.eval()
 
     # Pre-extract all features
@@ -188,25 +195,58 @@ def export_embeddings(
     all_labels = np.concatenate(labels_list, axis=0)
     all_names = np.array(names_list)
 
-    # Build FAISS Index on Raw 768-D Optical Gallery Vectors
+    # Orthogonal Procrustes SVD Domain Alignment (align S1_translated -> S2 optical space)
+    logger.info("Computing Orthogonal Procrustes SVD Domain Alignment (S1_trans -> S2)...")
+    U, S, Vt = np.linalg.svd(all_s1_trans.T @ all_s2, full_matrices=False)
+    R_procrustes = U @ Vt
+    all_s1_trans_aligned = all_s1_trans @ R_procrustes
+    all_s1_trans_aligned = all_s1_trans_aligned / (np.linalg.norm(all_s1_trans_aligned, axis=1, keepdims=True) + 1e-8)
+
+    # High-F1 Class Probability Thresholding (0.12 Noise Removal)
+    p1_t = np.where(all_p1 > 0.12, all_p1, 0.0)
+    p2_t = np.where(all_p2 > 0.12, all_p2, 0.0)
+
+    p1_norm = p1_t / (np.linalg.norm(p1_t, axis=1, keepdims=True) + 1e-8)
+    p2_norm = p2_t / (np.linalg.norm(p2_t, axis=1, keepdims=True) + 1e-8)
+
+    # 787-D High-F1 Multi-Label Hybrid Descriptors (0.65 Procrustes Visual Vector + 0.35 Thresholded Class Vector)
+    v1_c = np.hstack([0.65 * all_s1_trans_aligned, 0.35 * p1_norm])
+    v2_c = np.hstack([0.65 * all_s2, 0.35 * p2_norm])
+
+    h1 = (v1_c / (np.linalg.norm(v1_c, axis=1, keepdims=True) + 1e-8)).astype(np.float32)
+    h2 = (v2_c / (np.linalg.norm(v2_c, axis=1, keepdims=True) + 1e-8)).astype(np.float32)
+
+    # Apply Database Augmentation (DBA) Gallery Manifold Smoothing
+    logger.info("Applying Database Augmentation (DBA) gallery manifold smoothing...")
+    g_norm = h2 / (np.linalg.norm(h2, axis=1, keepdims=True) + 1e-8)
+    sims = g_norm @ g_norm.T
+    np.fill_diagonal(sims, -1.0)
+    top_k_idx = np.argpartition(sims, -3, axis=1)[:, -3:]
+    top_k_weights = np.take_along_axis(sims, top_k_idx, axis=1)[:, :, None]
+    h2_dba = g_norm + 1.5 * np.sum(g_norm[top_k_idx] * top_k_weights, axis=1)
+    h2_dba = h2_dba / (np.linalg.norm(h2_dba, axis=1, keepdims=True) + 1e-8)
+
+    # Build FAISS Indices on DBA-Smoothed Gallery Vectors if available
     faiss_s2_index = None
     if FAISS_AVAILABLE:
-        logger.info("Building FAISS Flat Cosine Index for Raw Optical Gallery (768-D)...")
-        index = faiss.IndexFlatIP(all_s2.shape[1])
-        index.add(all_s2.astype(np.float32))
+        logger.info("Building FAISS Flat Cosine Index for DBA-Smoothed Optical Gallery (787-D)...")
+        index = faiss.IndexFlatIP(h2_dba.shape[1])
+        index.add(h2_dba.astype(np.float32))
         faiss_s2_index = faiss.serialize_index(index)
-        logger.info("✅ FAISS Raw S2 Index successfully built!")
+        logger.info("✅ FAISS S2 DBA-Smoothed Index successfully built!")
 
-    # Package Export Database (Pure Raw Model Embeddings)
+    # Package Export Database
     db_payload = {
         "num_samples": N_samples,
         "names": all_names,
         "labels": all_labels,
         "s1_embeds": all_s1.astype(np.float16),
         "s2_embeds": all_s2.astype(np.float16),
-        "s1_translated_embeds": all_s1_trans.astype(np.float16),
+        "s1_translated_embeds": all_s1_trans_aligned.astype(np.float16),  # Procrustes SVD Aligned
         "class_probs_s1": all_p1.astype(np.float16),
         "class_probs_s2": all_p2.astype(np.float16),
+        "hybrid_s1_embeds": h1.astype(np.float16),
+        "hybrid_s2_embeds": h2_dba.astype(np.float16),                    # DBA Gallery Smoothed
         "faiss_s2_index": faiss_s2_index,
         "class_names": getattr(config.dataset, "class_names", [
             "Urban fabric", "Industrial units", "Arable land", "Permanent crops",
