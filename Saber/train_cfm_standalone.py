@@ -170,6 +170,7 @@ def train_cfm_standalone(
     logger.info(f"✅ Pre-extraction Complete! Cached {N_train} train pairs & {N_test} test pairs in GPU memory.")
     logger.info(f"📊 Test Evaluation Setup: {len(query_indices)} S1 Queries -> {len(gallery_indices)} S2 Gallery Items.")
 
+    best_f1_5 = 0.0
     best_map5 = 0.0
     best_bridge_path = os.path.join(save_dir, "bridge_unified.pth")
     best_ben_path = os.path.join(save_dir, "bridge_best_ben14k.pth")
@@ -239,12 +240,13 @@ def train_cfm_standalone(
             map5 = metrics5.get("map@5", metrics5.get("MAP@5", 0.0))
             prec5 = metrics5.get("precision@5", metrics5.get("PRECISION@5", 0.0))
             rec5 = metrics5.get("recall@5", metrics5.get("RECALL@5", 0.0))
+            f1_5 = metrics5.get("f1@5", metrics5.get("F1@5", (2.0 * prec5 * rec5) / (prec5 + rec5 + 1e-8)))
 
         eval_elapsed = time.time() - eval_start
 
         logger.info(
             f"Epoch [{epoch}/{epochs}] ({train_elapsed:.2f}s train, {eval_elapsed:.2f}s eval) | "
-            f"Flow MSE: {avg_loss:.6f} | mAP@5: {map5:.4f} | Prec@5: {prec5:.4f} | Rec@5: {rec5:.4f}"
+            f"Flow MSE: {avg_loss:.6f} | F1@5: {f1_5:.4f} | mAP@5: {map5:.4f} | Prec@5: {prec5:.4f} | Rec@5: {rec5:.4f}"
         )
 
         # Save checkpoint payload
@@ -253,6 +255,7 @@ def train_cfm_standalone(
             "bridge_state_dict": bridge_net.state_dict(),
             "optimizer_state_dict": optimizer.state_dict(),
             "loss": avg_loss,
+            "f1_5": f1_5,
             "map5": map5,
             "precision5": prec5,
             "recall5": rec5
@@ -261,14 +264,16 @@ def train_cfm_standalone(
         # Save latest checkpoint
         torch.save(b_ckpt_data, best_bridge_path)
 
-        if map5 > best_map5:
+        if f1_5 > best_f1_5:
+            best_f1_5 = f1_5
             best_map5 = map5
             torch.save(b_ckpt_data, best_ben_path)
-            logger.info(f"🏆 NEW BEST Cross-Modal mAP@5: {best_map5:.4f}! Saved to '{best_ben_path}'")
+            logger.info(f"🏆 NEW BEST Cross-Modal F1@5: {best_f1_5:.4f} (mAP@5: {map5:.4f})! Saved to '{best_ben_path}'")
 
     print("=" * 80)
     print(" 🎉 INSTANT CFM LATENT BRIDGE TRAINING COMPLETED SUCCESSFULLY!")
-    print(f" Best Cross-Modal mAP@5 : {best_map5:.4f}")
+    print(f" Best Cross-Modal F1@5  : {best_f1_5:.4f}")
+    print(f" Corresponding mAP@5    : {best_map5:.4f}")
     print(f" Master Bridge Checkpoint : '{best_bridge_path}'")
     print(f" Best BEN-14K Checkpoint   : '{best_ben_path}'")
     print("=" * 80)
