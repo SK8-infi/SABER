@@ -454,9 +454,9 @@ def train_unified(
         model.bridge.cfm_bridge = bridge_net
         model.bridge.ode_steps = 10
 
-        # ⚡ PRE-EXTRACT TRAIN & TEST LATENTS ONCE INTO GPU MEMORY
-        logger.info("⚡ Pre-extracting 768-D S1 (z1) & S2 (z2) latents for TRAIN set into GPU memory...")
-        train_z1_list, train_z2_list = [], []
+        # ⚡ PRE-EXTRACT TRAIN & TEST LATENTS & CLASS PROBABILITIES ONCE INTO GPU MEMORY
+        logger.info("⚡ Pre-extracting 768-D S1 (z1), S2 (z2) latents & class probabilities for TRAIN set into GPU memory...")
+        train_z1_list, train_z2_list, train_p1_list = [], [], []
         with torch.no_grad():
             for batch in tqdm(ben14k_loader, desc="Caching Train Latents", dynamic_ncols=True):
                 images = batch.get("image1", batch.get("image")).to(device, non_blocking=True)
@@ -466,22 +466,25 @@ def train_unified(
                 x_s1 = images[:, :2, :, :]
                 x_s2 = images[:, 2:, :, :]
 
-                z1_raw, z2_raw = model(x_s1, x_s2)[:2]
+                z1_raw, z2_raw, _, logits_s1, logits_s2 = model(x_s1, x_s2)
                 z1_norm = F.normalize(z1_raw, p=2, dim=-1)
                 z2_norm = F.normalize(z2_raw, p=2, dim=-1)
+                p1_sig = torch.sigmoid(logits_s1)
 
                 train_z1_list.append(z1_norm.cpu())
                 train_z2_list.append(z2_norm.cpu())
+                train_p1_list.append(p1_sig.cpu())
 
         cached_train_z1 = torch.cat(train_z1_list, dim=0).to(device)
         cached_train_z2 = torch.cat(train_z2_list, dim=0).to(device)
+        cached_train_p1 = torch.cat(train_p1_list, dim=0).to(device)
         N_train = cached_train_z1.shape[0]
 
-        logger.info("⚡ Pre-extracting 768-D S1 (z1) & S2 (z2) latents for TEST evaluation set into GPU memory...")
+        logger.info("⚡ Pre-extracting 768-D S1 (z1), S2 (z2) latents & class probabilities for TEST evaluation set into GPU memory...")
         test_dataset = BEN14KDataset(data_dir=ben_resolved_path, modality="both", split="test", is_train=False, use_synthetic=False)
         test_loader = DataLoader(test_dataset, batch_size=config.dataset.batch_size, shuffle=False, num_workers=2, pin_memory=True)
 
-        test_s1_list, test_s2_list, test_labels_list, test_names_list = [], [], [], []
+        test_s1_list, test_s2_list, test_p1_list, test_labels_list, test_names_list = [], [], [], [], []
         with torch.no_grad():
             for batch in tqdm(test_loader, desc="Caching Test Latents", dynamic_ncols=True):
                 images = batch.get("image", batch.get("image1")).to(device, non_blocking=True)
@@ -491,17 +494,20 @@ def train_unified(
                 x_s1 = images[:, :2, :, :]
                 x_s2 = images[:, 2:, :, :]
 
-                z1_raw, z2_raw = model(x_s1, x_s2)[:2]
+                z1_raw, z2_raw, _, logits_s1, logits_s2 = model(x_s1, x_s2)
                 z1_norm = F.normalize(z1_raw, p=2, dim=-1)
                 z2_norm = F.normalize(z2_raw, p=2, dim=-1)
+                p1_sig = torch.sigmoid(logits_s1)
 
                 test_s1_list.append(z1_norm.cpu())
                 test_s2_list.append(z2_norm.cpu())
+                test_p1_list.append(p1_sig.cpu())
                 test_labels_list.append(batch["label"].cpu())
                 test_names_list.extend(batch["name"])
 
         cached_test_s1 = torch.cat(test_s1_list, dim=0).to(device)
         cached_test_s2 = torch.cat(test_s2_list, dim=0).to(device)
+        cached_test_p1 = torch.cat(test_p1_list, dim=0).to(device)
         cached_test_labels = torch.cat(test_labels_list, dim=0).to(device)
         cached_test_names = np.array(test_names_list)
         N_test = cached_test_s1.shape[0]
@@ -514,6 +520,7 @@ def train_unified(
         gallery_indices = np.sort(shuffled[q_size:])
 
         test_q_s1 = cached_test_s1[query_indices]
+        test_q_p1 = cached_test_p1[query_indices]
         test_q_labels = cached_test_labels[query_indices].cpu().numpy()
         test_q_names = cached_test_names[query_indices]
 
@@ -528,7 +535,7 @@ def train_unified(
         best_map5 = 0.0
         best_ben_path = os.path.join(config.checkpoint_dir, "bridge_best_ben14k.pth")
 
-        logger.info(f"Training Master CFM Bridge for {bridge_epochs} Epochs on Cached GPU Memory Tensors...")
+        logger.info(f"Training Master Class-Conditioned CFM Bridge for {bridge_epochs} Epochs on Cached GPU Memory Tensors...")
 
         batch_size_b = config.dataset.batch_size
         num_batches_b = (N_train + batch_size_b - 1) // batch_size_b
@@ -544,6 +551,7 @@ def train_unified(
                 idx_b = perm[b_idx * batch_size_b : (b_idx + 1) * batch_size_b]
                 z1_b = cached_train_z1[idx_b]
                 z2_b = cached_train_z2[idx_b]
+                p1_b = cached_train_p1[idx_b]
                 B_curr = z1_b.shape[0]
 
                 bridge_opt.zero_grad()
@@ -552,8 +560,14 @@ def train_unified(
                 z_tau = (1.0 - tau) * z1_b + tau * z2_b
                 v_target = z2_b - z1_b
 
-                v_pred, _ = bridge_net(z_tau, tau, z1_b)
-                loss_b = F.mse_loss(v_pred, v_target)
+                v_pred, _ = bridge_net(z_tau, tau, z1_b, c_class=p1_b)
+                mse_loss = F.mse_loss(v_pred, v_target)
+
+                # Cosine Directional Alignment Loss
+                z_pred_step = z1_b + v_pred
+                cos_loss = 1.0 - F.cosine_similarity(z_pred_step, z2_b, dim=-1).mean()
+
+                loss_b = mse_loss + 0.5 * cos_loss
 
                 loss_b.backward()
                 torch.nn.utils.clip_grad_norm_(bridge_net.parameters(), 1.0)
@@ -569,7 +583,7 @@ def train_unified(
             eval_b_start = time.time()
             bridge_net.eval()
             with torch.no_grad():
-                translated_q_s1 = model.bridge(test_q_s1)
+                translated_q_s1 = model.bridge(test_q_s1, c_class=test_q_p1)
                 translated_q_s1 = F.normalize(translated_q_s1, p=2, dim=-1)
 
                 metrics5 = compute_retrieval_metrics(

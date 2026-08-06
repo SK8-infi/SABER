@@ -85,12 +85,14 @@ class CFMBridge(nn.Module):
         hidden_dim: int = 768,
         num_blocks: int = 4,
         num_queries: int = 8,
+        num_classes: int = 19,
         dropout: float = 0.1
     ) -> None:
         super().__init__()
         self.dim = dim
         self.hidden_dim = hidden_dim
         self.num_queries = num_queries
+        self.num_classes = num_classes
 
         # Feature 1: Shared Learnable Queries s (Modality-Agnostic Semantic Anchors)
         self.shared_queries = nn.Parameter(torch.randn(num_queries, dim) * 0.02)
@@ -98,6 +100,13 @@ class CFMBridge(nn.Module):
 
         self.time_emb = SinusoidalTimeEmbedding(hidden_dim)
         self.in_proj = nn.Linear(dim * 2, hidden_dim)
+
+        # Class Conditioning Projection
+        self.class_emb = nn.Sequential(
+            nn.Linear(num_classes, dim),
+            nn.GELU(),
+            nn.Linear(dim, dim)
+        )
 
         # Interleave ResBlocks with AttentionBlocks
         self.blocks = nn.ModuleList()
@@ -142,15 +151,22 @@ class CFMBridge(nn.Module):
         return c_cond.squeeze(1) if is_2d else c_cond
 
     def forward(
-        self, z_tau: torch.Tensor, tau: torch.Tensor, c_a: torch.Tensor
+        self,
+        z_tau: torch.Tensor,
+        tau: torch.Tensor,
+        c_a: torch.Tensor,
+        c_class: Optional[torch.Tensor] = None
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         """
         Returns:
-            v: Predicted velocity field v_phi(z_tau, tau, c_a, s)
+            v: Predicted velocity field v_phi(z_tau, tau, c_a, c_class, s)
             logvar: Residual log-variance for per-query uncertainty u(q)
         """
         t_emb = self.time_emb(tau)
         c_cond = self._condition_context(c_a)
+
+        if c_class is not None:
+            c_cond = c_cond + self.class_emb(c_class)
 
         h = torch.cat([z_tau, c_cond], dim=-1)
         h = self.in_proj(h)
@@ -175,7 +191,7 @@ class CFMBridgeWrapper(nn.Module):
         self.ode_steps = ode_steps
 
     def predict_with_uncertainty(
-        self, x: torch.Tensor
+        self, x: torch.Tensor, c_class: Optional[torch.Tensor] = None
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         """
         Translates source context x -> target manifold latent z_pred, 
@@ -192,7 +208,7 @@ class CFMBridgeWrapper(nn.Module):
         if self.ode_steps == 1:
             # 1-step Euler integration
             tau = torch.zeros(B, 1, device=device)
-            v, logvar = self.cfm_bridge(z, tau, x)
+            v, logvar = self.cfm_bridge(z, tau, x, c_class=c_class)
             z_pred = z + v
             
             # Calibrated Uncertainty u(q) = sigmoid(mean(logvar))
@@ -204,7 +220,7 @@ class CFMBridgeWrapper(nn.Module):
             accum_logvar = torch.zeros(B, device=device)
             for step in range(self.ode_steps):
                 tau = torch.ones(B, 1, device=device) * (step * dt)
-                v, logvar = self.cfm_bridge(z, tau, x)
+                v, logvar = self.cfm_bridge(z, tau, x, c_class=c_class)
                 z = z + v * dt
                 accum_logvar = accum_logvar + (logvar.mean(dim=-1) if logvar.ndim == 2 else logvar.mean(dim=(-1, -2)))
             
@@ -213,7 +229,7 @@ class CFMBridgeWrapper(nn.Module):
 
         return z_pred, u_q
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        z_pred, _ = self.predict_with_uncertainty(x)
+    def forward(self, x: torch.Tensor, c_class: Optional[torch.Tensor] = None) -> torch.Tensor:
+        z_pred, _ = self.predict_with_uncertainty(x, c_class=c_class)
         return z_pred
 
