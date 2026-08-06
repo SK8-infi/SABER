@@ -64,8 +64,8 @@ geometry:
   triplet_weight: 0.0      # Pure Self-Supervised Mode (No labels used during training)
   sigreg_weight: 2.0       # Empirical characteristic function regularization
   classification_weight: 0.0  # Pure Self-Supervised Mode (No labels used during training)
-  infonce_weight: 0.0      # Set > 0 (e.g. 1.0) to enable InfoNCE contrastive loss
-  infonce_temperature: 0.07 # InfoNCE temperature parameter τ
+  infonce_weight: 1.0      # Active Hybrid Self-Supervised InfoNCE Loss (100% Label-Free)
+  infonce_temperature: 0.07 # OpenAI CLIP Standard Temperature τ
 
 # Hashing Configuration (Dev 4)
 hashing:
