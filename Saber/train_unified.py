@@ -178,15 +178,16 @@ def train_unified(
     # PHASE 1: MASTER ENCODER & PROJECTION HEAD JOINT TRAINING
     # -------------------------------------------------------------
     if mode_clean in ["all", "encoder"]:
-        # 4. Instantiate Pure Unsupervised Loss (Zero Classification Weight)
         loss_fn = SaberCombinedLoss(
-            jaccard_weight=config.geometry.get("jaccard_weight", 2.0),
-            ranking_weight=config.geometry.get("ranking_weight", 1.5),
+            jaccard_weight=config.geometry.get("jaccard_weight", 0.0),
+            ranking_weight=config.geometry.get("ranking_weight", 0.0),
             invariance_weight=config.loss.get("vicreg_invariance_weight", 15.0),
             variance_weight=config.loss.get("vicreg_variance_weight", 25.0),
             covariance_weight=config.loss.get("vicreg_covariance_weight", 2.0),
             sigreg_weight=config.geometry.get("sigreg_weight", 2.0),
-            classification_weight=0.0  # PURE UNSUPERVISED (NO LABELS)
+            classification_weight=0.0,  # PURE UNSUPERVISED (NO LABELS)
+            infonce_weight=config.geometry.get("infonce_weight", 0.0),
+            infonce_temperature=config.geometry.get("infonce_temperature", 0.07)
         ).to(device)
 
         # Optimizer
