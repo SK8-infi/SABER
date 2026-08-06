@@ -88,7 +88,7 @@ train:
   weight_decay: 0.01
   epochs: 5
   grad_clip: 1.0
-  grad_accumulation_steps: 4  # Effective batch = 64 * 4 = 256
+  grad_accumulation_steps: 8  # Effective batch = 64 * 8 = 512 (matches CR-JEPA)
   amp: true              # Automated Mixed Precision
   use_ema: true          # EMA target model copy
   ema_decay: 0.996
