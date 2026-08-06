@@ -151,13 +151,11 @@ def train_cfm_standalone(
             x_s1 = images[:, :2, :, :]
             x_s2 = images[:, 2:, :, :]
 
-            # Extract frozen 768-D embeddings
+            # Extract frozen 768-D embeddings directly from master model
             with torch.no_grad():
-                feats_s1 = model.backbone(x_s1, [5.405, 5.405])
-                z1 = F.normalize(model.projection_head(feats_s1), p=2, dim=-1)
-
-                feats_s2 = model.backbone(x_s2, [0.443, 0.490, 0.560, 0.665, 0.705, 0.740, 0.783, 0.842, 0.865, 0.945, 1.610, 2.190])
-                z2 = F.normalize(model.projection_head(feats_s2), p=2, dim=-1)
+                z1_raw, z2_raw = model(x_s1, x_s2)[:2]
+                z1 = F.normalize(z1_raw, p=2, dim=-1)
+                z2 = F.normalize(z2_raw, p=2, dim=-1)
 
             optimizer.zero_grad()
 
