@@ -100,9 +100,9 @@ retrieval:
   metric: "cosine"       # "cosine" or "l2"
   index_type: "flat"     # "flat", "ivfpq", or "binary_hnsw"
   index_path: "checkpoints/faiss_index.bin"
-  use_pca: true
-  use_dba: true
-  use_qe: true
+  use_pca: false
+  use_dba: false
+  use_qe: false
   nlist: 64
   pq_m: 64
   pq_bits: 4
