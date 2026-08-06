@@ -177,17 +177,27 @@ class BEN14KDataset(BaseDataset):
                 if os.path.exists(target_csv):
                     self.csv_path = target_csv
             
-            # Fallback scan locations
+            # Fallback scan locations (Linux case-sensitivity resilient)
             if self.csv_path is None or not os.path.exists(self.csv_path):
-                fallbacks = [
-                    "c:/Github/SABER/Datasets/benv1_14k/benv1_14k_dataset_master_labels.csv",
-                    os.path.join(os.path.expanduser("~"), "Downloads", "benv1_14k", "benv1_14k_dataset_master_labels.csv"),
-                    "data/benv1_14k/benv1_14k_dataset_master_labels.csv"
-                ]
-                for path in fallbacks:
-                    if os.path.exists(path):
-                        self.csv_path = path
-                        break
+                alt_dir = data_dir.replace("datasets/", "Datasets/").replace("Datasets/", "datasets/")
+                alt_csv = os.path.join(alt_dir, "benv1_14k_dataset_master_labels.csv")
+                if os.path.exists(alt_csv):
+                    self.csv_path = alt_csv
+                else:
+                    fallbacks = [
+                        "Datasets/benv1_14k/benv1_14k_dataset_master_labels.csv",
+                        "datasets/benv1_14k/benv1_14k_dataset_master_labels.csv",
+                        "/content/SABER/Datasets/benv1_14k/benv1_14k_dataset_master_labels.csv",
+                        "/content/SABER/datasets/benv1_14k/benv1_14k_dataset_master_labels.csv",
+                        "/content/Datasets/benv1_14k/benv1_14k_dataset_master_labels.csv",
+                        "c:/Github/SABER/Datasets/benv1_14k/benv1_14k_dataset_master_labels.csv",
+                        os.path.join(os.path.expanduser("~"), "Downloads", "benv1_14k", "benv1_14k_dataset_master_labels.csv"),
+                        "data/benv1_14k/benv1_14k_dataset_master_labels.csv"
+                    ]
+                    for path in fallbacks:
+                        if os.path.exists(path):
+                            self.csv_path = path
+                            break
 
             if self.csv_path is None:
                 raise FileNotFoundError(

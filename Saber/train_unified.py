@@ -477,7 +477,7 @@ def train_unified(
         N_train = cached_train_z1.shape[0]
 
         logger.info("⚡ Pre-extracting 768-D S1 (z1) & S2 (z2) latents for TEST evaluation set into GPU memory...")
-        test_dataset = BEN14KDataset(data_dir=config.dataset.data_dir, modality="both", split="test", is_train=False, use_synthetic=False)
+        test_dataset = BEN14KDataset(data_dir=ben_resolved_path, modality="both", split="test", is_train=False, use_synthetic=False)
         test_loader = DataLoader(test_dataset, batch_size=config.dataset.batch_size, shuffle=False, num_workers=2, pin_memory=True)
 
         test_s1_list, test_s2_list, test_labels_list, test_names_list = [], [], [], []
