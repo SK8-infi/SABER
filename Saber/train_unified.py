@@ -160,17 +160,9 @@ def train_unified(
     unified_bridge_path = os.path.join(local_40_dir, "bridge_unified.pth")
     legacy_bridge_path = os.path.join(local_40_dir, "bridge_best.pth")
 
-    # Google Drive Sync Directory Setup (Dynamic Folder based on checkpoint_dir)
-    drive_data_dir = "/content/drive/MyDrive/SABER_Data"
-    ckpt_dir_name = getattr(config, "checkpoint_dir", "checkpoints_sigreg").strip("/").replace("/", "_")
-    if ckpt_dir_name == "checkpoints":
-        drive_folder_name = "checkpoints_40epochs"
-    else:
-        drive_folder_name = ckpt_dir_name
-    drive_ckpt_dir = os.path.join(drive_data_dir, drive_folder_name)
-    is_drive_available = os.path.exists("/content/drive/MyDrive")
-    if is_drive_available:
-        os.makedirs(drive_ckpt_dir, exist_ok=True)
+    # Google Drive Sync (Disabled - strictly operating 100% locally)
+    is_drive_available = False
+    drive_ckpt_dir = ""
 
     mode_clean = mode.lower().strip()
 
@@ -206,11 +198,9 @@ def train_unified(
         
         scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=epochs, eta_min=1e-6)
 
-        # 🔍 Auto-Resume Detection for Phase 1 Encoder (Google Drive or Local)
+        # 🔍 Auto-Resume Detection for Phase 1 Encoder (Strictly Local)
         start_epoch = 1
         resume_candidates = [
-            os.path.join(drive_ckpt_dir, "saber_unified.pth") if is_drive_available else None,
-            os.path.join(drive_ckpt_dir, "latest.pth") if is_drive_available else None,
             unified_ckpt_path,
             latest_ckpt_path
         ]
@@ -415,8 +405,6 @@ def train_unified(
             encoder_path = resolve_existing_path(
                 "",
                 [
-                    os.path.join(drive_ckpt_dir, "saber_unified.pth") if is_drive_available else "",
-                    os.path.join(drive_ckpt_dir, "latest.pth") if is_drive_available else "",
                     unified_ckpt_path,
                     latest_ckpt_path
                 ]
@@ -438,10 +426,9 @@ def train_unified(
         bridge_epochs = bridge_epochs_override if bridge_epochs_override is not None else 10
         model.eval()
 
-        # 🔍 Auto-Resume Detection for Phase 2 CFM Bridge
+        # 🔍 Auto-Resume Detection for Phase 2 CFM Bridge (Strictly Local)
         start_b_epoch = 1
         bridge_resume_candidates = [
-            os.path.join(drive_ckpt_dir, "bridge_unified.pth") if is_drive_available else None,
             unified_bridge_path,
             legacy_bridge_path
         ]
