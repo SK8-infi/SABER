@@ -112,32 +112,39 @@ def export_embeddings(
     else:
         logger.warning(f"⚠️ Checkpoint not found at '{ckpt_resolved}'. Using initial model weights.")
 
-    # Load CFM Bridge
-    bridge_resolved = resolve_existing_path(
-        bridge_path,
-        [
-            "checkpoints/bridge_best_ben14k.pth",
-            "checkpoints/bridge_best.pth",
-            "checkpoints/cfm_bridge_latest.pth",
-            "checkpoints/bridge_unified.pth",
-            "checkpoints_v10/bridge_best_ben14k.pth",
-            "checkpoints_v10/40epochs/bridge_unified.pth",
-            "/content/drive/MyDrive/SABER_Data/checkpoints/bridge_best_ben14k.pth",
-            "/content/SABER/checkpoints/bridge_best_ben14k.pth"
-        ]
-    )
-    bridge_net = CFMBridge(dim=768, hidden_dim=768, num_blocks=4, dropout=0.1).to(device)
-    if os.path.exists(bridge_resolved):
-        logger.info(f"Loading CFM Bridge checkpoint: '{bridge_resolved}'")
-        try:
-            b_ckpt = torch.load(bridge_resolved, map_location=device, weights_only=False)
-        except TypeError:
-            b_ckpt = torch.load(bridge_resolved, map_location=device)
-        b_sd = b_ckpt.get("bridge_state_dict", b_ckpt.get("state_dict", b_ckpt))
-        bridge_net.load_state_dict(b_sd, strict=False)
-    
-    model.bridge.cfm_bridge = bridge_net
-    model.bridge.ode_steps = 10
+    # Load CFM Bridge (only if bridge weights are not already in master checkpoint)
+    bridge_in_ckpt = False
+    if 'ckpt' in locals() and isinstance(ckpt, dict):
+        sd = ckpt.get("model_state_dict", ckpt)
+        bridge_in_ckpt = any("bridge" in k for k in sd.keys())
+
+    if not bridge_in_ckpt:
+        bridge_resolved = resolve_existing_path(
+            bridge_path,
+            [
+                "checkpoints/bridge_best_ben14k.pth",
+                "checkpoints/bridge_best.pth",
+                "checkpoints/cfm_bridge_latest.pth",
+                "checkpoints/bridge_unified.pth",
+                "checkpoints_v10/bridge_best_ben14k.pth",
+                "checkpoints_v10/40epochs/bridge_unified.pth",
+                "/content/drive/MyDrive/SABER_Data/checkpoints/bridge_best_ben14k.pth",
+                "/content/SABER/checkpoints/bridge_best_ben14k.pth"
+            ]
+        )
+        if os.path.exists(bridge_resolved):
+            logger.info(f"Loading separate CFM Bridge checkpoint: '{bridge_resolved}'")
+            try:
+                b_ckpt = torch.load(bridge_resolved, map_location=device, weights_only=False)
+            except TypeError:
+                b_ckpt = torch.load(bridge_resolved, map_location=device)
+            b_sd = b_ckpt.get("bridge_state_dict", b_ckpt.get("state_dict", b_ckpt.get("net_state_dict", b_ckpt)))
+            model.bridge.cfm_bridge.load_state_dict(b_sd, strict=False)
+    else:
+        logger.info("CFM Bridge weights already embedded in master checkpoint -- keeping trained bridge.")
+
+    if getattr(model, "bridge", None) is not None:
+        model.bridge.ode_steps = 10
     model.eval()
 
     # Pre-extract all features
