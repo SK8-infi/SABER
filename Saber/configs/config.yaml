@@ -3,7 +3,7 @@
 # General
 seed: 42
 device: "cuda"  # "cuda" or "cpu"
-checkpoint_dir: "checkpoints"
+checkpoint_dir: "checkpoints_v10"
 log_dir: "logs"
 viz_dir: "visualizations"
 
@@ -50,20 +50,22 @@ bridge:
   enabled: true
   hidden_dim: 768
   num_blocks: 4
-  ode_steps: 3
+  ode_steps: 10
   dropout: 0.1
-  checkpoint: "checkpoints/bridge_best_ben14k.pth"
+  checkpoint: "checkpoints_v10/bridge_unified.pth"
 
 # Embedding Geometry Optimization (Dev 3)
 geometry:
   enabled: true
-  jaccard_weight: 2.0
-  ranking_weight: 1.5
+  jaccard_weight: 0.0      # Pure Self-Supervised Mode (No labels used during training)
+  ranking_weight: 0.0      # Pure Self-Supervised Mode (No labels used during training)
   ranking_temp_s: 0.07
   ranking_temp_p: 0.05
-  triplet_weight: 0.5
-  sigreg_weight: 0.1
-  classification_weight: 0.0
+  triplet_weight: 0.0      # Pure Self-Supervised Mode (No labels used during training)
+  sigreg_weight: 2.0       # Empirical characteristic function regularization
+  classification_weight: 0.0  # Pure Self-Supervised Mode (No labels used during training)
+  infonce_weight: 1.0      # Active Hybrid Self-Supervised InfoNCE Loss (100% Label-Free)
+  infonce_temperature: 0.07 # OpenAI CLIP Standard Temperature τ
 
 # Hashing Configuration (Dev 4)
 hashing:
@@ -82,7 +84,7 @@ loss:
 
 # Training Details
 train:
-  learning_rate: 0.0005
+  learning_rate: 0.0003
   weight_decay: 0.01
   epochs: 5
   grad_clip: 1.0

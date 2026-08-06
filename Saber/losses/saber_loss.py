@@ -28,7 +28,9 @@ class SaberCombinedLoss(nn.Module):
         hashing_weight: float = 0.1,
         triplet_weight: float = 0.5,
         sigreg_weight: float = 0.1,
-        classification_weight: float = 1.0
+        classification_weight: float = 1.0,
+        infonce_weight: float = 0.0,
+        infonce_temperature: float = 0.07
     ) -> None:
         super().__init__()
         self.jaccard_weight = jaccard_weight
@@ -39,6 +41,8 @@ class SaberCombinedLoss(nn.Module):
         self.triplet_weight = triplet_weight
         self.sigreg_weight = sigreg_weight
         self.classification_weight = classification_weight
+        self.infonce_weight = infonce_weight
+        self.infonce_temperature = infonce_temperature
         
         self.vicreg_loss_fn = VICRegLoss(
             invariance_weight=invariance_weight,
@@ -297,6 +301,17 @@ class SaberCombinedLoss(nn.Module):
                     classification_loss = bce_s1
 
 
+        # 2.6 Compute Cross-Modal InfoNCE Contrastive Loss
+        infonce_loss = torch.tensor(0.0, device=device)
+        if getattr(self, "infonce_weight", 0.0) > 0.0:
+            z1_n = F.normalize(z1_pred, p=2, dim=1, eps=1e-4)
+            z2_n = F.normalize(z2, p=2, dim=1, eps=1e-4)
+            sim_matrix = torch.matmul(z1_n, z2_n.t()) / self.infonce_temperature
+            labels_diag = torch.arange(B, device=device)
+            loss_12 = F.cross_entropy(sim_matrix, labels_diag)
+            loss_21 = F.cross_entropy(sim_matrix.t(), labels_diag)
+            infonce_loss = 0.5 * (loss_12 + loss_21)
+
         # 3. Combined total loss
         total_loss = (
             (self.jaccard_weight * jaccard_loss) +
@@ -305,6 +320,7 @@ class SaberCombinedLoss(nn.Module):
             (self.hashing_weight * hash_loss) +
             (self.sigreg_weight * sigreg_loss) +
             (self.classification_weight * classification_loss) +
+            (self.infonce_weight * infonce_loss) +
             vicreg_loss
         )
 
@@ -318,6 +334,7 @@ class SaberCombinedLoss(nn.Module):
             "quant_loss": quant_loss,
             "sigreg_loss": sigreg_loss,
             "classification_loss": classification_loss,
+            "infonce_loss": infonce_loss,
             "invariance_loss": invariance_loss,
             "variance_loss": variance_loss,
             "covariance_loss": covariance_loss

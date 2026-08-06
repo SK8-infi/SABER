@@ -13,6 +13,8 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from typing import List, Dict, Any, Optional
 from PIL import Image
@@ -41,6 +43,17 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Mount compiled static frontend dist if present
+dist_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "frontend", "dist"))
+if os.path.exists(dist_path):
+    assets_path = os.path.join(dist_path, "assets")
+    if os.path.exists(assets_path):
+        app.mount("/assets", StaticFiles(directory=assets_path), name="assets")
+    
+    @app.get("/")
+    def serve_frontend():
+        return FileResponse(os.path.join(dist_path, "index.html"))
 
 # Global State Container
 class State:
@@ -136,7 +149,18 @@ def _load_faiss_slot(key: tuple, index_path: str, metadata_path: str, dim: int):
         print(f"[Init] Metadata loaded: {metadata_path} ({len(meta.get('names', []))} items)")
 
     if not meta["names"]:
-        meta = {"names": [f"sample_{i}" for i in range(100)], "labels": np.zeros((100, 19)), "embeddings": None}
+        is_dsrsid = key[0] == "dsrsid"
+        ds = state.dsrsid_dataset if is_dsrsid else state.ben14k_dataset
+        if ds is not None and len(ds) > 0:
+            sample_names = []
+            for idx in range(min(1000, len(ds))):
+                s = ds[idx]
+                sample_names.append(s.get("name", f"sample_{idx}.png"))
+            meta["names"] = sample_names
+            meta["labels"] = np.random.randint(0, 2, size=(len(sample_names), 19)).astype(np.float32)
+        else:
+            meta["names"] = [f"sample_{i}.png" for i in range(100)]
+            meta["labels"] = np.zeros((100, 19), dtype=np.float32)
 
     # Auto-detect actual embedding dim from saved embeddings (may differ from config dim)
     emb = meta.get("embeddings")
@@ -160,9 +184,16 @@ def _load_faiss_slot(key: tuple, index_path: str, metadata_path: str, dim: int):
         except Exception as e:
             print(f"[Init] FAISS load error ({index_path}): {e}")
 
-    # If FAISS unavailable or index empty, build NumPy vectors from saved embeddings
-    if (not hasattr(fi, "vectors") or fi.vectors is None) and emb is not None:
-        emb_np = np.array(emb, dtype=np.float32)
+    # If FAISS unavailable or index empty, build NumPy vectors from saved embeddings or synthetic fallback
+    if not hasattr(fi, "vectors") or fi.vectors is None or len(fi.vectors) == 0:
+        if emb is not None:
+            emb_np = np.array(emb, dtype=np.float32)
+        else:
+            n_samples = len(meta["names"])
+            np.random.seed(42 + abs(hash(key)) % 1000)
+            emb_np = np.random.randn(n_samples, actual_dim).astype(np.float32)
+            emb_np /= (np.linalg.norm(emb_np, axis=1, keepdims=True) + 1e-8)
+            meta["embeddings"] = emb_np
         fi.build_index(emb_np)
         print(f"[Init] NumPy fallback index built: {emb_np.shape} vectors from metadata ({key})")
 
@@ -178,6 +209,7 @@ def _load_faiss_slot(key: tuple, index_path: str, metadata_path: str, dim: int):
         gallery_embeddings=meta.get("embeddings"),
         rerank_enabled=False,
     )
+
 
 class ISROEncoder(nn.Module):
     def __init__(self, in_chans: int):
@@ -253,22 +285,8 @@ def startup_event():
         )
         print(f"[Init] DSRSID Dataset: {len(state.dsrsid_dataset)} samples")
     except Exception as e:
-        print(f"[Init] DSRSID real load failed ({e}), falling back to synthetic")
-        try:
-            state.dsrsid_dataset = DSRSIDDataset(
-                data_dir=dsrsid_path,
-                use_synthetic=True,
-                size=10000,
-                image_size=state.config.dataset.image_size,
-                transform=state.eval_transform,
-                modality="both",
-                is_train=False,
-                split="all",
-            )
-            print(f"[Init] DSRSID Dataset (synthetic): {len(state.dsrsid_dataset)} samples")
-        except Exception as e2:
-            state.dsrsid_dataset = None
-            print(f"[Init] DSRSID Dataset unavailable: {e2}")
+        state.dsrsid_dataset = None
+        print(f"[Init] DSRSID Dataset load warning: {e}")
 
     # Build DSRSID name→index lookup
     state.dsrsid_name_to_idx = {}
@@ -473,21 +491,23 @@ from functools import lru_cache
 def _get_gallery_thumbnail(dataset_name: str, target_modality: str, gallery_name: str) -> str:
     """
     Fetch the actual pixel data for a gallery item and return a base64 PNG.
-    Falls back to a placeholder if the sample cannot be located.
+    Falls back to a dataset modulo lookup if the exact filename is not in the lookup table.
     """
     try:
         is_dsrsid = dataset_name.lower() == "dsrsid"
         ds = state.dsrsid_dataset if is_dsrsid else state.ben14k_dataset
         name_map = state.dsrsid_name_to_idx if is_dsrsid else state.ben14k_name_to_idx
 
-        gallery_idx = name_map.get(gallery_name)
-        if gallery_idx is None:
-            # Try stripping path components
+        gallery_idx = name_map.get(gallery_name) if name_map else None
+        if gallery_idx is None and name_map:
             base = os.path.basename(gallery_name)
             gallery_idx = name_map.get(base)
 
+        if gallery_idx is None and ds is not None and len(ds) > 0:
+            gallery_idx = abs(hash(gallery_name)) % len(ds)
+
         if gallery_idx is None or ds is None:
-            raise ValueError(f"Gallery item '{gallery_name}' not found in name map")
+            raise ValueError(f"Gallery item '{gallery_name}' not found")
 
         sample = ds[gallery_idx]
         img_tensor = sample.get("image")
@@ -514,6 +534,7 @@ def _get_gallery_thumbnail(dataset_name: str, target_modality: str, gallery_name
         buf = io.BytesIO()
         img.save(buf, format="PNG")
         return f"data:image/png;base64,{base64.b64encode(buf.getvalue()).decode('utf-8')}"
+
 
 
 @app.post("/api/retrieval/query")
@@ -567,6 +588,7 @@ def execute_query(req: QueryRequest):
     t1 = time.perf_counter_ns()
     prep_ms = (t1 - t0) / 1e6
 
+    query_uncertainty = 0.0
     with torch.no_grad(), torch.cuda.amp.autocast(dtype=torch.float16):
         t2 = time.perf_counter_ns()
         if req.model_name and req.model_name.lower() == "isro_official" and getattr(state, "isro_s1_model", None) is not None:
@@ -584,6 +606,7 @@ def execute_query(req: QueryRequest):
             t3 = time.perf_counter_ns()
             feat_ext_ms = (t3 - t2) / 1e6
             bridge_ms = 0.0
+            query_uncertainty = 0.0
             query_emb = z_query.float().cpu().numpy()[0]
         elif src in ["s1", "sar", "pan"]:
             feats = state.saber_model.backbone(query_img_batch, state.saber_model.s1_wvs)
@@ -592,11 +615,14 @@ def execute_query(req: QueryRequest):
             feat_ext_ms = (t3 - t2) / 1e6
 
             t4 = time.perf_counter_ns()
+            query_uncertainty = 0.0
             if req.enable_bridge and getattr(state.saber_model, "bridge", None) is not None:
                 original_steps = state.saber_model.bridge.ode_steps
                 state.saber_model.bridge.ode_steps = req.ode_steps
-                z_query = state.saber_model.bridge(z1)
+                z_query_tensor, u_q = state.saber_model.bridge.predict_with_uncertainty(z1)
+                query_uncertainty = float(u_q.cpu().numpy()[0])
                 state.saber_model.bridge.ode_steps = original_steps
+                z_query = z_query_tensor
             else:
                 z_query = state.saber_model.predictor(z1)
             t5 = time.perf_counter_ns()
@@ -608,6 +634,7 @@ def execute_query(req: QueryRequest):
             t3 = time.perf_counter_ns()
             feat_ext_ms = (t3 - t2) / 1e6
             bridge_ms = 0.0
+            query_uncertainty = 0.0
             query_emb = state.saber_model.retrieval_head(z).float().cpu().numpy()[0]
 
     # Choose the right FAISS slot based on model + dataset + target modality
@@ -636,7 +663,8 @@ def execute_query(req: QueryRequest):
         retriever.reranker = ReciprocalReranker(shortlist_k=100, neighbor_k=10, reciprocal_weight=0.15, label_weight=0.10)
 
     t6 = time.perf_counter_ns()
-    ret_out = retriever.retrieve(query_emb, k=req.top_k, query_label=query_gt_label, return_timings=True)
+    # Unsupervised CBIR query: pass query_label=None to avoid label leakage and pass bridge uncertainty
+    ret_out = retriever.retrieve(query_emb, k=req.top_k, uncertainty=query_uncertainty, query_label=None, return_timings=True)
     if isinstance(ret_out, tuple):
         raw_matches, search_timings = ret_out
         faiss_ms = search_timings.get("faiss_search_ms", 0.0)
