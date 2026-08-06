@@ -340,6 +340,7 @@ def train_unified(
                 pbar.set_postfix({
                     "loss": f"{v_loss:.4f}",
                     "infonce": f"{v_infonce:.3f}",
+                    "jacc": f"{v_jacc:.3f}",
                     "invar": f"{v_inv:.3f}",
                     "var": f"{v_var:.3f}",
                     "cov": f"{v_cov:.3f}",
@@ -362,6 +363,7 @@ def train_unified(
                 f"Epoch [{epoch}/{epochs}] completed in {elapsed:.1f}s | "
                 f"Loss: {avg_loss:.4f} | "
                 f"InfoNCE: {avg_infonce:.4f} | "
+                f"Jacc: {avg_jacc:.4f} | "
                 f"Invar: {avg_inv:.4f} | "
                 f"Var: {avg_var:.4f} | "
                 f"Cov: {avg_cov:.4f} | "
