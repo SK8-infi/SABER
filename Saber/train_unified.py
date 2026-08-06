@@ -245,7 +245,7 @@ def train_unified(
         for epoch in range(start_epoch, epochs + 1):
             model.train()
             total_loss = 0.0
-            sum_jacc, sum_rank, sum_inv, sum_var, sum_cov, sum_sigreg, sum_infonce = 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0
+            sum_bce, sum_jacc, sum_rank, sum_inv, sum_var, sum_cov, sum_sigreg, sum_infonce = 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0
             start_time = time.time()
 
             ben_iter = iter(ben14k_loader)
@@ -327,8 +327,9 @@ def train_unified(
                         for p_online, p_target in zip(model.parameters(), ema_model.parameters()):
                             p_target.data.mul_(ema_decay).add_(p_online.data, alpha=1.0 - ema_decay)
 
-                # Accumulate pure SSL loss sub-components
+                # Accumulate pure SSL & Supervised loss sub-components
                 v_loss = step_loss.item()
+                v_bce = loss_dict.get("classification_loss", torch.tensor(0.0)).item()
                 v_jacc = loss_dict.get("jaccard_loss", torch.tensor(0.0)).item()
                 v_rank = loss_dict.get("ranking_loss", torch.tensor(0.0)).item()
                 v_inv = loss_dict.get("invariance_loss", torch.tensor(0.0)).item()
@@ -338,6 +339,7 @@ def train_unified(
                 v_infonce = loss_dict.get("infonce_loss", torch.tensor(0.0)).item()
 
                 total_loss += v_loss
+                sum_bce += v_bce
                 sum_jacc += v_jacc
                 sum_rank += v_rank
                 sum_inv += v_inv
@@ -349,8 +351,10 @@ def train_unified(
                 current_lr = optimizer.param_groups[0]["lr"]
                 pbar.set_postfix({
                     "loss": f"{v_loss:.4f}",
+                    "bce": f"{v_bce:.3f}",
                     "infonce": f"{v_infonce:.3f}",
                     "jacc": f"{v_jacc:.3f}",
+                    "rank": f"{v_rank:.3f}",
                     "invar": f"{v_inv:.3f}",
                     "var": f"{v_var:.3f}",
                     "cov": f"{v_cov:.3f}",
@@ -361,6 +365,7 @@ def train_unified(
             scheduler.step()
             elapsed = time.time() - start_time
             avg_loss = total_loss / max_batches
+            avg_bce = sum_bce / max_batches
             avg_jacc = sum_jacc / max_batches
             avg_rank = sum_rank / max_batches
             avg_inv = sum_inv / max_batches
@@ -372,8 +377,10 @@ def train_unified(
             logger.info(
                 f"Epoch [{epoch}/{epochs}] completed in {elapsed:.1f}s | "
                 f"Loss: {avg_loss:.4f} | "
+                f"BCE: {avg_bce:.4f} | "
                 f"InfoNCE: {avg_infonce:.4f} | "
                 f"Jacc: {avg_jacc:.4f} | "
+                f"Rank: {avg_rank:.4f} | "
                 f"Invar: {avg_inv:.4f} | "
                 f"Var: {avg_var:.4f} | "
                 f"Cov: {avg_cov:.4f} | "
