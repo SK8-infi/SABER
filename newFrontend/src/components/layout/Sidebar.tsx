@@ -321,6 +321,7 @@ const SidebarLayout = () => {
 
   const [advancedOpen, setAdvancedOpen] = useState(true)
   const isAblation = pathname.includes('/abliation')
+  const isTraining = pathname.includes('/training')
 
   // Nav groups rendered in the sidebar.
   const formatGroups = navItems.filter(item => item.groupLabel === 'Format')
@@ -359,6 +360,7 @@ const SidebarLayout = () => {
         })}
 
         {/* Dataset, Source, Target Gallery, Scene Index Controls below Format */}
+        {!isTraining && (
         <SidebarGroup className='gap-3 px-3 py-2 group-data-[collapsible=icon]:hidden'>
           {/* DATASET */}
           <div className='flex flex-col gap-1.5'>
@@ -572,6 +574,7 @@ const SidebarLayout = () => {
           </>
           )}
         </SidebarGroup>
+        )}
 
         {/* Remaining Navigation Sections — removed */}
       </SidebarContent>

@@ -56,6 +56,11 @@ export const navItems: NavItem[] = [
         icon: 'Sliders',
         label: 'Abliation',
         href: '/dashboard/format/abliation'
+      },
+      {
+        icon: 'Activity',
+        label: 'Training',
+        href: '/dashboard/format/training'
       }
     ]
   }
