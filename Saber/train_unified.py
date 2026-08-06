@@ -160,17 +160,9 @@ def train_unified(
     unified_bridge_path = os.path.join(local_40_dir, "bridge_unified.pth")
     legacy_bridge_path = os.path.join(local_40_dir, "bridge_best.pth")
 
-    # Google Drive Sync Directory Setup (Dynamic Folder based on checkpoint_dir)
-    drive_data_dir = "/content/drive/MyDrive/SABER_Data"
-    ckpt_dir_name = getattr(config, "checkpoint_dir", "checkpoints_sigreg").strip("/").replace("/", "_")
-    if ckpt_dir_name == "checkpoints":
-        drive_folder_name = "checkpoints_40epochs"
-    else:
-        drive_folder_name = ckpt_dir_name
-    drive_ckpt_dir = os.path.join(drive_data_dir, drive_folder_name)
-    is_drive_available = os.path.exists("/content/drive/MyDrive")
-    if is_drive_available:
-        os.makedirs(drive_ckpt_dir, exist_ok=True)
+    # Google Drive Sync (Disabled - strictly operating 100% locally)
+    is_drive_available = False
+    drive_ckpt_dir = ""
 
     mode_clean = mode.lower().strip()
 
@@ -206,11 +198,9 @@ def train_unified(
         
         scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=epochs, eta_min=1e-6)
 
-        # 🔍 Auto-Resume Detection for Phase 1 Encoder (Google Drive or Local)
+        # 🔍 Auto-Resume Detection for Phase 1 Encoder (Strictly Local)
         start_epoch = 1
         resume_candidates = [
-            os.path.join(drive_ckpt_dir, "saber_unified.pth") if is_drive_available else None,
-            os.path.join(drive_ckpt_dir, "latest.pth") if is_drive_available else None,
             unified_ckpt_path,
             latest_ckpt_path
         ]
@@ -253,7 +243,7 @@ def train_unified(
         for epoch in range(start_epoch, epochs + 1):
             model.train()
             total_loss = 0.0
-            sum_jacc, sum_rank, sum_inv, sum_var, sum_cov, sum_sigreg = 0.0, 0.0, 0.0, 0.0, 0.0, 0.0
+            sum_jacc, sum_rank, sum_inv, sum_var, sum_cov, sum_sigreg, sum_infonce = 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0
             start_time = time.time()
 
             ben_iter = iter(ben14k_loader)
@@ -335,6 +325,7 @@ def train_unified(
                 v_var = loss_dict.get("variance_loss", torch.tensor(0.0)).item()
                 v_cov = loss_dict.get("covariance_loss", torch.tensor(0.0)).item()
                 v_sigreg = loss_dict.get("sigreg_loss", torch.tensor(0.0)).item()
+                v_infonce = loss_dict.get("infonce_loss", torch.tensor(0.0)).item()
 
                 total_loss += v_loss
                 sum_jacc += v_jacc
@@ -343,10 +334,12 @@ def train_unified(
                 sum_var += v_var
                 sum_cov += v_cov
                 sum_sigreg += v_sigreg
+                sum_infonce += v_infonce
 
                 current_lr = optimizer.param_groups[0]["lr"]
                 pbar.set_postfix({
                     "loss": f"{v_loss:.4f}",
+                    "infonce": f"{v_infonce:.3f}",
                     "jacc": f"{v_jacc:.3f}",
                     "invar": f"{v_inv:.3f}",
                     "var": f"{v_var:.3f}",
@@ -364,12 +357,13 @@ def train_unified(
             avg_var = sum_var / max_batches
             avg_cov = sum_cov / max_batches
             avg_sigreg = sum_sigreg / max_batches
+            avg_infonce = sum_infonce / max_batches
 
             logger.info(
                 f"Epoch [{epoch}/{epochs}] completed in {elapsed:.1f}s | "
                 f"Loss: {avg_loss:.4f} | "
+                f"InfoNCE: {avg_infonce:.4f} | "
                 f"Jacc: {avg_jacc:.4f} | "
-                f"Rank: {avg_rank:.4f} | "
                 f"Invar: {avg_inv:.4f} | "
                 f"Var: {avg_var:.4f} | "
                 f"Cov: {avg_cov:.4f} | "
@@ -415,8 +409,6 @@ def train_unified(
             encoder_path = resolve_existing_path(
                 "",
                 [
-                    os.path.join(drive_ckpt_dir, "saber_unified.pth") if is_drive_available else "",
-                    os.path.join(drive_ckpt_dir, "latest.pth") if is_drive_available else "",
                     unified_ckpt_path,
                     latest_ckpt_path
                 ]
@@ -438,10 +430,9 @@ def train_unified(
         bridge_epochs = bridge_epochs_override if bridge_epochs_override is not None else 10
         model.eval()
 
-        # 🔍 Auto-Resume Detection for Phase 2 CFM Bridge
+        # 🔍 Auto-Resume Detection for Phase 2 CFM Bridge (Strictly Local)
         start_b_epoch = 1
         bridge_resume_candidates = [
-            os.path.join(drive_ckpt_dir, "bridge_unified.pth") if is_drive_available else None,
             unified_bridge_path,
             legacy_bridge_path
         ]

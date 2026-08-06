@@ -45,7 +45,7 @@ class Evaluator:
         num_batches = len(self.dataloader)
         with torch.no_grad():
             for batch_idx, batch in enumerate(self.dataloader):
-                images = batch["image"].to(self.device)
+                images = batch.get("image", batch.get("image1")).to(self.device)
                 
                 # Auto-resize on GPU to prevent CPU resize bottleneck
                 if images.shape[-1] != 224 or images.shape[-2] != 224:
@@ -92,7 +92,9 @@ class Evaluator:
             gallery_indices = np.arange(num_samples)
 
 
-        is_cross_modal = (self.config.dataset.get("modality", "s2").lower() == "both")
+        dataset_cfg = self.config.get("dataset", {}) if isinstance(self.config, dict) else getattr(self.config, "dataset", {})
+        modality = str(dataset_cfg.get("modality", "both") if isinstance(dataset_cfg, dict) else getattr(dataset_cfg, "modality", "both")).lower()
+        is_cross_modal = (modality == "both" or getattr(self.dataloader.dataset, "modality", "s2") == "both")
 
         if not is_cross_modal:
             # Same-modal path
@@ -118,10 +120,8 @@ class Evaluator:
             
             with torch.no_grad():
                 for batch_idx, batch in enumerate(self.dataloader):
-                    images = batch["image"].to(self.device)
+                    images = batch.get("image", batch.get("image1")).to(self.device)
 
-
-                    
                     # Auto-resize on GPU to prevent CPU resize bottleneck
                     if images.shape[-1] != 224 or images.shape[-2] != 224:
                         import torch.nn.functional as F
@@ -149,7 +149,7 @@ class Evaluator:
             labels = np.concatenate(labels_list, axis=0)
             names = filenames_list
             
-            direction = self.config.get("retrieval", {}).get("direction", "s1_to_s2").lower()
+            direction = self.config.get("retrieval", {}).get("direction", "s1_to_s2").lower() if isinstance(self.config, dict) else getattr(self.config.retrieval, "direction", "s1_to_s2").lower()
             if direction == "s2_to_s1":
                 logger.info("Setting up retrieval direction: S2 (query) -> S1 (gallery)")
                 query_embeds = all_s2_embeds[query_indices]
@@ -170,10 +170,9 @@ class Evaluator:
             embeddings[gallery_indices] = gallery_embeds
 
         # Apply Mean-Centering Vector Calibration (z - mu) / ||z - mu||
-        # Preserves all 768-D multi-spectral ViT dimensions without neighbor-smoothing distortion
-        use_pca = self.config.get("retrieval", {}).get("use_pca", False)
-        use_dba = self.config.get("retrieval", {}).get("use_dba", False)
-        use_qe = self.config.get("retrieval", {}).get("use_qe", False)
+        use_pca = self.config.get("retrieval", {}).get("use_pca", False) if isinstance(self.config, dict) else getattr(self.config.retrieval, "use_pca", False)
+        use_dba = self.config.get("retrieval", {}).get("use_dba", False) if isinstance(self.config, dict) else getattr(self.config.retrieval, "use_dba", False)
+        use_qe = self.config.get("retrieval", {}).get("use_qe", False) if isinstance(self.config, dict) else getattr(self.config.retrieval, "use_qe", False)
 
         mu = np.mean(gallery_embeds, axis=0, keepdims=True)
         gallery_embeds = gallery_embeds - mu
@@ -223,7 +222,7 @@ class Evaluator:
         logger.info(f"Retrieval Split: {len(query_indices)} queries, {len(gallery_indices)} gallery items (Mean-Calibrated).")
 
         # Calculate metrics by computing chunked similarities to avoid OOM
-        is_multilabel = (self.config.dataset.name.lower() == "ben14k")
+        is_multilabel = True
         exclude_self = not is_cross_modal
         metrics5 = compute_retrieval_metrics(
             query_embeds=query_embeds,
