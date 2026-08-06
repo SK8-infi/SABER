@@ -190,40 +190,34 @@ class BEN14KDataset(BaseDataset):
                         break
 
             if self.csv_path is None:
-                logger.warning(
-                    f"benv1_14k_dataset_master_labels.csv not found in data_dir '{data_dir}' or fallbacks. "
-                    "Falling back to synthetic data."
+                raise FileNotFoundError(
+                    f"benv1_14k_dataset_master_labels.csv not found in data_dir '{data_dir}' or fallbacks."
                 )
-                self.use_synthetic = True
             else:
-                try:
-                    full_df = pd.read_csv(self.csv_path)
-                    total_n = len(full_df)
+                full_df = pd.read_csv(self.csv_path)
+                total_n = len(full_df)
+                
+                # Deterministic split partitioning (Seed 42)
+                # 70% Train (10,382) | 10% Val (1,483) | 20% Test (2,967)
+                rng = np.random.RandomState(42)
+                shuffled_idx = rng.permutation(total_n)
+                
+                train_end = int(0.70 * total_n)
+                val_end = int(0.80 * total_n)
+                
+                if self.split == "train":
+                    split_idx = shuffled_idx[:train_end]
+                elif self.split == "val":
+                    split_idx = shuffled_idx[train_end:val_end]
+                elif self.split == "test":
+                    split_idx = shuffled_idx[val_end:]
+                else: # "all"
+                    split_idx = shuffled_idx
                     
-                    # Deterministic split partitioning (Seed 42)
-                    # 70% Train (10,382) | 10% Val (1,483) | 20% Test (2,967)
-                    rng = np.random.RandomState(42)
-                    shuffled_idx = rng.permutation(total_n)
-                    
-                    train_end = int(0.70 * total_n)
-                    val_end = int(0.80 * total_n)
-                    
-                    if self.split == "train":
-                        split_idx = shuffled_idx[:train_end]
-                    elif self.split == "val":
-                        split_idx = shuffled_idx[train_end:val_end]
-                    elif self.split == "test":
-                        split_idx = shuffled_idx[val_end:]
-                    else: # "all"
-                        split_idx = shuffled_idx
-                        
-                    self.df = full_df.iloc[split_idx].reset_index(drop=True)
-                    self.size = len(self.df)
-                    self.ben14k_root = os.path.dirname(self.csv_path)
-                    logger.info(f"Loaded BEN-14K [{self.split.upper()} SPLIT] metadata CSV from '{self.csv_path}'. Using {self.size} samples.")
-                except Exception as e:
-                    logger.error(f"Error loading BEN-14K metadata CSV: {e}. Falling back to synthetic.")
-                    self.use_synthetic = True
+                self.df = full_df.iloc[split_idx].reset_index(drop=True)
+                self.size = len(self.df)
+                self.ben14k_root = os.path.dirname(self.csv_path)
+                logger.info(f"Loaded BEN-14K [{self.split.upper()} SPLIT] metadata CSV from '{self.csv_path}'. Using {self.size} samples.")
 
     def __len__(self) -> int:
         return self.size

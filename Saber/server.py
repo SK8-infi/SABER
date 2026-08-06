@@ -13,6 +13,8 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from typing import List, Dict, Any, Optional
 from PIL import Image
@@ -41,6 +43,17 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Mount compiled static frontend dist if present
+dist_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "frontend", "dist"))
+if os.path.exists(dist_path):
+    assets_path = os.path.join(dist_path, "assets")
+    if os.path.exists(assets_path):
+        app.mount("/assets", StaticFiles(directory=assets_path), name="assets")
+    
+    @app.get("/")
+    def serve_frontend():
+        return FileResponse(os.path.join(dist_path, "index.html"))
 
 # Global State Container
 class State:
@@ -272,22 +285,8 @@ def startup_event():
         )
         print(f"[Init] DSRSID Dataset: {len(state.dsrsid_dataset)} samples")
     except Exception as e:
-        print(f"[Init] DSRSID real load failed ({e}), falling back to synthetic")
-        try:
-            state.dsrsid_dataset = DSRSIDDataset(
-                data_dir=dsrsid_path,
-                use_synthetic=True,
-                size=10000,
-                image_size=state.config.dataset.image_size,
-                transform=state.eval_transform,
-                modality="both",
-                is_train=False,
-                split="all",
-            )
-            print(f"[Init] DSRSID Dataset (synthetic): {len(state.dsrsid_dataset)} samples")
-        except Exception as e2:
-            state.dsrsid_dataset = None
-            print(f"[Init] DSRSID Dataset unavailable: {e2}")
+        state.dsrsid_dataset = None
+        print(f"[Init] DSRSID Dataset load warning: {e}")
 
     # Build DSRSID name→index lookup
     state.dsrsid_name_to_idx = {}
@@ -589,6 +588,7 @@ def execute_query(req: QueryRequest):
     t1 = time.perf_counter_ns()
     prep_ms = (t1 - t0) / 1e6
 
+    query_uncertainty = 0.0
     with torch.no_grad(), torch.cuda.amp.autocast(dtype=torch.float16):
         t2 = time.perf_counter_ns()
         if req.model_name and req.model_name.lower() == "isro_official" and getattr(state, "isro_s1_model", None) is not None:
@@ -606,6 +606,7 @@ def execute_query(req: QueryRequest):
             t3 = time.perf_counter_ns()
             feat_ext_ms = (t3 - t2) / 1e6
             bridge_ms = 0.0
+            query_uncertainty = 0.0
             query_emb = z_query.float().cpu().numpy()[0]
         elif src in ["s1", "sar", "pan"]:
             feats = state.saber_model.backbone(query_img_batch, state.saber_model.s1_wvs)

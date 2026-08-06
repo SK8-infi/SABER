@@ -40,13 +40,8 @@ class BaseDataset(Dataset, ABC):
 
     def __getitem__(self, idx: int) -> Dict[str, Any]:
         """
-        Get a sample. If use_synthetic is True or if loading the real item fails,
-        falls back to generating synthetic data.
+        Get a sample. Loads real item unless use_synthetic is explicitly set to True.
         """
         if self.use_synthetic:
             return self.get_synthetic_item(idx)
-        try:
-            return self.get_real_item(idx)
-        except Exception as e:
-            # Graceful fallback to synthetic data
-            return self.get_synthetic_item(idx)
+        return self.get_real_item(idx)
