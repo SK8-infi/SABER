@@ -90,9 +90,16 @@ def export_embeddings(
     ckpt_resolved = resolve_existing_path(
         checkpoint_path,
         [
+            "checkpoints/latest_ben14k.pth",
+            "checkpoints/latest.pth",
+            "checkpoints/saber_unified_best.pth",
+            "checkpoints/saber_unified_clean.pth",
+            "checkpoints/saber_unified.pth",
             "checkpoints_v10/saber_unified_clean.pth",
             "checkpoints_v10/40epochs/saber_unified.pth",
-            "checkpoints/saber_unified_clean.pth"
+            "/content/drive/MyDrive/SABER_Data/checkpoints/latest_ben14k.pth",
+            "/content/drive/MyDrive/SABER_Data/checkpoints/saber_unified.pth",
+            "/content/SABER/checkpoints/latest_ben14k.pth"
         ]
     )
     if os.path.exists(ckpt_resolved):
@@ -109,9 +116,14 @@ def export_embeddings(
     bridge_resolved = resolve_existing_path(
         bridge_path,
         [
+            "checkpoints/bridge_best_ben14k.pth",
+            "checkpoints/bridge_best.pth",
+            "checkpoints/cfm_bridge_latest.pth",
+            "checkpoints/bridge_unified.pth",
             "checkpoints_v10/bridge_best_ben14k.pth",
             "checkpoints_v10/40epochs/bridge_unified.pth",
-            "checkpoints/bridge_best.pth"
+            "/content/drive/MyDrive/SABER_Data/checkpoints/bridge_best_ben14k.pth",
+            "/content/SABER/checkpoints/bridge_best_ben14k.pth"
         ]
     )
     bridge_net = CFMBridge(dim=768, hidden_dim=768, num_blocks=4, dropout=0.1).to(device)
