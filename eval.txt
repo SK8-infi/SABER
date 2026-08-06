@@ -1,0 +1,67 @@
+[2026-08-06 11:04:58] [INFO] [evaluate.py:77]: Initializing REJEPA/SABER Evaluation & Indexing runner...
+[2026-08-06 11:04:58] [INFO] [evaluate.py:84]: Computation Device: cuda
+[2026-08-06 11:04:58] [INFO] [ben14k.py:220]: Loaded BEN-14K [TEST SPLIT] metadata CSV from 'Datasets/benv1_14k/benv1_14k_dataset_master_labels.csv'. Using 2967 samples.
+[2026-08-06 11:04:58] [INFO] [evaluate.py:121]: Dataset Loaded: BEN14K [TEST HELD-OUT PARTITION] (Synthetic=False)
+[2026-08-06 11:04:58] [INFO] [evaluate.py:138]: Instantiating SABER model (DOFA + LoRA)...
+[2026-08-06 11:05:00] [INFO] [backbone.py:115]: Loading DOFA pretrained weights...
+[2026-08-06 11:05:00] [INFO] [backbone.py:122]: Loading weights from local cache: /root/.cache/torch/hub/checkpoints/DOFA_ViT_base_e100.pth
+[2026-08-06 11:05:02] [INFO] [backbone.py:129]: Successfully loaded DOFA pretrained weights.
+[2026-08-06 11:05:02] [INFO] [saber.py:68]: Successfully wrapped DOFA ViT blocks with LoRA adapters (Rank 16, Target: qkv, fc1, fc2).
+[2026-08-06 11:05:02] [INFO] [saber.py:120]: Successfully instantiated CFM Latent Bridge wrapper inside SABER.
+[2026-08-06 11:05:02] [INFO] [evaluate.py:166]: Loading checkpoint parameters from: 'checkpoints_v10/saber_unified_clean.pth'
+[2026-08-06 11:05:02] [INFO] [evaluate.py:174]: Successfully loaded master encoder, LoRA, and projection parameters (strict=False).
+[2026-08-06 11:05:02] [INFO] [evaluate.py:201]: Loading CFM Latent Bridge checkpoint from: 'checkpoints_v10/bridge_unified.pth'
+[2026-08-06 11:05:03] [INFO] [evaluate.py:208]: Successfully loaded bridge model parameters (strict=False).
+[2026-08-06 11:05:03] [INFO] [evaluator.py:44]: Extracting embeddings for evaluation (Same-Modal S2 -> S2)...
+[2026-08-06 11:05:10] [INFO] [evaluator.py:66]: Extraction Batch [0/12] completed.
+[2026-08-06 11:05:44] [INFO] [evaluator.py:222]: Retrieval Split: 593 queries, 2967 gallery items (Mean-Calibrated).
+[2026-08-06 11:05:49] [INFO] [evaluate.py:224]: =========================================
+[2026-08-06 11:05:49] [INFO] [evaluate.py:225]:            RETRIEVAL METRICS             
+[2026-08-06 11:05:49] [INFO] [evaluate.py:226]: =========================================
+[2026-08-06 11:05:49] [INFO] [evaluate.py:228]: PRECISION@5    : 0.7446
+[2026-08-06 11:05:49] [INFO] [evaluate.py:228]: RECALL@5       : 0.7240
+[2026-08-06 11:05:49] [INFO] [evaluate.py:228]: F1@5           : 0.7496
+[2026-08-06 11:05:49] [INFO] [evaluate.py:228]: MAP@5          : 0.8367
+[2026-08-06 11:05:49] [INFO] [evaluate.py:228]: PRECISION@10   : 0.7307
+[2026-08-06 11:05:49] [INFO] [evaluate.py:228]: RECALL@10      : 0.7137
+[2026-08-06 11:05:49] [INFO] [evaluate.py:228]: F1@10          : 0.7357
+[2026-08-06 11:05:49] [INFO] [evaluate.py:228]: MAP@10         : 0.8367
+[2026-08-06 11:05:49] [INFO] [evaluate.py:229]: =========================================
+[2026-08-06 11:05:49] [INFO] [faiss_index.py:145]: Built FAISS flat cosine index with 2967 items.
+[2026-08-06 11:05:49] [INFO] [evaluate.py:301]: Saved gallery metadata to: checkpoints/faiss_index_metadata.pth
+[2026-08-06 11:05:49] [INFO] [evaluate.py:336]: Visualizations skipped. Pass --viz to generate plots.
+[2026-08-06 11:05:49] [INFO] [evaluate.py:338]: Evaluation complete.
+[2026-08-06 11:06:02] [INFO] [evaluate.py:77]: Initializing REJEPA/SABER Evaluation & Indexing runner...
+[2026-08-06 11:06:02] [INFO] [evaluate.py:84]: Computation Device: cuda
+[2026-08-06 11:06:02] [INFO] [ben14k.py:220]: Loaded BEN-14K [TEST SPLIT] metadata CSV from 'Datasets/benv1_14k/benv1_14k_dataset_master_labels.csv'. Using 2967 samples.
+[2026-08-06 11:06:02] [INFO] [evaluate.py:121]: Dataset Loaded: BEN14K [TEST HELD-OUT PARTITION] (Synthetic=False)
+[2026-08-06 11:06:02] [INFO] [evaluate.py:138]: Instantiating SABER model (DOFA + LoRA)...
+[2026-08-06 11:06:03] [INFO] [backbone.py:115]: Loading DOFA pretrained weights...
+[2026-08-06 11:06:03] [INFO] [backbone.py:122]: Loading weights from local cache: /root/.cache/torch/hub/checkpoints/DOFA_ViT_base_e100.pth
+[2026-08-06 11:06:03] [INFO] [backbone.py:129]: Successfully loaded DOFA pretrained weights.
+[2026-08-06 11:06:03] [INFO] [saber.py:68]: Successfully wrapped DOFA ViT blocks with LoRA adapters (Rank 16, Target: qkv, fc1, fc2).
+[2026-08-06 11:06:03] [INFO] [saber.py:120]: Successfully instantiated CFM Latent Bridge wrapper inside SABER.
+[2026-08-06 11:06:04] [INFO] [evaluate.py:166]: Loading checkpoint parameters from: 'checkpoints_v10/saber_unified_clean.pth'
+[2026-08-06 11:06:04] [INFO] [evaluate.py:174]: Successfully loaded master encoder, LoRA, and projection parameters (strict=False).
+[2026-08-06 11:06:04] [INFO] [evaluate.py:201]: Loading CFM Latent Bridge checkpoint from: 'checkpoints_v10/bridge_unified.pth'
+[2026-08-06 11:06:04] [INFO] [evaluate.py:208]: Successfully loaded bridge model parameters (strict=False).
+[2026-08-06 11:06:04] [INFO] [evaluator.py:110]: Extracting bimodal embeddings for cross-modal evaluation (S1 query, S2 gallery)...
+[2026-08-06 11:06:17] [INFO] [evaluator.py:145]: Bimodal Extraction Batch [0/12] completed.
+[2026-08-06 11:07:33] [INFO] [evaluator.py:158]: Setting up retrieval direction: S1 (query) -> S2 (gallery)
+[2026-08-06 11:07:33] [INFO] [evaluator.py:222]: Retrieval Split: 593 queries, 2967 gallery items (Mean-Calibrated).
+[2026-08-06 11:07:37] [INFO] [evaluate.py:224]: =========================================
+[2026-08-06 11:07:37] [INFO] [evaluate.py:225]:            RETRIEVAL METRICS             
+[2026-08-06 11:07:37] [INFO] [evaluate.py:226]: =========================================
+[2026-08-06 11:07:37] [INFO] [evaluate.py:228]: PRECISION@5    : 0.7505
+[2026-08-06 11:07:37] [INFO] [evaluate.py:228]: RECALL@5       : 0.6634
+[2026-08-06 11:07:37] [INFO] [evaluate.py:228]: F1@5           : 0.7186
+[2026-08-06 11:07:37] [INFO] [evaluate.py:228]: MAP@5          : 0.8297
+[2026-08-06 11:07:37] [INFO] [evaluate.py:228]: PRECISION@10   : 0.7457
+[2026-08-06 11:07:37] [INFO] [evaluate.py:228]: RECALL@10      : 0.6574
+[2026-08-06 11:07:37] [INFO] [evaluate.py:228]: F1@10          : 0.7121
+[2026-08-06 11:07:37] [INFO] [evaluate.py:228]: MAP@10         : 0.8297
+[2026-08-06 11:07:37] [INFO] [evaluate.py:229]: =========================================
+[2026-08-06 11:07:37] [INFO] [faiss_index.py:145]: Built FAISS flat cosine index with 2967 items.
+[2026-08-06 11:07:37] [INFO] [evaluate.py:301]: Saved gallery metadata to: checkpoints/faiss_index_metadata.pth
+[2026-08-06 11:07:37] [INFO] [evaluate.py:336]: Visualizations skipped. Pass --viz to generate plots.
+[2026-08-06 11:07:37] [INFO] [evaluate.py:338]: Evaluation complete.
