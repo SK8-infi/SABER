@@ -34,8 +34,8 @@ graph TD
     subgraph Backbone ["3. Deep Feature Extraction"]
         DOFA["Frozen DOFA ViT-Base Backbone"]
         LoRA["LoRA Adapters (r=16, α=32)"]
-        ProjHead["Projection Head MLP (768 -> 384)"]
-        Z1_Z2["Normalized Metric Embeddings (z1, z2)"]
+        ProjHead["Projection Head MLP (768 -> 768)"]
+        Z1_Z2["Normalized Metric Embeddings (z1, z2 ∈ ℝ⁷⁶⁸)"]
     end
 
     subgraph Supervision ["4. Ground-Truth Semantic Features"]
@@ -51,7 +51,7 @@ graph TD
     end
 
     subgraph Quantization ["6. Quantized & Regularization Features"]
-        SIGReg_Slices["Random Cramér-Wold Slices (A ∈ R^{384x64})"]
+        SIGReg_Slices["Random Cramér-Wold Slices (A ∈ ℝ^{768x64})"]
         Hash_Bits["Binary Hash Codes (b ∈ {-1, +1}^256)"]
     end
 
@@ -106,83 +106,74 @@ Instead of using hardcoded 3-channel RGB projection weights, SABER incorporates 
 * **Gaofen-1 (MS)**: `[0.485, 0.555, 0.660, 0.830]`
 
 ### Role in Training:
-The backbone hypernetwork ([wave_dynamic_layer.py](file:///c:/Users/praba/OneDrive/Desktop/LFX26/SABER/Saber/dofa/wave_dynamic_layer.py)) accepts these continuous wavelength floats and dynamically generates Vision Transformer (ViT) patch projection weights. This enables **sensor-agnostic feature extraction** across arbitrary sensor band configurations without needing separate backbones.
+The backbone hypernetwork ([wave_dynamic_layer.py](file:///c:/Github/SABER/Saber/dofa/wave_dynamic_layer.py)) accepts these continuous wavelength floats and dynamically generates Vision Transformer (ViT) patch projection weights. This enables **sensor-agnostic feature extraction** across arbitrary sensor band configurations without needing separate backbones.
 
 ---
 
-## 🏷️ 3. Ground-Truth Semantic Target Features (Supervision Level)
+## 🏷️ 3. Ground-Truth Semantic Target Features (Supervision & Evaluation Level)
 
-To enforce that the metric embedding space groups ecologically and structurally similar scenes together, SABER extracts and computes semantic features from multi-label annotations:
+To evaluate retrieval precision and optionally guide metric space geometry, SABER extracts semantic features from multi-label annotations:
 
 ### 3.1 Multi-Label Target Vectors ($y \in \{0, 1\}^C$)
-* **BEN-14K (19 CORINE Classes)**: 19-dimensional multi-hot binary vectors representing land-cover presence (e.g., *Urban fabric*, *Coniferous forest*, *Water bodies*, *Arable land*). Defined in [ben14k.py](file:///c:/Users/praba/OneDrive/Desktop/LFX26/SABER/Saber/datasets/ben14k.py#L12-L32).
-* **DSRSID (8 LULC Classes)**: 8-dimensional multi-hot vectors representing land-use classes (*Aquafarm*, *Forest*, *High building*, *Low building*, *Farm land*, *River*, *Water*, *Cloud*). Defined in [dsrsid.py](file:///c:/Users/praba/OneDrive/Desktop/LFX26/SABER/Saber/datasets/dsrsid.py#L10-L19).
+* **BEN-14K (19 CORINE Classes)**: 19-dimensional multi-hot binary vectors representing land-cover presence (e.g., *Urban fabric*, *Coniferous forest*, *Water bodies*, *Arable land*). Defined in [ben14k.py](file:///c:/Github/SABER/Saber/datasets/ben14k.py).
+* **DSRSID (8 LULC Classes)**: 8-dimensional multi-hot vectors representing land-use classes (*Aquafarm*, *Forest*, *High building*, *Low building*, *Farm land*, *River*, *Water*, *Cloud*). Defined in [dsrsid.py](file:///c:/Github/SABER/Saber/datasets/dsrsid.py).
 
 ### 3.2 Soft Jaccard Overlap Matrix ($s_{ij}$)
-During mini-batch training, pairwise ground-truth similarity matrices are computed using the Jaccard overlap index between sample multi-hot targets $y_i$ and $y_j$:
+During mini-batch evaluation or supervised metric training, pairwise ground-truth similarity matrices are computed using the Jaccard overlap index between sample multi-hot targets $y_i$ and $y_j$:
 $$s_{ij} = \frac{|y_i \cap y_j|}{|y_i \cup y_j|} = \frac{y_i^T y_j}{\|y_i\|_1 + \|y_j\|_1 - y_i^T y_j + \epsilon}$$
 
-This soft matrix serves as continuous similarity target supervision for:
-* **Soft Jaccard Regression Loss ($\mathcal{L}_{rel}$)** in [saber_loss.py](file:///c:/Users/praba/OneDrive/Desktop/LFX26/SABER/Saber/losses/saber_loss.py#L77-L95).
-* **Listwise Neighborhood Ranking Loss ($\mathcal{L}_{rank}$)** in [saber_loss.py](file:///c:/Users/praba/OneDrive/Desktop/LFX26/SABER/Saber/losses/saber_loss.py#L132-L147).
-
-```python
-# Compute soft target Jaccard overlap matrix s_ij
-intersection = torch.matmul(targets, targets.t())  # (B, B)
-sum_y = torch.sum(targets, dim=1, keepdim=True)    # (B, 1)
-union = sum_y + sum_y.t() - intersection           # (B, B)
-s_ij = intersection / (union + 1e-8)
-```
+* **Self-Supervised Pre-Training Mode (Current Active)**: In pure self-supervised mode (`targets=None`), $s_{ij}$ defaults to the identity matrix $\mathbf{I}$, and training relies strictly on **InfoNCE + VICReg (Invariance, Variance, Covariance) + SIGReg**.
+* **Supervised Metric Mode (Optional)**: Used when `jaccard_weight > 0` for soft Jaccard regression ($\mathcal{L}_{rel}$) and neighborhood ranking ($\mathcal{L}_{rank}$) in [saber_loss.py](file:///c:/Github/SABER/Saber/losses/saber_loss.py).
 
 ---
 
 ## 🧠 4. Deep Latent Representations & Feature Maps (Model Level)
 
-During model execution ([saber.py](file:///c:/Users/praba/OneDrive/Desktop/LFX26/SABER/Saber/models/saber.py#L164-L230)), raw images are transformed into high-dimensional latent vectors:
+During model execution ([saber.py](file:///c:/Github/SABER/Saber/models/saber.py)), raw images are transformed into high-dimensional latent vectors:
 
 1. **Wavelength-Conditioned ViT Features ($h \in \mathbb{R}^{768}$)**:
-   Extracted by the frozen DOFA ViT-Base backbone (`FrozenDOFABackbone` in [backbone.py](file:///c:/Users/praba/OneDrive/Desktop/LFX26/SABER/Saber/models/backbone.py)). Represents high-level spatial-spectral context after 12 Transformer self-attention layers.
+   Extracted by the frozen DOFA ViT-Base backbone (`FrozenDOFABackbone` in [backbone.py](file:///c:/Github/SABER/Saber/models/backbone.py)). Represents high-level spatial-spectral context after 12 Transformer self-attention layers.
 2. **LoRA Parameter-Efficient Adapter Features**:
    Parameter-Efficient Fine-Tuning (LoRA, $r=16, \alpha=32$) is applied strictly to attention query/key/value (`qkv`) projections and MLP layers (`fc1`, `fc2`). These adapters tune representation geometry while keeping 99.74% of backbone weights frozen.
-3. **Projected Metric Embeddings ($z_1, z_2 \in \mathbb{R}^{384}$)**:
-   Generated by passing backbone features through a 3-layer MLP projection head (`ProjectionHead` in [projection_head.py](file:///c:/Users/praba/OneDrive/Desktop/LFX26/SABER/Saber/models/projection_head.py)). These normalized vectors inhabit the metric space where cosine distance mirrors land-cover similarity.
-4. **Predicted Target Latents ($\hat{z}_2 \in \mathbb{R}^{384}$)**:
-   Generated by the Latent Predictor network (`Predictor` in [predictor.py](file:///c:/Users/praba/OneDrive/Desktop/LFX26/SABER/Saber/models/predictor.py)), estimating target modality features $z_2$ directly from source features $z_1$.
+3. **Projected Metric Embeddings ($z_1, z_2 \in \mathbb{R}^{768}$)**:
+   Generated by passing backbone features through a 3-layer MLP projection head (`ProjectionHead` in [projection_head.py](file:///c:/Github/SABER/Saber/models/projection_head.py)). These normalized vectors inhabit the metric space where cosine distance mirrors cross-modal similarity.
+4. **Predicted Target Latents ($\hat{z}_2 \in \mathbb{R}^{768}$)**:
+   Generated by the Latent Predictor network (`Predictor` in [predictor.py](file:///c:/Github/SABER/Saber/models/predictor.py)), estimating target modality features $z_2$ directly from source features $z_1$.
 
 ---
 
 ## 🌉 5. Stochastic Latent Bridge & Flow Matching Features (Phase 2 Alignment Level)
 
-To solve cross-modal domain shift (e.g., SAR radar backscatter vs. optical multispectral reflectance), Phase 2 trains a **Conditional Flow Matching (CFM) Latent Bridge** ([bridge.py](file:///c:/Users/praba/OneDrive/Desktop/LFX26/SABER/Saber/models/bridge.py)):
+To solve cross-modal domain shift (e.g., SAR radar backscatter vs. optical multispectral reflectance), Phase 2 trains a **Conditional Flow Matching (CFM) Latent Bridge** ([bridge.py](file:///c:/Github/SABER/Saber/models/bridge.py)):
 
 ### Features Used in the Latent Bridge:
-1. **Source Latent Embeddings ($z_1 \in \mathbb{R}^{384}$)**: Query radar or panchromatic feature embedding.
-2. **Target Latent Embeddings ($z_2 \in \mathbb{R}^{384}$)**: Target multispectral gallery feature embedding.
-3. **Continuous Interpolation Time Vector ($\tau \in [0, 1]$)**: Converted to sinusoidal positional embeddings representing ODE integration time steps.
-4. **Velocity Vector ($v_\phi \in \mathbb{R}^{384}$)**: Output of the neural network modeling the probability vector field $v_\phi = \frac{d z_\tau}{d\tau} = z_2 - z_1$.
-5. **Modality-Agnostic Semantic Anchors ($s \in \mathbb{R}^{16 \times 384}$)**: Shared learnable query tokens inside [AttentionBlockCFM](file:///c:/Users/praba/OneDrive/Desktop/LFX26/SABER/Saber/models/bridge.py#L82) that align features across modalities without losing spatial semantics.
-6. **Log-Variance & Uncertainty Score ($u(q) \in [0, 1]$)**: Estimated via a residual log-variance head $\text{logvar}$ and calibrated using $u(q) = \text{sigmoid}\left(\frac{1}{d} \sum_j \text{logvar}_j\right)$ to measure translation confidence.
+1. **Source Latent Embeddings ($z_1 \in \mathbb{R}^{768}$)**: Query radar or panchromatic feature embedding.
+2. **Target Latent Embeddings ($z_2 \in \mathbb{R}^{768}$)**: Target multispectral gallery feature embedding.
+3. **Continuous Interpolation Time Vector ($\tau \in [0, 1]$)**: Converted via continuous `SinusoidalTimeEmbedding` to positional encodings representing ODE integration time steps.
+4. **Velocity Vector ($v_\phi \in \mathbb{R}^{768}$)**: Output of the neural network modeling the probability vector field $v_\phi = \frac{d z_\tau}{d\tau} = z_2 - z_1$.
+5. **Modality-Agnostic Semantic Anchors ($s \in \mathbb{R}^{8 \times 768}$)**: Shared learnable query tokens inside `AttentionBlockCFM` in [bridge.py](file:///c:/Github/SABER/Saber/models/bridge.py) that align features across modalities without losing spatial semantics.
+6. **Log-Variance & Uncertainty Score ($u(q) \in [0, 1]$)**: Estimated via a residual log-variance head `out_logvar` and calibrated using $u(q) = \text{sigmoid}\left(\frac{1}{d} \sum_j \text{logvar}_j\right)$ to measure translation confidence and scale k-reciprocal re-ranking.
 
 ---
 
 ## ⚡ 6. Sketched Isotropic Gaussian & Hash Code Features (Search & Regularization)
 
-1. **Random Cramér-Wold Projection Features ($A \in \mathbb{R}^{384 \times 64}$)**:
-   Used by **SIGReg** ([sigreg.py](file:///c:/Users/praba/OneDrive/Desktop/LFX26/SABER/Saber/losses/sigreg.py)) to project 384-dimensional embeddings onto 64 random 1D slices. The Empirical Characteristic Function (ECF) of these 1D slices is compared against standard Gaussian distributions to prevent feature dimension collapse.
+1. **Random Cramér-Wold Projection Features ($A \in \mathbb{R}^{768 \times 64}$)**:
+   Used by **SIGReg** ([sigreg.py](file:///c:/Github/SABER/Saber/losses/sigreg.py)) to project 768-dimensional embeddings onto 64 random 1D slices. The Empirical Characteristic Function (ECF) of these 1D slices is compared against standard Gaussian distributions to prevent feature dimension collapse and normalize embedding density.
 2. **Compact Binary Hash Codes ($b \in \{-1, +1\}^{256}$)**:
-   Produced by `HashingHead` ([hashing_head.py](file:///c:/Users/praba/OneDrive/Desktop/LFX26/SABER/Saber/models/hashing_head.py)) via tanh soft codes $\hat{b} = \tanh(W z + b)$, enabling sub-millisecond Hamming distance retrieval in FAISS.
+   Produced by `HashingHead` ([hashing_head.py](file:///c:/Github/SABER/Saber/models/hashing_head.py)) via tanh soft codes $\hat{b} = \tanh(W z + b)$, enabling sub-millisecond Hamming distance retrieval in FAISS when `hashing.enabled: true`.
 
 ---
 
 ## 📊 Summary Table of Losses & Associated Features
 
-| Loss Objective | Symbol | Key Features Used | Purpose |
+| Loss Objective | Symbol | Key Features Used | Primary Purpose |
 | :--- | :--- | :--- | :--- |
-| **Soft Jaccard Loss** | $\mathcal{L}_{rel}$ | Embeddings ($z_1, z_2$), Multi-hot targets ($y$), Soft Jaccard matrix ($s_{ij}$) | Regresses cosine similarity directly to real-world multi-label overlap |
-| **Neighborhood Ranking** | $\mathcal{L}_{rank}$ | Embedding similarity logits ($S_{ij}$), Jaccard probabilities ($P_{ij}$) | Optimizes relative retrieval ranking in local mini-batch neighborhoods |
-| **VICReg (Inv, Var, Cov)** | $\mathcal{L}_{vic}$ | Latent embeddings ($z_1, z_2$), Feature-wise std dev, Covariance matrix | Prevents representation collapse and decorrelates embedding dimensions |
-| **SIGReg Loss** | $\mathcal{L}_{sigreg}$ | Latent embeddings ($z$), Random slice projections ($A \in \mathbb{R}^{d \times K}$) | Enforces maximum entropy isotropic Gaussian latent space distribution |
-| **CFM Bridge Loss** | $\mathcal{L}_{CFM}$ | Source/target latents ($z_1, z_2$), Velocity field ($v_\phi$), Time steps ($\tau$) | Transport source radar distribution onto optical gallery distribution |
-| **Hashing Loss** | $\mathcal{L}_{hash}$ | Soft hash codes ($\hat{b}$), Pairwise target similarity ($s_{ij}$) | Constrains binary codes to preserve metric space similarity in Hamming space |
+| **Cross-Modal InfoNCE** | $\mathcal{L}_{InfoNCE}$ | Latent embeddings ($z_1, z_2$), Temperature ($\tau=0.07$) | 100% Label-free cross-modal directional alignment ($S1 \leftrightarrow S2$) |
+| **VICReg (Inv, Var, Cov)** | $\mathcal{L}_{vic}$ | Latent embeddings ($z_1, z_2$), Feature-wise std dev, Covariance matrix | Minimizes $S1 \leftrightarrow S2$ distance ($\mathcal{L}_{inv}$), forces $\text{std} \ge 1$ ($\mathcal{L}_{var}$), and decorrelates features ($\mathcal{L}_{cov}$) |
+| **SIGReg Loss** | $\mathcal{L}_{sigreg}$ | Latent embeddings ($z$), Random slice projections ($A \in \mathbb{R}^{768 \times 64}$) | Enforces maximum entropy isotropic Gaussian latent space distribution |
+| **CFM Bridge Loss** | $\mathcal{L}_{CFM}$ | Source/target latents ($z_1, z_2$), Velocity field ($v_\phi$), Time steps ($\tau$) | Transports source radar distribution onto optical gallery distribution |
+| **Soft Jaccard Loss** | $\mathcal{L}_{rel}$ | Embeddings ($z_1, z_2$), Multi-hot targets ($y$), Soft Jaccard matrix ($s_{ij}$) | Regresses cosine similarity directly to real-world multi-label overlap (Optional Supervised Mode) |
+| **Neighborhood Ranking** | $\mathcal{L}_{rank}$ | Embedding similarity logits ($S_{ij}$), Jaccard probabilities ($P_{ij}$) | Optimizes relative retrieval ranking in local mini-batch neighborhoods (Optional Supervised Mode) |
+| **Hashing Loss** | $\mathcal{L}_{hash}$ | Soft hash codes ($\hat{b}$), Pairwise target similarity ($s_{ij}$) | Constrains binary codes to preserve metric space similarity in Hamming space (Optional Dev 4) |
 
----
