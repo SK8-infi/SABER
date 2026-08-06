@@ -99,8 +99,8 @@ def train_cfm_standalone(
 
     # 3. Load Datasets
     logger.info(f"Loading BEN-14K dataset from '{data_dir}'...")
-    train_dataset = BEN14KDataset(data_dir=data_dir, modality="both", split="train", use_synthetic=False)
-    test_dataset = BEN14KDataset(data_dir=data_dir, modality="both", split="test", use_synthetic=False)
+    train_dataset = BEN14KDataset(data_dir=data_dir, modality="both", split="train", is_train=True, use_synthetic=False)
+    test_dataset = BEN14KDataset(data_dir=data_dir, modality="both", split="test", is_train=False, use_synthetic=False)
 
     train_loader = DataLoader(
         train_dataset,

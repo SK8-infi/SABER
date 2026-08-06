@@ -45,7 +45,7 @@ class Evaluator:
         num_batches = len(self.dataloader)
         with torch.no_grad():
             for batch_idx, batch in enumerate(self.dataloader):
-                images = batch["image"].to(self.device)
+                images = batch.get("image", batch.get("image1")).to(self.device)
                 
                 # Auto-resize on GPU to prevent CPU resize bottleneck
                 if images.shape[-1] != 224 or images.shape[-2] != 224:
@@ -118,7 +118,7 @@ class Evaluator:
             
             with torch.no_grad():
                 for batch_idx, batch in enumerate(self.dataloader):
-                    images = batch["image"].to(self.device)
+                    images = batch.get("image", batch.get("image1")).to(self.device)
 
 
                     
