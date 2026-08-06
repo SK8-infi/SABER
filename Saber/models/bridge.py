@@ -169,7 +169,7 @@ class CFMBridgeWrapper(nn.Module):
     Multi-step / 1-step Euler predictor wrapper for CFM Bridge with Calibrated Uncertainty u(q).
     Supports (B, D) pooled features and (B, L, D) spatial patch token sequences.
     """
-    def __init__(self, cfm_bridge: CFMBridge, ode_steps: int = 1) -> None:
+    def __init__(self, cfm_bridge: CFMBridge, ode_steps: int = 10) -> None:
         super().__init__()
         self.cfm_bridge = cfm_bridge
         self.ode_steps = ode_steps
