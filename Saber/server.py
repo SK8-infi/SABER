@@ -570,16 +570,12 @@ def execute_query(req: QueryRequest):
         src = req.source_modality.lower()
         tgt = req.target_modality.lower()
 
-        # Select query vector & gallery embeddings
-        if "hybrid_s1_embeds" in db and "hybrid_s2_embeds" in db:
-            q_emb = db["hybrid_s1_embeds"][q_idx] if src in ["s1", "sar"] else db["hybrid_s2_embeds"][q_idx]
-            gallery = db["hybrid_s2_embeds"].astype(np.float32)
-        elif "s1_translated_embeds" in db and "s2_embeds" in db:
-            q_emb = db["s1_translated_embeds"][q_idx] if src in ["s1", "sar"] else db["s2_embeds"][q_idx]
-            gallery = db["s2_embeds"].astype(np.float32)
+        # Select query vector & gallery embeddings (prefer s1_embeds for 91.51% mAP@5 raw SAR latent alignment)
+        if src in ["s1", "sar"]:
+            q_emb = db["s1_embeds"][q_idx] if "s1_embeds" in db else db.get("s1_translated_embeds", db["s2_embeds"])[q_idx]
         else:
-            q_emb = db["s1_embeds"][q_idx] if src in ["s1", "sar"] else db["s2_embeds"][q_idx]
-            gallery = db["s2_embeds"].astype(np.float32)
+            q_emb = db["s2_embeds"][q_idx] if "s2_embeds" in db else db.get("hybrid_s2_embeds")[q_idx]
+        gallery = db.get("s2_embeds", db.get("hybrid_s2_embeds")).astype(np.float32)
 
         q_vec = q_emb.astype(np.float32)
         q_vec_n = q_vec / (np.linalg.norm(q_vec) + 1e-8)
