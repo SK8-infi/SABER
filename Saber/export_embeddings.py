@@ -167,22 +167,17 @@ def export_embeddings(
             p1 = torch.sigmoid(logits_s1)
             p2 = torch.sigmoid(logits_s2)
 
-            # CFM Bridge translation S1 -> S2 (compatible with both class-conditioned and unimodal bridges)
+            # CFM Bridge translation S1 -> S2 (raw CFM translated latent vector)
             try:
                 z1_trans_raw = model.bridge(z1, c_class=p1)
             except TypeError:
                 z1_trans_raw = model.bridge(z1)
             z1_trans = F.normalize(z1_trans_raw, p=2, dim=-1)
 
-            # Dual-Classifier Prob Fusion: refine radar predictions using translated optical vector
-            logits_trans = model.classifier(z1_trans)
-            p1_trans = torch.sigmoid(logits_trans)
-            p1_fused = 0.5 * p1 + 0.5 * p1_trans
-
             s1_list.append(z1.cpu().numpy())
             s2_list.append(z2.cpu().numpy())
             s1_trans_list.append(z1_trans.cpu().numpy())
-            p1_list.append(p1_fused.cpu().numpy())
+            p1_list.append(p1.cpu().numpy())
             p2_list.append(p2.cpu().numpy())
             labels_list.append(batch["label"].cpu().numpy())
             names_list.extend(batch["name"])
@@ -195,58 +190,27 @@ def export_embeddings(
     all_labels = np.concatenate(labels_list, axis=0)
     all_names = np.array(names_list)
 
-    # Orthogonal Procrustes SVD Domain Alignment (align S1_translated -> S2 optical space)
-    logger.info("Computing Orthogonal Procrustes SVD Domain Alignment (S1_trans -> S2)...")
-    U, S, Vt = np.linalg.svd(all_s1_trans.T @ all_s2, full_matrices=False)
-    R_procrustes = U @ Vt
-    all_s1_trans_aligned = all_s1_trans @ R_procrustes
-    all_s1_trans_aligned = all_s1_trans_aligned / (np.linalg.norm(all_s1_trans_aligned, axis=1, keepdims=True) + 1e-8)
-
-    # High-F1 Class Probability Thresholding (0.12 Noise Removal)
-    p1_t = np.where(all_p1 > 0.12, all_p1, 0.0)
-    p2_t = np.where(all_p2 > 0.12, all_p2, 0.0)
-
-    p1_norm = p1_t / (np.linalg.norm(p1_t, axis=1, keepdims=True) + 1e-8)
-    p2_norm = p2_t / (np.linalg.norm(p2_t, axis=1, keepdims=True) + 1e-8)
-
-    # 787-D High-F1 Multi-Label Hybrid Descriptors (0.65 Procrustes Visual Vector + 0.35 Thresholded Class Vector)
-    v1_c = np.hstack([0.65 * all_s1_trans_aligned, 0.35 * p1_norm])
-    v2_c = np.hstack([0.65 * all_s2, 0.35 * p2_norm])
-
-    h1 = (v1_c / (np.linalg.norm(v1_c, axis=1, keepdims=True) + 1e-8)).astype(np.float32)
-    h2 = (v2_c / (np.linalg.norm(v2_c, axis=1, keepdims=True) + 1e-8)).astype(np.float32)
-
-    # Apply Database Augmentation (DBA) Gallery Manifold Smoothing
-    logger.info("Applying Database Augmentation (DBA) gallery manifold smoothing...")
-    g_norm = h2 / (np.linalg.norm(h2, axis=1, keepdims=True) + 1e-8)
-    sims = g_norm @ g_norm.T
-    np.fill_diagonal(sims, -1.0)
-    top_k_idx = np.argpartition(sims, -3, axis=1)[:, -3:]
-    top_k_weights = np.take_along_axis(sims, top_k_idx, axis=1)[:, :, None]
-    h2_dba = g_norm + 1.5 * np.sum(g_norm[top_k_idx] * top_k_weights, axis=1)
-    h2_dba = h2_dba / (np.linalg.norm(h2_dba, axis=1, keepdims=True) + 1e-8)
-
-    # Build FAISS Indices on DBA-Smoothed Gallery Vectors if available
+    # Build FAISS Index directly on raw Optical Gallery (768-D)
     faiss_s2_index = None
     if FAISS_AVAILABLE:
-        logger.info("Building FAISS Flat Cosine Index for DBA-Smoothed Optical Gallery (787-D)...")
-        index = faiss.IndexFlatIP(h2_dba.shape[1])
-        index.add(h2_dba.astype(np.float32))
+        logger.info("Building FAISS Flat Cosine Index for Raw Optical Gallery (768-D)...")
+        index = faiss.IndexFlatIP(all_s2.shape[1])
+        index.add(all_s2.astype(np.float32))
         faiss_s2_index = faiss.serialize_index(index)
-        logger.info("✅ FAISS S2 DBA-Smoothed Index successfully built!")
+        logger.info("✅ FAISS S2 Raw Index successfully built!")
 
-    # Package Export Database
+    # Package Export Database (Pure Raw Embeddings - No Post-Processing Applied)
     db_payload = {
         "num_samples": N_samples,
         "names": all_names,
         "labels": all_labels,
         "s1_embeds": all_s1.astype(np.float16),
         "s2_embeds": all_s2.astype(np.float16),
-        "s1_translated_embeds": all_s1_trans_aligned.astype(np.float16),  # Procrustes SVD Aligned
+        "s1_translated_embeds": all_s1_trans.astype(np.float16), # Raw CFM Translated Latent Vector
         "class_probs_s1": all_p1.astype(np.float16),
         "class_probs_s2": all_p2.astype(np.float16),
-        "hybrid_s1_embeds": h1.astype(np.float16),
-        "hybrid_s2_embeds": h2_dba.astype(np.float16),                    # DBA Gallery Smoothed
+        "hybrid_s1_embeds": all_s1_trans.astype(np.float16),     # Pure Raw CFM Translated
+        "hybrid_s2_embeds": all_s2.astype(np.float16),           # Pure Raw Optical Gallery
         "faiss_s2_index": faiss_s2_index,
         "class_names": getattr(config.dataset, "class_names", [
             "Urban fabric", "Industrial units", "Arable land", "Permanent crops",
