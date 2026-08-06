@@ -409,8 +409,8 @@ const SidebarLayout = () => {
           </div>
           )}
 
-          {/* TARGET GALLERY — hidden on ablation route */}
-          {!isAblation && (
+          {/* TARGET GALLERY — hidden (auto-derived for both same+cross modal) */}
+          {false && (
           <div className='flex flex-col gap-1.5 mt-1'>
             <SidebarGroupLabel className='text-sidebar-foreground/50 h-auto p-0 text-xs font-semibold tracking-wider uppercase'>
               TARGET GALLERY

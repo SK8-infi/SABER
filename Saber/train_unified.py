@@ -13,6 +13,7 @@ os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
 sys.stdout.reconfigure(encoding='utf-8', line_buffering=True)
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
+import numpy as np
 from Saber.utils.config import load_config
 from Saber.utils.seed import set_seed
 from Saber.utils.logger import setup_logger
@@ -22,6 +23,7 @@ from Saber.datasets.transforms import get_transforms
 from Saber.models.saber import SABER
 from Saber.models.bridge import CFMBridge, CFMBridgeWrapper
 from Saber.losses.saber_loss import SaberCombinedLoss
+from Saber.trainer.metrics import compute_retrieval_metrics
 
 def resolve_existing_path(path: str, candidate_paths: list) -> str:
     """Smart path resolver for Linux case-sensitive filesystems (Google Colab / Kaggle)."""
@@ -300,22 +302,29 @@ def train_unified(
                         loss_dict = loss_fn(z_pan, z_ms, z_pan_pred, targets=None)
 
                 step_loss = loss_dict.get("loss", loss_dict.get("total_loss"))
+                accum_steps = config.train.get("grad_accumulation_steps", 1)
+                loss_scaled = step_loss / accum_steps
 
                 if scaler is not None:
-                    scaler.scale(step_loss).backward()
-                    scaler.unscale_(optimizer)
-                    torch.nn.utils.clip_grad_norm_(trainable_params, grad_clip)
-                    scaler.step(optimizer)
-                    scaler.update()
+                    scaler.scale(loss_scaled).backward()
+                    if (step + 1) % accum_steps == 0 or (step + 1) == max_batches:
+                        scaler.unscale_(optimizer)
+                        torch.nn.utils.clip_grad_norm_(trainable_params, grad_clip)
+                        scaler.step(optimizer)
+                        scaler.update()
+                        optimizer.zero_grad()
                 else:
-                    step_loss.backward()
-                    torch.nn.utils.clip_grad_norm_(trainable_params, grad_clip)
-                    optimizer.step()
+                    loss_scaled.backward()
+                    if (step + 1) % accum_steps == 0 or (step + 1) == max_batches:
+                        torch.nn.utils.clip_grad_norm_(trainable_params, grad_clip)
+                        optimizer.step()
+                        optimizer.zero_grad()
 
                 # Update EMA target model
-                with torch.no_grad():
-                    for p_online, p_target in zip(model.parameters(), ema_model.parameters()):
-                        p_target.data.mul_(ema_decay).add_(p_online.data, alpha=1.0 - ema_decay)
+                if (step + 1) % accum_steps == 0 or (step + 1) == max_batches:
+                    with torch.no_grad():
+                        for p_online, p_target in zip(model.parameters(), ema_model.parameters()):
+                            p_target.data.mul_(ema_decay).add_(p_online.data, alpha=1.0 - ema_decay)
 
                 # Accumulate pure SSL loss sub-components
                 v_loss = step_loss.item()
@@ -394,14 +403,12 @@ def train_unified(
 
     # Clear VRAM cache between Phase 1 and Phase 2
     if torch.cuda.is_available():
-        torch.cuda.empty_cache()
-
-    # -------------------------------------------------------------
+        torch.cuda.empty_cache()    # -------------------------------------------------------------
     # PHASE 2: MASTER PATCH-PROJECTED CFM BRIDGE TRAINING
     # -------------------------------------------------------------
     if mode_clean in ["all", "bridge"]:
         logger.info("="*60)
-        logger.info(" PHASE 2: MASTER PATCH-PROJECTED CFM BRIDGE TRAINING (SPEED OPTIMIZED)")
+        logger.info(" PHASE 2: MASTER LATENT CFM BRIDGE TRAINING & INSTANT GPU EVALUATION")
         logger.info("="*60)
 
         # If mode is bridge-only, ensure encoder weights are loaded
@@ -420,119 +427,131 @@ def train_unified(
                 except TypeError:
                     ckpt = torch.load(encoder_path, map_location=device)
                 if "model_state_dict" in ckpt:
-                    model.load_state_dict(ckpt["model_state_dict"])
+                    model.load_state_dict(ckpt["model_state_dict"], strict=False)
             else:
                 logger.warning("⚠️ No pre-trained master encoder checkpoint found! CFM Bridge will train on initial backbone weights.")
 
-        bridge_net = CFMBridge(dim=768, hidden_dim=768, num_blocks=4, dropout=0.1).to(device)
-        bridge_opt = torch.optim.AdamW(bridge_net.parameters(), lr=0.0003, weight_decay=0.01)
-
-        bridge_epochs = bridge_epochs_override if bridge_epochs_override is not None else 10
+        # Freeze encoder during bridge training
         model.eval()
+        for p in model.parameters():
+            p.requires_grad = False
 
-        # 🔍 Auto-Resume Detection for Phase 2 CFM Bridge (Strictly Local)
-        start_b_epoch = 1
-        bridge_resume_candidates = [
-            unified_bridge_path,
-            legacy_bridge_path
-        ]
-        bridge_resume_path = None
-        for b_cand in bridge_resume_candidates:
-            if b_cand and os.path.exists(b_cand):
-                bridge_resume_path = b_cand
-                break
+        bridge_net = CFMBridge(dim=768, hidden_dim=768, num_blocks=4, dropout=0.1).to(device)
+        
+        # Bypass queries for clean direct concatenation
+        bridge_net.is_queries_trained = False
+        with torch.no_grad():
+            if hasattr(bridge_net, "query_scale"):
+                bridge_net.query_scale.zero_()
 
-        if bridge_resume_path and not force_retrain_bridge:
-            try:
-                logger.info(f"🔍 Found existing Bridge Checkpoint at '{bridge_resume_path}'. Checking architecture compatibility...")
-                try:
-                    b_ckpt = torch.load(bridge_resume_path, map_location=device, weights_only=False)
-                except TypeError:
-                    b_ckpt = torch.load(bridge_resume_path, map_location=device)
-                
-                raw_sd = b_ckpt.get("bridge_state_dict", b_ckpt.get("state_dict", b_ckpt)) if isinstance(b_ckpt, dict) else b_ckpt
-                has_new_arch = isinstance(raw_sd, dict) and any("shared_queries" in k for k in raw_sd.keys())
+        bridge_opt = torch.optim.AdamW(bridge_net.parameters(), lr=0.0005, weight_decay=0.01)
 
-                if not has_new_arch:
-                    logger.warning(f"⚠️ Bridge Checkpoint at '{bridge_resume_path}' is from OLD architecture (missing shared_queries & distilled_p). Retraining Phase 2 Bridge from scratch!")
-                    start_b_epoch = 1
-                else:
-                    if isinstance(b_ckpt, dict) and "bridge_state_dict" in b_ckpt:
-                        bridge_net.load_state_dict(b_ckpt["bridge_state_dict"])
-                        if "optimizer_state_dict" in b_ckpt:
-                            bridge_opt.load_state_dict(b_ckpt["optimizer_state_dict"])
-                        last_b_epoch = b_ckpt.get("epoch", 0)
-                        if last_b_epoch >= bridge_epochs:
-                            logger.info(f"✅ Phase 2 Bridge training already completed ({last_b_epoch}/{bridge_epochs} epochs).")
-                            start_b_epoch = bridge_epochs + 1
-                        else:
-                            start_b_epoch = last_b_epoch + 1
-                            logger.info(f"⏩ Auto-resuming Phase 2 Bridge training from Epoch {start_b_epoch}/{bridge_epochs}!")
-                    elif isinstance(b_ckpt, dict) and "state_dict" in b_ckpt:
-                        bridge_net.load_state_dict(b_ckpt["state_dict"])
-                    elif isinstance(b_ckpt, dict):
-                        bridge_net.load_state_dict(b_ckpt)
-            except Exception as e:
-                logger.warning(f"Failed to load bridge checkpoint from '{bridge_resume_path}': {e}")
-        elif force_retrain_bridge:
-            logger.info("🔄 '--force_retrain_bridge' flag set. Retraining Phase 2 CFM Bridge from scratch!")
-            start_b_epoch = 1
-        logger.info(f"Training Master CFM Bridge for {bridge_epochs} Epochs on Cross-Modal Pair Features...")
+        bridge_epochs = bridge_epochs_override if bridge_epochs_override is not None else 15
+        bridge_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(bridge_opt, T_max=bridge_epochs, eta_min=1e-6)
 
-        for b_epoch in range(start_b_epoch, bridge_epochs + 1):
+        # Attach bridge to model for ODE evaluation
+        model.bridge.cfm_bridge = bridge_net
+        model.bridge.ode_steps = 10
+
+        # ⚡ PRE-EXTRACT TRAIN & TEST LATENTS ONCE INTO GPU MEMORY
+        logger.info("⚡ Pre-extracting 768-D S1 (z1) & S2 (z2) latents for TRAIN set into GPU memory...")
+        train_z1_list, train_z2_list = [], []
+        with torch.no_grad():
+            for batch in tqdm(ben14k_loader, desc="Caching Train Latents", dynamic_ncols=True):
+                images = batch.get("image1", batch.get("image")).to(device, non_blocking=True)
+                if images.ndim == 4 and (images.shape[-1] != 224 or images.shape[-2] != 224):
+                    images = F.interpolate(images, size=(224, 224), mode="bilinear", align_corners=False)
+
+                x_s1 = images[:, :2, :, :]
+                x_s2 = images[:, 2:, :, :]
+
+                z1_raw, z2_raw = model(x_s1, x_s2)[:2]
+                z1_norm = F.normalize(z1_raw, p=2, dim=-1)
+                z2_norm = F.normalize(z2_raw, p=2, dim=-1)
+
+                train_z1_list.append(z1_norm.cpu())
+                train_z2_list.append(z2_norm.cpu())
+
+        cached_train_z1 = torch.cat(train_z1_list, dim=0).to(device)
+        cached_train_z2 = torch.cat(train_z2_list, dim=0).to(device)
+        N_train = cached_train_z1.shape[0]
+
+        logger.info("⚡ Pre-extracting 768-D S1 (z1) & S2 (z2) latents for TEST evaluation set into GPU memory...")
+        test_dataset = BEN14KDataset(data_dir=config.dataset.data_dir, modality="both", split="test", is_train=False, use_synthetic=False)
+        test_loader = DataLoader(test_dataset, batch_size=config.dataset.batch_size, shuffle=False, num_workers=2, pin_memory=True)
+
+        test_s1_list, test_s2_list, test_labels_list, test_names_list = [], [], [], []
+        with torch.no_grad():
+            for batch in tqdm(test_loader, desc="Caching Test Latents", dynamic_ncols=True):
+                images = batch.get("image", batch.get("image1")).to(device, non_blocking=True)
+                if images.ndim == 4 and (images.shape[-1] != 224 or images.shape[-2] != 224):
+                    images = F.interpolate(images, size=(224, 224), mode="bilinear", align_corners=False)
+
+                x_s1 = images[:, :2, :, :]
+                x_s2 = images[:, 2:, :, :]
+
+                z1_raw, z2_raw = model(x_s1, x_s2)[:2]
+                z1_norm = F.normalize(z1_raw, p=2, dim=-1)
+                z2_norm = F.normalize(z2_raw, p=2, dim=-1)
+
+                test_s1_list.append(z1_norm.cpu())
+                test_s2_list.append(z2_norm.cpu())
+                test_labels_list.append(batch["label"].cpu())
+                test_names_list.extend(batch["name"])
+
+        cached_test_s1 = torch.cat(test_s1_list, dim=0).to(device)
+        cached_test_s2 = torch.cat(test_s2_list, dim=0).to(device)
+        cached_test_labels = torch.cat(test_labels_list, dim=0).to(device)
+        cached_test_names = np.array(test_names_list)
+        N_test = cached_test_s1.shape[0]
+
+        # Query (20%) and Gallery (80%) split
+        rng = np.random.RandomState(42)
+        shuffled = rng.permutation(N_test)
+        q_size = max(1, N_test // 5)
+        query_indices = np.sort(shuffled[:q_size])
+        gallery_indices = np.sort(shuffled[q_size:])
+
+        test_q_s1 = cached_test_s1[query_indices]
+        test_q_labels = cached_test_labels[query_indices].cpu().numpy()
+        test_q_names = cached_test_names[query_indices]
+
+        test_g_s2 = cached_test_s2[gallery_indices]
+        test_g_labels = cached_test_labels[gallery_indices].cpu().numpy()
+        test_g_names = cached_test_names[gallery_indices]
+
+        logger.info(f"✅ Pre-extraction Complete! Cached {N_train} train pairs & {N_test} test pairs in GPU memory.")
+        logger.info(f"📊 Test Evaluation Setup: {len(query_indices)} S1 Queries -> {len(gallery_indices)} S2 Gallery Items.")
+
+        best_f1_5 = 0.0
+        best_map5 = 0.0
+        best_ben_path = os.path.join(config.checkpoint_dir, "bridge_best_ben14k.pth")
+
+        logger.info(f"Training Master CFM Bridge for {bridge_epochs} Epochs on Cached GPU Memory Tensors...")
+
+        batch_size_b = config.dataset.batch_size
+        num_batches_b = (N_train + batch_size_b - 1) // batch_size_b
+
+        for b_epoch in range(1, bridge_epochs + 1):
             bridge_net.train()
             total_bridge_loss = 0.0
+            start_b_time = time.time()
 
-            ben_iter = iter(ben14k_loader)
-            dsr_iter = iter(dsrsid_loader) if (joint and dsrsid_loader is not None) else None
-            max_batches = len(ben14k_loader) + (len(dsrsid_loader) if (joint and dsrsid_loader is not None) else 0)
+            perm = torch.randperm(N_train, device=device)
 
-            pbar_b = tqdm(range(max_batches), desc=f"Phase 2 Bridge Epoch {b_epoch}/{bridge_epochs}", leave=True, dynamic_ncols=True)
-            for step in pbar_b:
+            for b_idx in range(num_batches_b):
+                idx_b = perm[b_idx * batch_size_b : (b_idx + 1) * batch_size_b]
+                z1_b = cached_train_z1[idx_b]
+                z2_b = cached_train_z2[idx_b]
+                B_curr = z1_b.shape[0]
+
                 bridge_opt.zero_grad()
-                is_ben_step = not joint or (step % 2 == 0) or (dsr_iter is None)
 
-                if is_ben_step:
-                    try:
-                        ben_batch = next(ben_iter)
-                    except StopIteration:
-                        ben_iter = iter(ben14k_loader)
-                        ben_batch = next(ben_iter)
+                tau = torch.rand(B_curr, 1, device=device)
+                z_tau = (1.0 - tau) * z1_b + tau * z2_b
+                v_target = z2_b - z1_b
 
-                    images_ben = ben_batch.get("image1", ben_batch.get("image")).to(device, non_blocking=True)
-                    if images_ben.shape[-1] != 224 or images_ben.shape[-2] != 224:
-                        images_ben = F.interpolate(images_ben, size=(224, 224), mode="bilinear", align_corners=False)
-
-                    x1 = images_ben[:, :2, :, :]
-                    x2 = images_ben[:, 2:, :, :]
-                    wvs1, wvs2 = model.s1_wvs, model.s2_wvs
-                else:
-                    try:
-                        dsr_batch = next(dsr_iter)
-                    except StopIteration:
-                        dsr_iter = iter(dsrsid_loader)
-                        dsr_batch = next(dsr_iter)
-
-                    images_dsr = dsr_batch.get("image1", dsr_batch.get("image")).to(device, non_blocking=True)
-                    if images_dsr.shape[-1] != 224 or images_dsr.shape[-2] != 224:
-                        images_dsr = F.interpolate(images_dsr, size=(224, 224), mode="bilinear", align_corners=False)
-
-                    x1 = images_dsr[:, :1, :, :]
-                    x2 = images_dsr[:, 1:, :, :]
-                    wvs1, wvs2 = [0.675], [0.485, 0.555, 0.660, 0.830]
-
-                with torch.no_grad():
-                    feats1 = model.backbone(x1, wvs1)
-                    feats2 = model.backbone(x2, wvs2)
-                    z1 = model.projection_head(feats1)
-                    z2 = model.projection_head(feats2)
-
-                # Flow Matching Interpolation
-                tau = torch.rand(z1.shape[0], 1, device=device)
-                v_target = z2 - z1
-                z_tau = (1.0 - tau) * z1 + tau * z2
-
-                v_pred, logvar = bridge_net(z_tau, tau, z1)
+                v_pred, _ = bridge_net(z_tau, tau, z1_b)
                 loss_b = F.mse_loss(v_pred, v_target)
 
                 loss_b.backward()
@@ -540,19 +559,59 @@ def train_unified(
                 bridge_opt.step()
 
                 total_bridge_loss += loss_b.item()
-                pbar_b.set_postfix({"flow_loss": f"{loss_b.item():.6f}"})
 
-            avg_b_loss = total_bridge_loss / max_batches
-            logger.info(f"Phase 2 Bridge Epoch {b_epoch}/{bridge_epochs} | Average Flow Loss: {avg_b_loss:.6f}")
+            bridge_scheduler.step()
+            train_b_elapsed = time.time() - start_b_time
+            avg_b_loss = total_bridge_loss / num_batches_b
+
+            # 📊 INSTANT GPU CROSS-MODAL EVALUATION (S1 -> S2)
+            eval_b_start = time.time()
+            bridge_net.eval()
+            with torch.no_grad():
+                translated_q_s1 = model.bridge(test_q_s1)
+                translated_q_s1 = F.normalize(translated_q_s1, p=2, dim=-1)
+
+                metrics5 = compute_retrieval_metrics(
+                    query_embeds=translated_q_s1.cpu().numpy(),
+                    gallery_embeds=test_g_s2.cpu().numpy(),
+                    query_labels=test_q_labels,
+                    gallery_labels=test_g_labels,
+                    top_k=5,
+                    is_multilabel=True,
+                    query_names=test_q_names,
+                    gallery_names=test_g_names,
+                    exclude_self_matches=False
+                )
+                map5 = metrics5.get("map@5", metrics5.get("MAP@5", 0.0))
+                prec5 = metrics5.get("precision@5", metrics5.get("PRECISION@5", 0.0))
+                rec5 = metrics5.get("recall@5", metrics5.get("RECALL@5", 0.0))
+                f1_5 = metrics5.get("f1@5", metrics5.get("F1@5", (2.0 * prec5 * rec5) / (prec5 + rec5 + 1e-8)))
+
+            eval_b_elapsed = time.time() - eval_b_start
+
+            logger.info(
+                f"Phase 2 Bridge Epoch [{b_epoch}/{bridge_epochs}] ({train_b_elapsed:.2f}s train, {eval_b_elapsed:.2f}s eval) | "
+                f"Flow MSE: {avg_b_loss:.6f} | F1@5: {f1_5:.4f} | mAP@5: {map5:.4f} | Prec@5: {prec5:.4f} | Rec@5: {rec5:.4f}"
+            )
 
             # Save Bridge Checkpoints
             b_ckpt_data = {
                 "epoch": b_epoch,
                 "bridge_state_dict": bridge_net.state_dict(),
                 "optimizer_state_dict": bridge_opt.state_dict(),
-                "loss": avg_b_loss
+                "loss": avg_b_loss,
+                "f1_5": f1_5,
+                "map5": map5,
+                "precision5": prec5,
+                "recall5": rec5
             }
             torch.save(b_ckpt_data, unified_bridge_path)
+
+            if f1_5 > best_f1_5:
+                best_f1_5 = f1_5
+                best_map5 = map5
+                torch.save(b_ckpt_data, best_ben_path)
+                logger.info(f"🏆 NEW BEST Cross-Modal F1@5: {best_f1_5:.4f} (mAP@5: {map5:.4f})! Saved to '{best_ben_path}'")
 
             if is_drive_available:
                 try:
