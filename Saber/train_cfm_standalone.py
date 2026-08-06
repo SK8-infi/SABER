@@ -30,20 +30,20 @@ def train_cfm_standalone(
     save_dir: str = "checkpoints_v10"
 ):
     """
-    Standalone Dedicated Training Engine for CFM Latent Bridge.
+    Original Pure Standalone Dedicated Training Engine for CFM Latent Bridge.
     
     1. Loads pre-trained Master Encoder (DOFA + LoRA + Projection Head).
     2. Freezes encoder completely.
-    3. Trains CFM Bridge using Enhanced Multi-Objective Loss:
-       - Velocity MSE Loss (||v_pred - v_target||^2)
-       - Velocity Cosine Loss (1 - cos(v_pred, v_target))
-       - End-Point Target Alignment Loss (1 - cos(z1 + v_pred, z2))
+    3. Trains CFM Bridge using pure Flow Matching MSE Loss:
+       - Velocity Field Target: v_target = z2 - z1
+       - Interpolated State: z_tau = (1 - tau) * z1 + tau * z2
+       - Loss: MSELoss(v_pred, v_target)
     4. Evaluates Cross-Modal Retrieval (S1 Query -> S2 Gallery) after every epoch.
     5. Saves best bridge checkpoint based on Cross-Modal mAP@5.
     """
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     logger.info("=" * 80)
-    logger.info(" 🚀 SABER STANDALONE CFM LATENT BRIDGE OPTIMIZATION ENGINE")
+    logger.info(" 🚀 SABER ORIGINAL SIMPLE CFM LATENT BRIDGE TRAINING ENGINE")
     logger.info("=" * 80)
     logger.info(f" Device: {device} | Batch Size: {batch_size} | Epochs: {epochs} | LR: {lr}")
     logger.info(f" Encoder Checkpoint Target: '{checkpoint_path}'")
@@ -76,26 +76,26 @@ def train_cfm_standalone(
     for param in model.parameters():
         param.requires_grad = False
 
-    # 2. Instantiate Fresh CFM Bridge
+    # 2. Instantiate Fresh Pure CFM Bridge
     bridge_net = CFMBridge(
         dim=768,
         hidden_dim=768,
         num_blocks=4,
-        num_queries=8,
         dropout=0.1
     ).to(device)
 
-    # Mark queries as active for training
-    bridge_net.is_queries_trained = True
-    # Initialize query_scale to a small positive value (0.1) to allow cross-attention gradients immediately
+    # Bypass queries for clean direct concatenation
+    bridge_net.is_queries_trained = False
     with torch.no_grad():
-        bridge_net.query_scale.copy_(torch.tensor(0.1, device=device))
+        if hasattr(bridge_net, "query_scale"):
+            bridge_net.query_scale.zero_()
 
     optimizer = torch.optim.AdamW(bridge_net.parameters(), lr=lr, weight_decay=0.01)
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=epochs, eta_min=1e-6)
 
     # Attach bridge to model for evaluator compatibility
     model.bridge.cfm_bridge = bridge_net
+    model.bridge.ode_steps = 10
 
     # 3. Load Datasets
     logger.info(f"Loading BEN-14K dataset from '{data_dir}'...")
@@ -131,15 +131,12 @@ def train_cfm_standalone(
     best_ben_path = os.path.join(save_dir, "bridge_best_ben14k.pth")
 
     logger.info("=" * 80)
-    logger.info(" STARTING CFM LATENT BRIDGE TRAINING & REAL-TIME EVALUATION")
+    logger.info(" STARTING PURE CFM LATENT BRIDGE TRAINING & REAL-TIME EVALUATION")
     logger.info("=" * 80)
 
     for epoch in range(1, epochs + 1):
         bridge_net.train()
         total_loss = 0.0
-        total_mse = 0.0
-        total_cos = 0.0
-        total_end = 0.0
         start_time = time.time()
 
         pbar = tqdm(train_loader, desc=f"CFM Epoch [{epoch}/{epochs}]", leave=True, dynamic_ncols=True)
@@ -168,48 +165,28 @@ def train_cfm_standalone(
             # Predict velocity field
             v_pred, _ = bridge_net(z_tau, tau, z1)
 
-            # 1. Velocity MSE Loss
-            loss_mse = F.mse_loss(v_pred, v_target)
-
-            # 2. Velocity Cosine Directional Loss
-            cos_sim_v = F.cosine_similarity(v_pred, v_target, dim=-1)
-            loss_cos = (1.0 - cos_sim_v).mean()
-
-            # 3. Integrated Target Reconstruction Loss (z_hat = z1 + v_pred)
-            z2_pred = F.normalize(z1 + v_pred, p=2, dim=-1)
-            loss_end = (1.0 - F.cosine_similarity(z2_pred, z2, dim=-1)).mean()
-
-            # Combined Loss
-            loss_bridge = loss_mse + 0.5 * loss_cos + 0.5 * loss_end
+            # Pure Flow Matching Velocity Field MSE Loss
+            loss_bridge = F.mse_loss(v_pred, v_target)
 
             loss_bridge.backward()
             torch.nn.utils.clip_grad_norm_(bridge_net.parameters(), 1.0)
             optimizer.step()
 
             total_loss += loss_bridge.item()
-            total_mse += loss_mse.item()
-            total_cos += loss_cos.item()
-            total_end += loss_end.item()
 
             pbar.set_postfix({
-                "loss": f"{loss_bridge.item():.4f}",
-                "mse": f"{loss_mse.item():.4f}",
-                "cos": f"{loss_cos.item():.4f}",
-                "q_scale": f"{bridge_net.query_scale.item():.3f}"
+                "flow_mse": f"{loss_bridge.item():.6f}",
+                "lr": f"{optimizer.param_groups[0]['lr']:.2e}"
             })
 
         scheduler.step()
         elapsed = time.time() - start_time
         num_batches = len(train_loader)
         avg_loss = total_loss / num_batches
-        avg_mse = total_mse / num_batches
-        avg_cos = total_cos / num_batches
-        avg_end = total_end / num_batches
 
         logger.info(
             f"Epoch [{epoch}/{epochs}] ({elapsed:.1f}s) | "
-            f"Bridge Loss: {avg_loss:.4f} | MSE: {avg_mse:.4f} | Cos: {avg_cos:.4f} | EndPt: {avg_end:.4f} | "
-            f"QueryScale: {bridge_net.query_scale.item():.3f}"
+            f"Flow Matching MSE Loss: {avg_loss:.6f}"
         )
 
         # 4. Perform Real-Time Cross-Modal Evaluation (S1 -> S2)
@@ -243,14 +220,14 @@ def train_cfm_standalone(
             logger.info(f"🏆 NEW BEST Cross-Modal mAP@5: {best_map5:.4f}! Saved to '{best_ben_path}'")
 
     print("=" * 80)
-    print(" 🎉 CFM LATENT BRIDGE TRAINING COMPLETED SUCCESSFULLY!")
+    print(" 🎉 PURE CFM LATENT BRIDGE TRAINING COMPLETED SUCCESSFULLY!")
     print(f" Best Cross-Modal mAP@5 : {best_map5:.4f}")
     print(f" Master Bridge Checkpoint : '{best_bridge_path}'")
     print(f" Best BEN-14K Checkpoint   : '{best_ben_path}'")
     print("=" * 80)
 
 def main():
-    parser = argparse.ArgumentParser(description="Standalone CFM Latent Bridge Dedicated Trainer")
+    parser = argparse.ArgumentParser(description="Original Pure Standalone CFM Latent Bridge Trainer")
     parser.add_argument("--config", type=str, default="Saber/configs/config.yaml", help="Path to config.yaml")
     parser.add_argument("--checkpoint", type=str, default="checkpoints_v10/saber_unified_clean.pth", help="Path to pre-trained Master Encoder checkpoint")
     parser.add_argument("--data_dir", type=str, default="Datasets/benv1_14k", help="Path to BEN-14K dataset directory")
