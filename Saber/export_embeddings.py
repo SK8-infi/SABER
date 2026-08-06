@@ -163,16 +163,23 @@ def export_embeddings(
     all_labels = np.concatenate(labels_list, axis=0)
     all_names = np.array(names_list)
 
-    # High-F1 Class Probability Thresholding (0.15 Noise Removal)
-    p1_t = np.where(all_p1 > 0.15, all_p1, 0.0)
-    p2_t = np.where(all_p2 > 0.15, all_p2, 0.0)
+    # Orthogonal Procrustes SVD Domain Alignment (align S1_translated -> S2 optical space)
+    logger.info("Computing Orthogonal Procrustes SVD Domain Alignment (S1_trans -> S2)...")
+    U, S, Vt = np.linalg.svd(all_s1_trans.T @ all_s2, full_matrices=False)
+    R_procrustes = U @ Vt
+    all_s1_trans_aligned = all_s1_trans @ R_procrustes
+    all_s1_trans_aligned = all_s1_trans_aligned / (np.linalg.norm(all_s1_trans_aligned, axis=1, keepdims=True) + 1e-8)
+
+    # High-F1 Class Probability Thresholding (0.12 Noise Removal)
+    p1_t = np.where(all_p1 > 0.12, all_p1, 0.0)
+    p2_t = np.where(all_p2 > 0.12, all_p2, 0.0)
 
     p1_norm = p1_t / (np.linalg.norm(p1_t, axis=1, keepdims=True) + 1e-8)
     p2_norm = p2_t / (np.linalg.norm(p2_t, axis=1, keepdims=True) + 1e-8)
 
-    # 787-D High-F1 Multi-Label Hybrid Descriptors (0.6 Visual Vector + 0.4 Thresholded Class Vector)
-    v1_c = np.hstack([0.6 * all_s1_trans, 0.4 * p1_norm])
-    v2_c = np.hstack([0.6 * all_s2, 0.4 * p2_norm])
+    # 787-D High-F1 Multi-Label Hybrid Descriptors (0.65 Procrustes Visual Vector + 0.35 Thresholded Class Vector)
+    v1_c = np.hstack([0.65 * all_s1_trans_aligned, 0.35 * p1_norm])
+    v2_c = np.hstack([0.65 * all_s2, 0.35 * p2_norm])
 
     h1 = (v1_c / (np.linalg.norm(v1_c, axis=1, keepdims=True) + 1e-8)).astype(np.float32)
     h2 = (v2_c / (np.linalg.norm(v2_c, axis=1, keepdims=True) + 1e-8)).astype(np.float32)
