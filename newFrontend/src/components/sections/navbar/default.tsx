@@ -1,137 +1,75 @@
 "use client";
 
-import { type VariantProps } from "class-variance-authority";
-import { Menu } from "lucide-react";
-import { ReactNode } from "react";
-
-import { siteConfig } from "@/config/site";
-import { cn } from "@/lib/utils";
-
-import LaunchUI from "../../logos/launch-ui";
-import { Button, buttonVariants } from "../../ui/button";
+import { Menu, Satellite } from "lucide-react";
+import { Button } from "../../ui/button";
 import {
   Navbar as NavbarComponent,
   NavbarLeft,
   NavbarRight,
 } from "../../ui/navbar";
-import Navigation from "../../ui/navigation";
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "../../ui/sheet";
 
-interface NavbarLink {
-  text: string;
-  href: string;
-}
+const NAV_LINKS = [
+  { text: "Use Cases", href: "#use-cases" },
+  { text: "Architecture", href: "#architecture" },
+  { text: "Benchmarks", href: "#benchmarks" },
+  { text: "FAQ", href: "#faq" },
+];
 
-interface NavbarActionProps {
-  text: string;
-  href: string;
-  variant?: VariantProps<typeof buttonVariants>["variant"];
-  icon?: ReactNode;
-  iconRight?: ReactNode;
-  isButton?: boolean;
-}
-
-interface NavbarProps {
-  logo?: ReactNode;
-  name?: string;
-  homeUrl?: string;
-  mobileLinks?: NavbarLink[];
-  actions?: NavbarActionProps[];
-  showNavigation?: boolean;
-  customNavigation?: ReactNode;
-  className?: string;
-}
-
-export default function Navbar({
-  logo = <LaunchUI />,
-  name = "Launch UI",
-  homeUrl = siteConfig.url,
-  mobileLinks = [
-    { text: "Getting Started", href: siteConfig.url },
-    { text: "Components", href: siteConfig.url },
-    { text: "Documentation", href: siteConfig.url },
-  ],
-  actions = [
-    { text: "Sign in", href: siteConfig.url, isButton: false },
-    {
-      text: "Get Started",
-      href: siteConfig.url,
-      isButton: true,
-      variant: "default",
-    },
-  ],
-  showNavigation = true,
-  customNavigation,
-  className,
-}: NavbarProps) {
+export default function Navbar() {
   return (
-    <header className={cn("sticky top-0 z-50 -mb-4 px-4 pb-4", className)}>
-      <div className="fade-bottom bg-background/15 absolute left-0 h-24 w-full backdrop-blur-lg"></div>
+    <header className="sticky top-0 z-50 -mb-4 px-4 pb-4">
+      <div className="fade-bottom bg-background/15 absolute left-0 h-24 w-full backdrop-blur-lg" />
       <div className="max-w-container relative mx-auto">
         <NavbarComponent>
           <NavbarLeft>
-            <a
-              href={homeUrl}
-              className="flex items-center gap-2 text-xl font-bold"
-            >
-              {logo}
-              {name}
+            <a href="/" className="flex items-center gap-2.5 text-xl font-bold">
+              <div className="flex items-center justify-center size-8 rounded-lg bg-[#FBBA72]/15 border border-[#FBBA72]/30">
+                <Satellite className="size-4 text-[#FBBA72]" />
+              </div>
+              <span>SABER</span>
+              <span className="hidden text-xs font-medium text-muted-foreground sm:block">
+                ISRO BAH 2026
+              </span>
             </a>
-            {showNavigation && (customNavigation || <Navigation />)}
+            <nav className="hidden items-center gap-6 md:flex ml-6">
+              {NAV_LINKS.map(l => (
+                <a key={l.text} href={l.href}
+                  className="text-sm text-muted-foreground hover:text-foreground transition-colors">
+                  {l.text}
+                </a>
+              ))}
+            </nav>
           </NavbarLeft>
           <NavbarRight>
-            {actions.map((action) =>
-              action.isButton ? (
-                <Button
-                  key={`${action.href}-${action.text}`}
-                  variant={action.variant || "default"}
-                  asChild
-                >
-                  <a href={action.href}>
-                    {action.icon}
-                    {action.text}
-                    {action.iconRight}
-                  </a>
-                </Button>
-              ) : (
-                <a
-                  key={`${action.href}-${action.text}`}
-                  href={action.href}
-                  className="hidden text-sm md:block"
-                >
-                  {action.text}
-                </a>
-              ),
-            )}
+            <a href="https://github.com/SK8-infi/SABER"
+              target="_blank" rel="noopener noreferrer"
+              className="hidden text-sm text-muted-foreground hover:text-foreground transition-colors md:block">
+              GitHub
+            </a>
+            <Button variant="default" asChild>
+              <a href="/dashboard/format/query">Launch Demo</a>
+            </Button>
+            {/* Mobile */}
             <Sheet>
               <SheetTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="shrink-0 md:hidden"
-                >
+                <Button variant="ghost" size="icon" className="shrink-0 md:hidden">
                   <Menu className="size-5" />
-                  <span className="sr-only">Toggle navigation menu</span>
+                  <span className="sr-only">Toggle menu</span>
                 </Button>
               </SheetTrigger>
               <SheetContent side="right">
-                <SheetTitle className="sr-only">Navigation menu</SheetTitle>
-                <nav className="grid gap-6 text-lg font-medium">
-                  <a
-                    href={homeUrl}
-                    className="flex items-center gap-2 text-xl font-bold"
-                  >
-                    <span>{name}</span>
+                <SheetTitle className="sr-only">Navigation</SheetTitle>
+                <nav className="grid gap-6 text-lg font-medium pt-8">
+                  <a href="/" className="flex items-center gap-2 font-bold">
+                    <Satellite className="size-5 text-[#FBBA72]" /> SABER
                   </a>
-                  {mobileLinks.map((link) => (
-                    <a
-                      key={`${link.href}-${link.text}`}
-                      href={link.href}
-                      className="text-muted-foreground hover:text-foreground"
-                    >
-                      {link.text}
-                    </a>
+                  {NAV_LINKS.map(l => (
+                    <a key={l.text} href={l.href}
+                      className="text-muted-foreground hover:text-foreground">{l.text}</a>
                   ))}
+                  <a href="/dashboard/format/query"
+                    className="text-[#FBBA72] font-semibold">Launch Demo →</a>
                 </nav>
               </SheetContent>
             </Sheet>

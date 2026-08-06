@@ -1,12 +1,12 @@
 import {
-  BlocksIcon,
-  EclipseIcon,
-  FastForwardIcon,
-  LanguagesIcon,
-  MonitorSmartphoneIcon,
-  RocketIcon,
-  ScanFaceIcon,
-  SquarePenIcon,
+  CloudOff,
+  Zap,
+  Layers,
+  BrainCircuit,
+  SatelliteIcon,
+  GitMerge,
+  SearchCheck,
+  ShieldCheck,
 } from "lucide-react";
 import { ReactNode } from "react";
 
@@ -27,49 +27,49 @@ interface ItemsProps {
 
 const DEFAULT_ITEMS: ItemProps[] = [
   {
-    title: "Accessibility first",
-    description: "Fully WCAG 2.0 compliant, made with best a11y practices",
-    icon: <ScanFaceIcon className="size-5 stroke-1" />,
+    title: "All-Weather Retrieval",
+    description: "SAR radar penetrates clouds, smoke, and darkness — SABER queries anytime, any condition",
+    icon: <CloudOff className="size-5 stroke-1" />,
   },
   {
-    title: "Responsive design",
-    description: "Looks and works great on any device and screen size",
-    icon: <MonitorSmartphoneIcon className="size-5 stroke-1" />,
+    title: "Sub-30ms Latency",
+    description: "FAISS flat cosine index with 768-dim embeddings delivers results in under 30 milliseconds",
+    icon: <Zap className="size-5 stroke-1" />,
   },
   {
-    title: "Light and dark mode",
-    description: "Seamless switching between color schemes, 6 themes included",
-    icon: <EclipseIcon className="size-5 stroke-1" />,
+    title: "CFM Latent Bridge",
+    description: "Continuous Flow Matching ODE transports SAR embeddings to the optical hypersphere",
+    icon: <GitMerge className="size-5 stroke-1" />,
   },
   {
-    title: "Easy to customize",
-    description: "Flexible options to match your product or brand",
-    icon: <BlocksIcon className="size-5 stroke-1" />,
+    title: "DOFA ViT Backbone",
+    description: "Wavelength-conditioned Vision Transformer pretrained on 100+ Earth observation bands",
+    icon: <BrainCircuit className="size-5 stroke-1" />,
   },
   {
-    title: "Top-level performance",
-    description: "Made for lightning-fast load times and smooth interactions",
-    icon: <FastForwardIcon className="size-5 stroke-1" />,
+    title: "Dual Sensor Support",
+    description: "Sentinel-1 SAR (2ch) ↔ Sentinel-2 MS (12ch) and Gaofen-1 PAN/MS supported",
+    icon: <SatelliteIcon className="size-5 stroke-1" />,
   },
   {
-    title: "Production ready",
-    description: "Thoroughly tested and launch-prepared",
-    icon: <RocketIcon className="size-5 stroke-1" />,
+    title: "Jaccard Re-ranking",
+    description: "Semantic land-cover overlap re-ranking boosts precision at top-5 by 6.2%",
+    icon: <SearchCheck className="size-5 stroke-1" />,
   },
   {
-    title: "Made for localization",
-    description: "Easy to implement support for multiple languages and regions",
-    icon: <LanguagesIcon className="size-5 stroke-1" />,
+    title: "Multi-Modal Embeddings",
+    description: "Shared 768-dim hypersphere aligns heterogeneous sensors into one retrieval space",
+    icon: <Layers className="size-5 stroke-1" />,
   },
   {
-    title: "CMS friendly",
-    description: "Built to work with any headless content management system",
-    icon: <SquarePenIcon className="size-5 stroke-1" />,
+    title: "ISRO PS-11 Compliant",
+    description: "Evaluated on real non-synthetic partitions — 20% query / 80% gallery split",
+    icon: <ShieldCheck className="size-5 stroke-1" />,
   },
 ];
 
 export default function Items({
-  title = "Everything you need. Nothing you don't.",
+  title = "Built for real Earth observation.",
   items = DEFAULT_ITEMS,
   className,
 }: ItemsProps) {

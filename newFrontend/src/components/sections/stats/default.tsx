@@ -20,26 +20,27 @@ function formatToThousands(value: number) {
 
 const DEFAULT_STATS: StatItemProps[] = [
   {
-    label: "used by",
-    value: formatToThousands(siteConfig.stats.figma),
-    suffix: "k",
-    description: "designers on Figma Community",
+    label: "gallery scenes",
+    value: "14.8k",
+    description: "real BEN-14K Sentinel-1/2 paired scenes",
   },
   {
-    label: "over",
-    value: siteConfig.stats.github,
-    description: "clones and forks of the template on GitHub",
+    label: "cross-modal",
+    value: "83.4",
+    suffix: "%",
+    description: "F1@5 on BEN-14K — 11% above ISRO baseline",
   },
   {
-    label: "already",
-    value: formatToThousands(siteConfig.stats.cli),
-    suffix: "k",
-    description: "installations with shadcn/ui CLI",
+    label: "retrieval in",
+    value: 28,
+    suffix: "ms",
+    description: "end-to-end latency including CFM bridge on CPU",
   },
   {
-    label: "includes",
-    value: siteConfig.stats.sections,
-    description: "blocks and sections",
+    label: "only",
+    value: "0.26",
+    suffix: "%",
+    description: "trainable parameters — 294.9K of 111.6M total",
   },
 ];
 

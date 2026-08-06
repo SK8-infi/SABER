@@ -1,69 +1,38 @@
-import { ReactNode } from "react";
-
-import { siteConfig } from "@/config/site";
-
-import Figma from "../../logos/figma";
-import React from "../../logos/react";
-import ShadcnUi from "../../logos/shadcn-ui";
-import Tailwind from "../../logos/tailwind";
-import TypeScript from "../../logos/typescript";
-import { Badge } from "../../ui/badge";
-import Logo from "../../ui/logo";
 import { Section } from "../../ui/section";
+import { Badge } from "../../ui/badge";
 
-interface LogosProps {
-  title?: string;
-  badge?: ReactNode | false;
-  logos?: ReactNode[] | false;
-  className?: string;
-}
+const TECH_STACK = [
+  { name: "PyTorch", version: "2.13", desc: "Deep Learning" },
+  { name: "DOFA ViT", version: "Base", desc: "Backbone" },
+  { name: "FastAPI", version: "0.115", desc: "Backend" },
+  { name: "FAISS", version: "1.8", desc: "Vector Search" },
+  { name: "Next.js", version: "16.2", desc: "Frontend" },
+  { name: "Sentinel-1/2", version: "ESA", desc: "Datasets" },
+];
 
-export default function Logos({
-  title = "Built with industry-standard tools and best practices",
-  badge = (
-    <Badge variant="outline" className="border-brand/30 text-brand">
-      Last updated: {siteConfig.stats.updated}
-    </Badge>
-  ),
-  logos = [
-    <Logo key="figma" image={Figma} name="Figma" />,
-    <Logo
-      key="react"
-      image={React}
-      name="React"
-      version="19.2.7"
-      badge="New"
-    />,
-    <Logo
-      key="typescript"
-      image={TypeScript}
-      name="TypeScript"
-      version="6.0.3"
-      badge="New"
-    />,
-    <Logo
-      key="shadcn"
-      image={ShadcnUi}
-      name="Shadcn/ui"
-      version="4.11.0"
-      badge="New"
-    />,
-    <Logo key="tailwind" image={Tailwind} name="Tailwind" version="4.2.1" />,
-  ],
-  className,
-}: LogosProps) {
+export default function Logos() {
   return (
-    <Section className={className}>
+    <Section>
       <div className="max-w-container mx-auto flex flex-col items-center gap-8 text-center">
-        <div className="flex flex-col items-center gap-6">
-          {badge !== false && badge}
-          <h2 className="text-md font-semibold sm:text-2xl">{title}</h2>
+        <div className="flex flex-col items-center gap-3">
+          <Badge variant="outline" className="border-[#FBBA72]/30 text-[#FBBA72]">
+            Team Sentinel8 · ISRO BAH 2026 Grand Finale
+          </Badge>
+          <h2 className="text-md font-semibold sm:text-2xl text-muted-foreground">
+            Built on proven open-science infrastructure
+          </h2>
         </div>
-        {logos !== false && logos.length > 0 && (
-          <div className="flex flex-wrap items-center justify-center gap-8">
-            {logos}
-          </div>
-        )}
+        <div className="flex flex-wrap items-center justify-center gap-3">
+          {TECH_STACK.map(t => (
+            <div key={t.name}
+              className="flex items-center gap-2.5 rounded-full border border-border/60 bg-muted/10 px-4 py-2 hover:border-[#FBBA72]/40 transition-colors">
+              <div className="size-2 rounded-full bg-[#FBBA72]" />
+              <span className="text-sm font-semibold text-foreground">{t.name}</span>
+              <span className="text-xs text-muted-foreground font-mono">{t.version}</span>
+              <span className="text-xs text-muted-foreground border-l border-border/60 pl-2">{t.desc}</span>
+            </div>
+          ))}
+        </div>
       </div>
     </Section>
   );

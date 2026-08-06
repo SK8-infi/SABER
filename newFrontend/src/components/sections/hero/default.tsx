@@ -27,12 +27,12 @@ interface HeroProps {
 
 const DEFAULT_HERO_BUTTONS: HeroButtonProps[] = [
   {
-    href: siteConfig.getStartedUrl,
-    text: "Get Started",
+    href: "/dashboard/format/query",
+    text: "Launch Demo",
     variant: "default",
   },
   {
-    href: siteConfig.links.github,
+    href: "https://github.com/SK8-infi/SABER",
     text: "GitHub",
     variant: "glow",
     icon: <Github className="mr-2 size-4" />,
@@ -42,10 +42,10 @@ const DEFAULT_HERO_BUTTONS: HeroButtonProps[] = [
 const DEFAULT_HERO_BADGE = (
   <Badge variant="outline" className="animate-appear">
     <span className="text-muted-foreground">
-      New version of Launch UI is out!
+      ISRO BAH 2026 · Problem Statement 11 · Team Sentinel8
     </span>
-    <a href={siteConfig.getStartedUrl} className="flex items-center gap-1">
-      Get started
+    <a href="/dashboard/format/query" className="flex items-center gap-1">
+      Try live demo
       <ArrowRightIcon className="size-3" />
     </a>
   </Badge>
@@ -64,9 +64,9 @@ const DEFAULT_HERO_MOCKUP = (
 );
 
 export default function Hero({
-  title = "Give your big idea the design it deserves",
-  description = "Professionally designed blocks and templates built with React, Shadcn/ui and Tailwind that will help your product stand out.",
-  mockup = DEFAULT_HERO_MOCKUP,
+  title = "SABER",
+  description = "Sensor-Agnostic Bridged Embedding Retrieval — cross-modal satellite image retrieval at sub-30ms.",
+  mockup = false,
   badge = DEFAULT_HERO_BADGE,
   buttons = DEFAULT_HERO_BUTTONS,
   className,
@@ -79,12 +79,12 @@ export default function Hero({
       )}
     >
       <div className="max-w-container mx-auto flex flex-col gap-12 pt-16 sm:gap-24">
-        <div className="flex flex-col items-center gap-6 text-center sm:gap-12">
+        <div className="flex flex-col items-center gap-4 text-center sm:gap-8">
           {badge !== false && badge}
-          <h1 className="animate-appear relative z-10 inline-block bg-gradient-to-r from-foreground via-brand-foreground to-foreground bg-clip-text text-4xl leading-tight font-semibold text-balance text-transparent drop-shadow-[0_0_35px_rgba(251,186,114,0.35)] sm:text-6xl sm:leading-tight md:text-8xl md:leading-tight">
+          <h1 className="animate-appear relative z-10 inline-block bg-gradient-to-r from-foreground via-brand-foreground to-foreground bg-clip-text text-4xl leading-[1.1] font-semibold text-balance text-transparent drop-shadow-[0_0_35px_rgba(251,186,114,0.35)] sm:text-6xl sm:leading-[1.1] md:text-8xl md:leading-[1.1]">
             {title}
           </h1>
-          <p className="text-md animate-appear text-muted-foreground relative z-10 max-w-[740px] font-medium text-balance opacity-0 delay-100 sm:text-xl">
+          <p className="text-md animate-appear text-muted-foreground relative z-10 max-w-[740px] font-medium text-balance opacity-0 delay-100 sm:text-xl leading-snug">
             {description}
           </p>
           {buttons !== false && buttons.length > 0 && (

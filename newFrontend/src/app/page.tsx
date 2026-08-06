@@ -7,6 +7,7 @@ import Logos from "@/components/sections/logos/default"
 import Navbar from "@/components/sections/navbar/default"
 import Pricing from "@/components/sections/pricing/default"
 import Stats from "@/components/sections/stats/default"
+import UseCases from "@/components/sections/usecases/default"
 import { LayoutLines } from "@/components/ui/layout-lines"
 
 export default function Home() {
@@ -16,6 +17,7 @@ export default function Home() {
       <Navbar />
       <Hero />
       <Logos />
+      <UseCases />
       <Items />
       <Stats />
       <Pricing />
