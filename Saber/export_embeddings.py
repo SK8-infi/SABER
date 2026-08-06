@@ -60,15 +60,25 @@ def export_embeddings(
     )
 
     logger.info(f"Loading full BEN-14K dataset from '{ben_resolved_path}'...")
-    dataset = BEN14KDataset(
-        data_dir=ben_resolved_path,
-        use_synthetic=False,
-        size=14832,
-        image_size=224,
-        modality="both",
-        is_train=False,
-        split="all"  # Export full dataset
-    )
+    try:
+        dataset = BEN14KDataset(
+            data_dir=ben_resolved_path,
+            use_synthetic=False,
+            size=14832,
+            image_size=224,
+            modality="both",
+            is_train=False,
+            split="all"  # Export full dataset
+        )
+    except TypeError:
+        dataset = BEN14KDataset(
+            data_dir=ben_resolved_path,
+            use_synthetic=False,
+            size=14832,
+            image_size=224,
+            modality="both",
+            is_train=False
+        )
     dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=False, num_workers=2, pin_memory=True)
     N_samples = len(dataset)
     logger.info(f"Dataset Loaded: {N_samples} total multi-modal samples.")
