@@ -302,22 +302,29 @@ def train_unified(
                         loss_dict = loss_fn(z_pan, z_ms, z_pan_pred, targets=None)
 
                 step_loss = loss_dict.get("loss", loss_dict.get("total_loss"))
+                accum_steps = config.train.get("grad_accumulation_steps", 1)
+                loss_scaled = step_loss / accum_steps
 
                 if scaler is not None:
-                    scaler.scale(step_loss).backward()
-                    scaler.unscale_(optimizer)
-                    torch.nn.utils.clip_grad_norm_(trainable_params, grad_clip)
-                    scaler.step(optimizer)
-                    scaler.update()
+                    scaler.scale(loss_scaled).backward()
+                    if (step + 1) % accum_steps == 0 or (step + 1) == max_batches:
+                        scaler.unscale_(optimizer)
+                        torch.nn.utils.clip_grad_norm_(trainable_params, grad_clip)
+                        scaler.step(optimizer)
+                        scaler.update()
+                        optimizer.zero_grad()
                 else:
-                    step_loss.backward()
-                    torch.nn.utils.clip_grad_norm_(trainable_params, grad_clip)
-                    optimizer.step()
+                    loss_scaled.backward()
+                    if (step + 1) % accum_steps == 0 or (step + 1) == max_batches:
+                        torch.nn.utils.clip_grad_norm_(trainable_params, grad_clip)
+                        optimizer.step()
+                        optimizer.zero_grad()
 
                 # Update EMA target model
-                with torch.no_grad():
-                    for p_online, p_target in zip(model.parameters(), ema_model.parameters()):
-                        p_target.data.mul_(ema_decay).add_(p_online.data, alpha=1.0 - ema_decay)
+                if (step + 1) % accum_steps == 0 or (step + 1) == max_batches:
+                    with torch.no_grad():
+                        for p_online, p_target in zip(model.parameters(), ema_model.parameters()):
+                            p_target.data.mul_(ema_decay).add_(p_online.data, alpha=1.0 - ema_decay)
 
                 # Accumulate pure SSL loss sub-components
                 v_loss = step_loss.item()
