@@ -236,9 +236,9 @@ def train_cfm_standalone(
                 gallery_names=test_g_names,
                 exclude_self_matches=False
             )
-            map5 = metrics5.get("MAP@5", 0.0)
-            prec5 = metrics5.get("PRECISION@5", 0.0)
-            rec5 = metrics5.get("RECALL@5", 0.0)
+            map5 = metrics5.get("map@5", metrics5.get("MAP@5", 0.0))
+            prec5 = metrics5.get("precision@5", metrics5.get("PRECISION@5", 0.0))
+            rec5 = metrics5.get("recall@5", metrics5.get("RECALL@5", 0.0))
 
         eval_elapsed = time.time() - eval_start
 
