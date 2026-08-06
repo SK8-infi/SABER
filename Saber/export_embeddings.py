@@ -142,10 +142,15 @@ def export_embeddings(
             z1_trans_raw = model.bridge(z1, c_class=p1)
             z1_trans = F.normalize(z1_trans_raw, p=2, dim=-1)
 
+            # Dual-Classifier Prob Fusion: refine radar predictions using translated optical vector
+            logits_trans = model.classifier(z1_trans)
+            p1_trans = torch.sigmoid(logits_trans)
+            p1_fused = 0.5 * p1 + 0.5 * p1_trans
+
             s1_list.append(z1.cpu().numpy())
             s2_list.append(z2.cpu().numpy())
             s1_trans_list.append(z1_trans.cpu().numpy())
-            p1_list.append(p1.cpu().numpy())
+            p1_list.append(p1_fused.cpu().numpy())
             p2_list.append(p2.cpu().numpy())
             labels_list.append(batch["label"].cpu().numpy())
             names_list.extend(batch["name"])
