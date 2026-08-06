@@ -158,9 +158,14 @@ def export_embeddings(
     all_labels = np.concatenate(labels_list, axis=0)
     all_names = np.array(names_list)
 
-    # Compute Hybrid Descriptors (ISRO Formula: 0.4*z + 0.6*p)
-    h1 = F.normalize(torch.tensor(0.4 * all_s1_trans + 0.6 * all_p1), p=2, dim=-1).numpy()
-    h2 = F.normalize(torch.tensor(0.4 * all_s2 + 0.6 * all_p2), p=2, dim=-1).numpy()
+    # Project 19-D class probabilities to 768-D space via classifier projection weight matrix
+    classifier_w = model.classifier.weight.detach().cpu().numpy()  # (19, 768)
+    p1_proj = all_p1 @ classifier_w                                # (N, 768)
+    p2_proj = all_p2 @ classifier_w                                # (N, 768)
+
+    # Compute Hybrid Descriptors (ISRO Formula: 0.4*z + 0.6*p_proj)
+    h1 = F.normalize(torch.tensor(0.4 * all_s1_trans + 0.6 * p1_proj), p=2, dim=-1).numpy()
+    h2 = F.normalize(torch.tensor(0.4 * all_s2 + 0.6 * p2_proj), p=2, dim=-1).numpy()
 
     # Build FAISS Indices if available
     faiss_s2_index = None
