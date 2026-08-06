@@ -148,8 +148,11 @@ def export_embeddings(
             p1 = torch.sigmoid(logits_s1)
             p2 = torch.sigmoid(logits_s2)
 
-            # CFM Bridge translation S1 -> S2
-            z1_trans_raw = model.bridge(z1, c_class=p1)
+            # CFM Bridge translation S1 -> S2 (compatible with both class-conditioned and unimodal bridges)
+            try:
+                z1_trans_raw = model.bridge(z1, c_class=p1)
+            except TypeError:
+                z1_trans_raw = model.bridge(z1)
             z1_trans = F.normalize(z1_trans_raw, p=2, dim=-1)
 
             # Dual-Classifier Prob Fusion: refine radar predictions using translated optical vector
