@@ -329,11 +329,11 @@ export default function QueryPage() {
 
       {/* ── Top query image card ── */}
       <Card className='border-border/60 shadow-sm overflow-hidden'>
-        <CardContent className='p-0'>
-          <div className='flex flex-col sm:flex-row'>
+        <CardContent className='p-3'>
+          <div className='flex flex-col sm:flex-row gap-3'>
 
             {/* Image panel */}
-            <div className='relative w-full sm:w-48 aspect-square sm:shrink-0 bg-muted/20 overflow-hidden self-center'>
+            <div className='relative w-full sm:w-48 aspect-square sm:shrink-0 bg-muted/20 overflow-hidden self-center rounded-xl'>
               {topLoading ? (
                 <div className='w-full h-full bg-muted/30 animate-pulse' />
               ) : queryInfo?.thumbnail ? (
@@ -343,7 +343,7 @@ export default function QueryPage() {
                   <SearchIcon className='size-8 text-muted-foreground/30' />
                 </div>
               )}
-              <span className='absolute top-2 left-2 bg-black/75 backdrop-blur-sm text-white text-[10px] font-semibold px-2 py-0.5 rounded-full font-sans tracking-wider border border-white/10'>
+              <span className='absolute top-3 left-3 bg-black/75 backdrop-blur-sm text-white text-[10px] font-semibold px-2 py-0.5 rounded-full font-sans tracking-wider border border-white/10'>
                 {queryInfo?.source_modality?.toUpperCase() ?? srcMod.toUpperCase()}
               </span>
             </div>

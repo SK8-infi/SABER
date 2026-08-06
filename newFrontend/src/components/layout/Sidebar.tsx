@@ -320,6 +320,7 @@ const SidebarLayout = () => {
   }
 
   const [advancedOpen, setAdvancedOpen] = useState(true)
+  const isAblation = pathname.includes('/abliation')
 
   // Nav groups rendered in the sidebar.
   const formatGroups = navItems.filter(item => item.groupLabel === 'Format')
@@ -379,7 +380,8 @@ const SidebarLayout = () => {
 
           <Separator className='my-1 bg-border/40' />
 
-          {/* SOURCE */}
+          {/* SOURCE — hidden on ablation route */}
+          {!isAblation && (
           <div className='flex flex-col gap-1.5'>
             <SidebarGroupLabel className='text-sidebar-foreground/50 h-auto p-0 text-xs font-semibold tracking-wider uppercase'>
               SOURCE
@@ -405,8 +407,10 @@ const SidebarLayout = () => {
               </SelectContent>
             </Select>
           </div>
+          )}
 
-          {/* TARGET GALLERY */}
+          {/* TARGET GALLERY — hidden on ablation route */}
+          {!isAblation && (
           <div className='flex flex-col gap-1.5 mt-1'>
             <SidebarGroupLabel className='text-sidebar-foreground/50 h-auto p-0 text-xs font-semibold tracking-wider uppercase'>
               TARGET GALLERY
@@ -432,6 +436,7 @@ const SidebarLayout = () => {
               </SelectContent>
             </Select>
           </div>
+          )}
 
           <Separator className='my-1 bg-border/40' />
 
@@ -457,7 +462,8 @@ const SidebarLayout = () => {
               <span>Random Scene</span>
             </Button>
 
-            {/* TOP-K SLIDER */}
+            {/* TOP-K SLIDER — hidden on ablation route */}
+            {!isAblation && (
             <div className='flex flex-col gap-2 pt-2'>
               <div className='text-sidebar-foreground/50 flex items-center justify-between text-xs font-semibold tracking-wider uppercase'>
                 <span>TOP-K</span>
@@ -475,11 +481,14 @@ const SidebarLayout = () => {
                 className='py-1'
               />
             </div>
+            )}
           </div>
 
+          {/* ADVANCED SECTION — hidden on ablation route */}
+          {!isAblation && (
+          <>
           <Separator className='my-1 bg-border/40' />
 
-          {/* ADVANCED SECTION */}
           <div className='flex flex-col gap-3'>
             {/* Header */}
             <button
@@ -560,6 +569,8 @@ const SidebarLayout = () => {
           </div>
 
           <Separator className='my-1 bg-border/40' />
+          </>
+          )}
         </SidebarGroup>
 
         {/* Remaining Navigation Sections — removed */}
