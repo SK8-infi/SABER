@@ -1,3 +1,4 @@
+import sys
 import os
 import time
 import argparse
@@ -8,11 +9,13 @@ import torch.nn.functional as F
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+
 from Saber.utils.config import load_config
 from Saber.datasets.ben14k import BEN14KDataset
 from Saber.models.saber import SABER
 from Saber.models.bridge import CFMBridge
-from Saber.evaluator import Evaluator
+from Saber.trainer.evaluator import Evaluator
 
 logging.basicConfig(level=logging.INFO, format="[%(asctime)s] [%(levelname)s] [%(filename)s:%(lineno)d]: %(message)s")
 logger = logging.getLogger(__name__)
