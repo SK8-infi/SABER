@@ -163,18 +163,31 @@ def export_embeddings(
     p1_proj = all_p1 @ classifier_w                                # (N, 768)
     p2_proj = all_p2 @ classifier_w                                # (N, 768)
 
-    # Compute Hybrid Descriptors (ISRO Formula: 0.4*z + 0.6*p_proj)
-    h1 = F.normalize(torch.tensor(0.4 * all_s1_trans + 0.6 * p1_proj), p=2, dim=-1).numpy()
-    h2 = F.normalize(torch.tensor(0.4 * all_s2 + 0.6 * p2_proj), p=2, dim=-1).numpy()
+    p1_proj_n = p1_proj / (np.linalg.norm(p1_proj, axis=1, keepdims=True) + 1e-8)
+    p2_proj_n = p2_proj / (np.linalg.norm(p2_proj, axis=1, keepdims=True) + 1e-8)
 
-    # Build FAISS Indices if available
+    # Optimized Hybrid Descriptors (0.7 Visual Vector + 0.3 Class Semantic Vector)
+    h1 = F.normalize(torch.tensor(0.7 * all_s1_trans + 0.3 * p1_proj_n), p=2, dim=-1).numpy()
+    h2 = F.normalize(torch.tensor(0.7 * all_s2 + 0.3 * p2_proj_n), p=2, dim=-1).numpy()
+
+    # Apply Database Augmentation (DBA) Gallery Manifold Smoothing
+    logger.info("Applying Database Augmentation (DBA) gallery manifold smoothing...")
+    g_norm = h2 / (np.linalg.norm(h2, axis=1, keepdims=True) + 1e-8)
+    sims = g_norm @ g_norm.T
+    np.fill_diagonal(sims, -1.0)
+    top_k_idx = np.argpartition(sims, -3, axis=1)[:, -3:]
+    top_k_weights = np.take_along_axis(sims, top_k_idx, axis=1)[:, :, None]
+    h2_dba = g_norm + 1.5 * np.sum(g_norm[top_k_idx] * top_k_weights, axis=1)
+    h2_dba = h2_dba / (np.linalg.norm(h2_dba, axis=1, keepdims=True) + 1e-8)
+
+    # Build FAISS Indices on DBA-Smoothed Gallery Vectors if available
     faiss_s2_index = None
     if FAISS_AVAILABLE:
-        logger.info("Building FAISS Flat Cosine Index for S2 Optical Gallery...")
+        logger.info("Building FAISS Flat Cosine Index for DBA-Smoothed Optical Gallery...")
         index = faiss.IndexFlatIP(768)
-        index.add(all_s2.astype(np.float32))
+        index.add(h2_dba.astype(np.float32))
         faiss_s2_index = faiss.serialize_index(index)
-        logger.info("✅ FAISS S2 Cosine Index successfully built!")
+        logger.info("✅ FAISS S2 DBA-Smoothed Index successfully built!")
 
     # Package Export Database
     db_payload = {
