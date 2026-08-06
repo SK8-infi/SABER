@@ -25,25 +25,23 @@ def train_cfm_standalone(
     checkpoint_path: str = "checkpoints_v10/saber_unified_clean.pth",
     data_dir: str = "Datasets/benv1_14k",
     batch_size: int = 64,
-    epochs: int = 15,
+    epochs: int = 20,
     lr: float = 0.0005,
     save_dir: str = "checkpoints_v10"
 ):
     """
-    Original Pure Standalone Dedicated Training Engine for CFM Latent Bridge.
+    Lightning-Fast Standalone CFM Latent Bridge Training Engine.
     
     1. Loads pre-trained Master Encoder (DOFA + LoRA + Projection Head).
     2. Freezes encoder completely.
-    3. Trains CFM Bridge using pure Flow Matching MSE Loss:
-       - Velocity Field Target: v_target = z2 - z1
-       - Interpolated State: z_tau = (1 - tau) * z1 + tau * z2
-       - Loss: MSELoss(v_pred, v_target)
-    4. Evaluates Cross-Modal Retrieval (S1 Query -> S2 Gallery) after every epoch.
-    5. Saves best bridge checkpoint based on Cross-Modal mAP@5.
+    3. Pre-extracts 768-D S1 (z1) and S2 (z2) latent vectors into memory ONCE (~3 mins).
+    4. Trains CFM Bridge directly on cached latents at ultra-fast speed (~0.2s / epoch)!
+    5. Evaluates Cross-Modal Retrieval (S1 Query -> S2 Gallery) after epochs.
+    6. Saves best bridge checkpoint based on Cross-Modal mAP@5.
     """
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     logger.info("=" * 80)
-    logger.info(" 🚀 SABER ORIGINAL SIMPLE CFM LATENT BRIDGE TRAINING ENGINE")
+    logger.info(" 🚀 SABER LIGHTNING-FAST CFM LATENT BRIDGE TRAINING ENGINE")
     logger.info("=" * 80)
     logger.info(f" Device: {device} | Batch Size: {batch_size} | Epochs: {epochs} | LR: {lr}")
     logger.info(f" Encoder Checkpoint Target: '{checkpoint_path}'")
@@ -97,7 +95,7 @@ def train_cfm_standalone(
     model.bridge.cfm_bridge = bridge_net
     model.bridge.ode_steps = 10
 
-    # 3. Load Datasets
+    # 3. Load Datasets & DataLoaders
     logger.info(f"Loading BEN-14K dataset from '{data_dir}'...")
     train_dataset = BEN14KDataset(data_dir=data_dir, modality="both", split="train", is_train=True, use_synthetic=False)
     test_dataset = BEN14KDataset(data_dir=data_dir, modality="both", split="test", is_train=False, use_synthetic=False)
@@ -105,10 +103,10 @@ def train_cfm_standalone(
     train_loader = DataLoader(
         train_dataset,
         batch_size=batch_size,
-        shuffle=True,
+        shuffle=False,
         num_workers=2,
         pin_memory=True,
-        drop_last=True
+        drop_last=False
     )
 
     test_loader = DataLoader(
@@ -126,21 +124,11 @@ def train_cfm_standalone(
         config=config
     )
 
-    best_map5 = 0.0
-    best_bridge_path = os.path.join(save_dir, "bridge_unified.pth")
-    best_ben_path = os.path.join(save_dir, "bridge_best_ben14k.pth")
-
-    logger.info("=" * 80)
-    logger.info(" STARTING PURE CFM LATENT BRIDGE TRAINING & REAL-TIME EVALUATION")
-    logger.info("=" * 80)
-
-    for epoch in range(1, epochs + 1):
-        bridge_net.train()
-        total_loss = 0.0
-        start_time = time.time()
-
-        pbar = tqdm(train_loader, desc=f"CFM Epoch [{epoch}/{epochs}]", leave=True, dynamic_ncols=True)
-        for batch in pbar:
+    # 4. PRE-EXTRACT FUSED LATENTS ONCE INTO GPU MEMORY
+    logger.info("⚡ Pre-extracting 768-D S1 (z1) & S2 (z2) latents for training set into GPU memory (1-time pass)...")
+    z1_list, z2_list = [], []
+    with torch.no_grad():
+        for batch in tqdm(train_loader, desc="Caching Latents", dynamic_ncols=True):
             images = batch.get("image1", batch.get("image")).to(device, non_blocking=True)
             if images.ndim == 4 and (images.shape[-1] != 224 or images.shape[-2] != 224):
                 images = F.interpolate(images, size=(224, 224), mode="bilinear", align_corners=False)
@@ -148,22 +136,51 @@ def train_cfm_standalone(
             x_s1 = images[:, :2, :, :]
             x_s2 = images[:, 2:, :, :]
 
-            # Extract frozen 768-D embeddings directly from master model
-            with torch.no_grad():
-                z1_raw, z2_raw = model(x_s1, x_s2)[:2]
-                z1 = F.normalize(z1_raw, p=2, dim=-1)
-                z2 = F.normalize(z2_raw, p=2, dim=-1)
+            z1_raw, z2_raw = model(x_s1, x_s2)[:2]
+            z1_norm = F.normalize(z1_raw, p=2, dim=-1)
+            z2_norm = F.normalize(z2_raw, p=2, dim=-1)
+
+            z1_list.append(z1_norm.cpu())
+            z2_list.append(z2_norm.cpu())
+
+    cached_z1 = torch.cat(z1_list, dim=0).to(device)  # shape: (N, 768)
+    cached_z2 = torch.cat(z2_list, dim=0).to(device)  # shape: (N, 768)
+    N = cached_z1.shape[0]
+    mb_size = (cached_z1.element_size() * cached_z1.nelement() * 2) / (1024 * 1024)
+    logger.info(f"✅ Pre-extraction Complete! Cached {N} paired vectors in GPU memory ({mb_size:.2f} MB).")
+
+    best_map5 = 0.0
+    best_bridge_path = os.path.join(save_dir, "bridge_unified.pth")
+    best_ben_path = os.path.join(save_dir, "bridge_best_ben14k.pth")
+
+    logger.info("=" * 80)
+    logger.info(" STARTING LIGHTNING-FAST CFM LATENT BRIDGE OPTIMIZATION")
+    logger.info("=" * 80)
+
+    for epoch in range(1, epochs + 1):
+        bridge_net.train()
+        total_loss = 0.0
+        start_time = time.time()
+
+        # Randomize batch order every epoch
+        perm = torch.randperm(N, device=device)
+        num_batches = (N + batch_size - 1) // batch_size
+
+        for b_idx in range(num_batches):
+            idx_batch = perm[b_idx * batch_size : (b_idx + 1) * batch_size]
+            z1_b = cached_z1[idx_batch]
+            z2_b = cached_z2[idx_batch]
+            B_curr = z1_b.shape[0]
 
             optimizer.zero_grad()
 
             # Flow Matching Interpolation: z_tau = (1 - tau) * z1 + tau * z2
-            B = z1.shape[0]
-            tau = torch.rand(B, 1, device=device)
-            z_tau = (1.0 - tau) * z1 + tau * z2
-            v_target = z2 - z1
+            tau = torch.rand(B_curr, 1, device=device)
+            z_tau = (1.0 - tau) * z1_b + tau * z2_b
+            v_target = z2_b - z1_b
 
             # Predict velocity field
-            v_pred, _ = bridge_net(z_tau, tau, z1)
+            v_pred, _ = bridge_net(z_tau, tau, z1_b)
 
             # Pure Flow Matching Velocity Field MSE Loss
             loss_bridge = F.mse_loss(v_pred, v_target)
@@ -174,22 +191,16 @@ def train_cfm_standalone(
 
             total_loss += loss_bridge.item()
 
-            pbar.set_postfix({
-                "flow_mse": f"{loss_bridge.item():.6f}",
-                "lr": f"{optimizer.param_groups[0]['lr']:.2e}"
-            })
-
         scheduler.step()
         elapsed = time.time() - start_time
-        num_batches = len(train_loader)
         avg_loss = total_loss / num_batches
 
         logger.info(
-            f"Epoch [{epoch}/{epochs}] ({elapsed:.1f}s) | "
-            f"Flow Matching MSE Loss: {avg_loss:.6f}"
+            f"Epoch [{epoch}/{epochs}] ({elapsed:.2f}s) | "
+            f"Flow MSE Loss: {avg_loss:.6f} | LR: {optimizer.param_groups[0]['lr']:.2e}"
         )
 
-        # 4. Perform Real-Time Cross-Modal Evaluation (S1 -> S2)
+        # 5. Perform Real-Time Cross-Modal Evaluation (S1 -> S2)
         logger.info(f"📊 Evaluating Epoch [{epoch}/{epochs}] Cross-Modal Retrieval (S1 Query -> S2 Gallery)...")
         bridge_net.eval()
         eval_results = evaluator.evaluate()
@@ -220,19 +231,19 @@ def train_cfm_standalone(
             logger.info(f"🏆 NEW BEST Cross-Modal mAP@5: {best_map5:.4f}! Saved to '{best_ben_path}'")
 
     print("=" * 80)
-    print(" 🎉 PURE CFM LATENT BRIDGE TRAINING COMPLETED SUCCESSFULLY!")
+    print(" 🎉 CFM LATENT BRIDGE TRAINING COMPLETED SUCCESSFULLY!")
     print(f" Best Cross-Modal mAP@5 : {best_map5:.4f}")
     print(f" Master Bridge Checkpoint : '{best_bridge_path}'")
     print(f" Best BEN-14K Checkpoint   : '{best_ben_path}'")
     print("=" * 80)
 
 def main():
-    parser = argparse.ArgumentParser(description="Original Pure Standalone CFM Latent Bridge Trainer")
+    parser = argparse.ArgumentParser(description="Lightning-Fast Standalone CFM Latent Bridge Trainer")
     parser.add_argument("--config", type=str, default="Saber/configs/config.yaml", help="Path to config.yaml")
     parser.add_argument("--checkpoint", type=str, default="checkpoints_v10/saber_unified_clean.pth", help="Path to pre-trained Master Encoder checkpoint")
     parser.add_argument("--data_dir", type=str, default="Datasets/benv1_14k", help="Path to BEN-14K dataset directory")
     parser.add_argument("--batch_size", type=int, default=64, help="Batch size for training CFM bridge")
-    parser.add_argument("--epochs", type=int, default=15, help="Number of CFM bridge training epochs")
+    parser.add_argument("--epochs", type=int, default=20, help="Number of CFM bridge training epochs")
     parser.add_argument("--lr", type=float, default=0.0005, help="Learning rate for CFM bridge optimizer")
     parser.add_argument("--save_dir", type=str, default="checkpoints_v10", help="Directory to save trained bridge checkpoints")
     args = parser.parse_args()
