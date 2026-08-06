@@ -208,13 +208,13 @@ def export_embeddings(
         "num_samples": N_samples,
         "names": all_names,
         "labels": all_labels,
-        "s1_embeds": all_s1.astype(np.float16),           # Half precision to save 50% disk space
+        "s1_embeds": all_s1.astype(np.float16),
         "s2_embeds": all_s2.astype(np.float16),
-        "s1_translated_embeds": all_s1_trans.astype(np.float16),
+        "s1_translated_embeds": all_s1_trans_aligned.astype(np.float16),  # Procrustes SVD Aligned
         "class_probs_s1": all_p1.astype(np.float16),
         "class_probs_s2": all_p2.astype(np.float16),
         "hybrid_s1_embeds": h1.astype(np.float16),
-        "hybrid_s2_embeds": h2.astype(np.float16),
+        "hybrid_s2_embeds": h2_dba.astype(np.float16),                    # DBA Gallery Smoothed
         "faiss_s2_index": faiss_s2_index,
         "class_names": getattr(config.dataset, "class_names", [
             "Urban fabric", "Industrial units", "Arable land", "Permanent crops",
