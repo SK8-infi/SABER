@@ -173,14 +173,14 @@ def train_unified(
     # -------------------------------------------------------------
     if mode_clean in ["all", "encoder"]:
         loss_fn = SaberCombinedLoss(
-            jaccard_weight=config.geometry.get("jaccard_weight", 0.0),
-            ranking_weight=config.geometry.get("ranking_weight", 0.0),
+            jaccard_weight=config.geometry.get("jaccard_weight", 2.0),
+            ranking_weight=config.geometry.get("ranking_weight", 1.0),
             invariance_weight=config.loss.get("vicreg_invariance_weight", 15.0),
             variance_weight=config.loss.get("vicreg_variance_weight", 25.0),
             covariance_weight=config.loss.get("vicreg_covariance_weight", 2.0),
             sigreg_weight=config.geometry.get("sigreg_weight", 2.0),
-            classification_weight=0.0,  # PURE UNSUPERVISED (NO LABELS)
-            infonce_weight=config.geometry.get("infonce_weight", 0.0),
+            classification_weight=config.geometry.get("classification_weight", 5.0),
+            infonce_weight=config.geometry.get("infonce_weight", 1.0),
             infonce_temperature=config.geometry.get("infonce_temperature", 0.07)
         ).to(device)
 
@@ -266,6 +266,7 @@ def train_unified(
                         ben_batch = next(ben_iter)
 
                     images_ben = ben_batch.get("image1", ben_batch.get("image")).to(device, non_blocking=True)
+                    targets_ben = ben_batch.get("label").to(device, non_blocking=True) if "label" in ben_batch else None
 
                     if images_ben.shape[-1] != 224 or images_ben.shape[-2] != 224:
                         images_ben = F.interpolate(images_ben, size=(224, 224), mode="bilinear", align_corners=False)
@@ -274,8 +275,8 @@ def train_unified(
                     x_s2 = images_ben[:, 2:, :, :]
 
                     with torch.amp.autocast("cuda", enabled=use_amp, dtype=torch.bfloat16 if torch.cuda.is_bf16_supported() else torch.float16):
-                        z1_ben, z2_ben, z1_pred_ben = model(x_s1, x_s2)[:3]
-                        loss_dict = loss_fn(z1_ben, z2_ben, z1_pred_ben, targets=None)
+                        z1_ben, z2_ben, z1_pred_ben, logits_s1, logits_s2 = model(x_s1, x_s2)
+                        loss_dict = loss_fn(z1_ben, z2_ben, z1_pred_ben, targets=targets_ben, logits_s1=logits_s1, logits_s2=logits_s2)
                 else:
                     try:
                         dsr_batch = next(dsr_iter)
