@@ -106,12 +106,25 @@ def train_cfm_standalone(
         train_dataset,
         batch_size=batch_size,
         shuffle=True,
-        num_workers=4,
+        num_workers=2,
         pin_memory=True,
         drop_last=True
     )
 
-    evaluator = Evaluator(model=model, test_dataset=test_dataset, config=config, device=device)
+    test_loader = DataLoader(
+        test_dataset,
+        batch_size=batch_size,
+        shuffle=False,
+        num_workers=2,
+        pin_memory=True
+    )
+
+    evaluator = Evaluator(
+        model=model,
+        dataloader=test_loader,
+        device=device,
+        config=config
+    )
 
     best_map5 = 0.0
     best_bridge_path = os.path.join(save_dir, "bridge_unified.pth")
@@ -204,7 +217,8 @@ def train_cfm_standalone(
         # 4. Perform Real-Time Cross-Modal Evaluation (S1 -> S2)
         logger.info(f"📊 Evaluating Epoch [{epoch}/{epochs}] Cross-Modal Retrieval (S1 Query -> S2 Gallery)...")
         bridge_net.eval()
-        metrics = evaluator.evaluate_cross_modal_retrieval(query_modality="s1", gallery_modality="s2")
+        eval_results = evaluator.evaluate()
+        metrics = eval_results.get("metrics", {})
         map5 = metrics.get("MAP@5", 0.0)
         prec5 = metrics.get("PRECISION@5", 0.0)
         rec5 = metrics.get("RECALL@5", 0.0)
