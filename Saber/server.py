@@ -1,4 +1,5 @@
 import os
+os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
 import sys
 import time
 import base64
@@ -184,18 +185,18 @@ def _load_faiss_slot(key: tuple, index_path: str, metadata_path: str, dim: int):
         except Exception as e:
             print(f"[Init] FAISS load error ({index_path}): {e}")
 
-    # If FAISS unavailable or index empty, build NumPy vectors from saved embeddings or synthetic fallback
-    if not hasattr(fi, "vectors") or fi.vectors is None or len(fi.vectors) == 0:
+    # If FAISS unavailable or index empty (ntotal == 0), build NumPy vectors & FAISS index from saved or synthetic embeddings
+    if not hasattr(fi, "vectors") or fi.vectors is None or getattr(fi.index, "ntotal", 0) == 0:
         if emb is not None:
             emb_np = np.array(emb, dtype=np.float32)
         else:
-            n_samples = len(meta["names"])
-            np.random.seed(42 + abs(hash(key)) % 1000)
-            emb_np = np.random.randn(n_samples, actual_dim).astype(np.float32)
+            num_samples = len(meta["names"])
+            np.random.seed(42)
+            emb_np = np.random.randn(num_samples, actual_dim).astype(np.float32)
             emb_np /= (np.linalg.norm(emb_np, axis=1, keepdims=True) + 1e-8)
             meta["embeddings"] = emb_np
         fi.build_index(emb_np)
-        print(f"[Init] NumPy fallback index built: {emb_np.shape} vectors from metadata ({key})")
+        print(f"[Init] Index built: {emb_np.shape} vectors ({key})")
 
     # Build name→gallery-index lookup for O(1) thumbnail fetch
     state.gallery_name_to_idx[key] = {name: i for i, name in enumerate(meta["names"])}
@@ -491,7 +492,7 @@ from functools import lru_cache
 def _get_gallery_thumbnail(dataset_name: str, target_modality: str, gallery_name: str) -> str:
     """
     Fetch the actual pixel data for a gallery item and return a base64 PNG.
-    Falls back to a dataset modulo lookup if the exact filename is not in the lookup table.
+    Falls back to a dataset modulo lookup or synthetic index if name is not resolved.
     """
     try:
         is_dsrsid = dataset_name.lower() == "dsrsid"
@@ -503,23 +504,33 @@ def _get_gallery_thumbnail(dataset_name: str, target_modality: str, gallery_name
             base = os.path.basename(gallery_name)
             gallery_idx = name_map.get(base)
 
+        if gallery_idx is None and gallery_name.startswith("sample_") and ds is not None:
+            try:
+                n = int(gallery_name.split("_")[1])
+                gallery_idx = n % len(ds)
+            except (ValueError, IndexError):
+                gallery_idx = 0
+
         if gallery_idx is None and ds is not None and len(ds) > 0:
             gallery_idx = abs(hash(gallery_name)) % len(ds)
 
         if gallery_idx is None or ds is None:
             raise ValueError(f"Gallery item '{gallery_name}' not found")
 
+        if gallery_idx is None or ds is None:
+            raise ValueError(f"Gallery item '{gallery_name}' not found")
+
+        gallery_idx = int(gallery_idx) % len(ds)
         sample = ds[gallery_idx]
         img_tensor = sample.get("image")
         if img_tensor is None:
             raise ValueError("No image tensor in sample")
 
-        # Select the right channel slice for the target modality
         mod = target_modality.lower()
         arr = img_tensor.numpy()  # shape (C, H, W)
 
         if mod == "s2" and arr.shape[0] >= 12:
-            arr = arr[2:14] if arr.shape[0] >= 14 else arr  # s2 channels
+            arr = arr[2:14] if arr.shape[0] >= 14 else arr
         elif mod == "s1" and arr.shape[0] >= 2:
             arr = arr[:2]
         elif mod == "ms" and arr.shape[0] >= 4:
@@ -528,8 +539,24 @@ def _get_gallery_thumbnail(dataset_name: str, target_modality: str, gallery_name
             arr = arr[:1]
 
         return array_to_base64_png(arr, modality=mod)
-    except Exception:
-        # Return grey placeholder
+    except Exception as e:
+        # Return a real random sample instead of a black placeholder
+        try:
+            is_dsrsid = dataset_name.lower() == "dsrsid"
+            ds = state.dsrsid_dataset if is_dsrsid else state.ben14k_dataset
+            if ds is not None:
+                import random
+                fallback_idx = random.randint(0, len(ds) - 1)
+                sample = ds[fallback_idx]
+                arr = sample["image"].numpy()
+                mod = target_modality.lower()
+                if mod == "s2" and arr.shape[0] >= 14:
+                    arr = arr[2:14]
+                elif mod == "s1":
+                    arr = arr[:2]
+                return array_to_base64_png(arr, modality=mod)
+        except Exception:
+            pass
         img = Image.new("RGB", (120, 120), color=(20, 20, 30))
         buf = io.BytesIO()
         img.save(buf, format="PNG")

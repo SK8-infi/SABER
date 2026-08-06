@@ -1,6 +1,7 @@
 import logging
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 try:
     import timm
     TIMM_AVAILABLE = True
@@ -146,6 +147,8 @@ class FrozenDOFABackbone(nn.Module):
         Returns:
             Pooled feature representation of shape (B, 768).
         """
+        if x.shape[-2:] != (224, 224):
+            x = F.interpolate(x, size=(224, 224), mode='bilinear', align_corners=False)
         has_trainable = any(p.requires_grad for p in self.model.parameters())
         if self.training and has_trainable:
             features = self.model.forward_features(x, wave_list)

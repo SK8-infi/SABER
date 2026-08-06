@@ -12,7 +12,7 @@ viz_dir: "visualizations"
 dataset:
   name: "ben14k"                  # "ben14k" (Sentinel-1/2) or "dsrsid" (Gaofen-1)
   data_dir: "datasets/benv1_14k"          # BEN-14K root dir (relative to project root)
-  dsrsid_path: "datasets/DSRSID.mat"     # DSRSID .mat file (relative to project root)
+  dsrsid_path: "datasets/DSRSID-001.mat"  # DSRSID .mat file (relative to project root)
   use_synthetic: false            # Set to false to train on real data
   size: 14832                     # Dataset size (e.g. 14832 for full ben14k, 80000 for dsrsid)
   modality: "s2"                  # "s2" (optical), "s1" (SAR), or "both" (cross-modal)
