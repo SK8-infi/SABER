@@ -158,17 +158,19 @@ def export_embeddings(
     all_labels = np.concatenate(labels_list, axis=0)
     all_names = np.array(names_list)
 
-    # Project 19-D class probabilities to 768-D space via classifier projection weight matrix
-    classifier_w = model.classifier.weight.detach().cpu().numpy()  # (19, 768)
-    p1_proj = all_p1 @ classifier_w                                # (N, 768)
-    p2_proj = all_p2 @ classifier_w                                # (N, 768)
+    # High-F1 Class Probability Thresholding (0.15 Noise Removal)
+    p1_t = np.where(all_p1 > 0.15, all_p1, 0.0)
+    p2_t = np.where(all_p2 > 0.15, all_p2, 0.0)
 
-    p1_proj_n = p1_proj / (np.linalg.norm(p1_proj, axis=1, keepdims=True) + 1e-8)
-    p2_proj_n = p2_proj / (np.linalg.norm(p2_proj, axis=1, keepdims=True) + 1e-8)
+    p1_norm = p1_t / (np.linalg.norm(p1_t, axis=1, keepdims=True) + 1e-8)
+    p2_norm = p2_t / (np.linalg.norm(p2_t, axis=1, keepdims=True) + 1e-8)
 
-    # Optimized Hybrid Descriptors (0.7 Visual Vector + 0.3 Class Semantic Vector)
-    h1 = F.normalize(torch.tensor(0.7 * all_s1_trans + 0.3 * p1_proj_n), p=2, dim=-1).numpy()
-    h2 = F.normalize(torch.tensor(0.7 * all_s2 + 0.3 * p2_proj_n), p=2, dim=-1).numpy()
+    # 787-D High-F1 Multi-Label Hybrid Descriptors (0.6 Visual Vector + 0.4 Thresholded Class Vector)
+    v1_c = np.hstack([0.6 * all_s1_trans, 0.4 * p1_norm])
+    v2_c = np.hstack([0.6 * all_s2, 0.4 * p2_norm])
+
+    h1 = (v1_c / (np.linalg.norm(v1_c, axis=1, keepdims=True) + 1e-8)).astype(np.float32)
+    h2 = (v2_c / (np.linalg.norm(v2_c, axis=1, keepdims=True) + 1e-8)).astype(np.float32)
 
     # Apply Database Augmentation (DBA) Gallery Manifold Smoothing
     logger.info("Applying Database Augmentation (DBA) gallery manifold smoothing...")
@@ -183,8 +185,8 @@ def export_embeddings(
     # Build FAISS Indices on DBA-Smoothed Gallery Vectors if available
     faiss_s2_index = None
     if FAISS_AVAILABLE:
-        logger.info("Building FAISS Flat Cosine Index for DBA-Smoothed Optical Gallery...")
-        index = faiss.IndexFlatIP(768)
+        logger.info("Building FAISS Flat Cosine Index for DBA-Smoothed Optical Gallery (787-D)...")
+        index = faiss.IndexFlatIP(h2_dba.shape[1])
         index.add(h2_dba.astype(np.float32))
         faiss_s2_index = faiss.serialize_index(index)
         logger.info("✅ FAISS S2 DBA-Smoothed Index successfully built!")
