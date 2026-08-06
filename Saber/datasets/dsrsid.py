@@ -96,61 +96,55 @@ class DSRSIDDataset(BaseDataset):
                         break
 
             if self.mat_path is None:
-                logger.warning(
-                    f"DSRSID.mat not found in data_dir '{data_dir}' or fallbacks. "
-                    "Falling back to synthetic data."
+                raise FileNotFoundError(
+                    f"DSRSID.mat not found in data_dir '{data_dir}' or fallbacks."
                 )
-                self.use_synthetic = True
             else:
                 # Open temporarily to read dataset size and build stratified index map
                 import h5py
-                try:
-                    with h5py.File(self.mat_path, "r") as f:
-                        self.total_samples = f["MUL_IMAGES"].shape[0]
-                        all_labels = f["LAND_COVER_TYPES"][0, :].astype(int)
+                with h5py.File(self.mat_path, "r") as f:
+                    self.total_samples = f["MUL_IMAGES"].shape[0]
+                    all_labels = f["LAND_COVER_TYPES"][0, :].astype(int)
 
-                    if self.size is None or self.size <= 0 or self.size >= self.total_samples:
-                        self.size = self.total_samples
-                        all_stratified = np.arange(self.total_samples)
-                    else:
-                        # Build stratified indices: sample equally from each class
-                        unique_classes = np.unique(all_labels)
-                        num_classes_found = len(unique_classes)
-                        per_class = max(1, self.size // num_classes_found)
-                        rng = np.random.RandomState(42)
-                        selected = []
-                        for cls in unique_classes:
-                            cls_indices = np.where(all_labels == cls)[0]
-                            n_take = min(per_class, len(cls_indices))
-                            chosen = rng.choice(cls_indices, size=n_take, replace=False)
-                            selected.append(chosen)
-                        all_stratified = np.sort(np.concatenate(selected))[:self.size]
-
-                    
-                    # Deterministic split partitioning (Seed 42): 70% Train | 10% Val | 20% Test
-                    total_n = len(all_stratified)
+                if self.size is None or self.size <= 0 or self.size >= self.total_samples:
+                    self.size = self.total_samples
+                    all_stratified = np.arange(self.total_samples)
+                else:
+                    # Build stratified indices: sample equally from each class
+                    unique_classes = np.unique(all_labels)
+                    num_classes_found = len(unique_classes)
+                    per_class = max(1, self.size // num_classes_found)
                     rng = np.random.RandomState(42)
-                    shuffled_idx = rng.permutation(total_n)
-                    all_stratified = all_stratified[shuffled_idx]
+                    selected = []
+                    for cls in unique_classes:
+                        cls_indices = np.where(all_labels == cls)[0]
+                        n_take = min(per_class, len(cls_indices))
+                        chosen = rng.choice(cls_indices, size=n_take, replace=False)
+                        selected.append(chosen)
+                    all_stratified = np.sort(np.concatenate(selected))[:self.size]
 
-                    train_end = int(0.70 * total_n)
-                    val_end = int(0.80 * total_n)
-                    
-                    if self.split == "train":
-                        self.sample_indices = all_stratified[:train_end]
-                    elif self.split == "val":
-                        self.sample_indices = all_stratified[train_end:val_end]
-                    elif self.split == "test":
-                        self.sample_indices = all_stratified[val_end:]
-                    else: # "all"
-                        self.sample_indices = all_stratified
+                
+                # Deterministic split partitioning (Seed 42): 70% Train | 10% Val | 20% Test
+                total_n = len(all_stratified)
+                rng = np.random.RandomState(42)
+                shuffled_idx = rng.permutation(total_n)
+                all_stratified = all_stratified[shuffled_idx]
 
-                    self.size = len(self.sample_indices)
+                train_end = int(0.70 * total_n)
+                val_end = int(0.80 * total_n)
+                
+                if self.split == "train":
+                    self.sample_indices = all_stratified[:train_end]
+                elif self.split == "val":
+                    self.sample_indices = all_stratified[train_end:val_end]
+                elif self.split == "test":
+                    self.sample_indices = all_stratified[val_end:]
+                else: # "all"
+                    self.sample_indices = all_stratified
 
-                    logger.info(f"Connected to DSRSID.mat at '{self.mat_path}'. Using {self.size} samples [{self.split.upper()} SPLIT].")
-                except Exception as e:
-                    logger.error(f"Error reading DSRSID.mat: {e}. Falling back to synthetic mode.")
-                    self.use_synthetic = True
+                self.size = len(self.sample_indices)
+
+                logger.info(f"Connected to DSRSID.mat at '{self.mat_path}'. Using {self.size} samples [{self.split.upper()} SPLIT].")
 
     def __len__(self) -> int:
         return self.size

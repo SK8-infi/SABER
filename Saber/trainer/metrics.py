@@ -146,7 +146,11 @@ def compute_retrieval_metrics(
         f"precision@{top_k}": mean_precision,
         f"recall@{top_k}": mean_recall,
         f"f1@{top_k}": mean_f1,
-        f"map@{top_k}": mean_map
+        f"map@{top_k}": mean_map,
+        f"PRECISION@{top_k}": mean_precision,
+        f"RECALL@{top_k}": mean_recall,
+        f"F1@{top_k}": mean_f1,
+        f"MAP@{top_k}": mean_map
     }
 
 def _compute_retrieval_metrics_numpy(
@@ -295,5 +299,9 @@ def _compute_retrieval_metrics_numpy(
         f"precision@{top_k}": mean_precision,
         f"recall@{top_k}": mean_recall,
         f"f1@{top_k}": mean_f1,
-        f"map@{top_k}": mean_map
+        f"map@{top_k}": mean_map,
+        f"PRECISION@{top_k}": mean_precision,
+        f"RECALL@{top_k}": mean_recall,
+        f"F1@{top_k}": mean_f1,
+        f"MAP@{top_k}": mean_map
     }

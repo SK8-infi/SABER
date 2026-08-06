@@ -88,7 +88,7 @@ train:
   weight_decay: 0.01
   epochs: 5
   grad_clip: 1.0
-  grad_accumulation_steps: 4  # Effective batch = 64 * 4 = 256
+  grad_accumulation_steps: 8  # Effective batch = 64 * 8 = 512 (matches CR-JEPA)
   amp: true              # Automated Mixed Precision
   use_ema: true          # EMA target model copy
   ema_decay: 0.996
@@ -100,6 +100,9 @@ retrieval:
   metric: "cosine"       # "cosine" or "l2"
   index_type: "flat"     # "flat", "ivfpq", or "binary_hnsw"
   index_path: "checkpoints/faiss_index.bin"
+  use_pca: false
+  use_dba: false
+  use_qe: false
   nlist: 64
   pq_m: 64
   pq_bits: 4

@@ -190,40 +190,34 @@ class BEN14KDataset(BaseDataset):
                         break
 
             if self.csv_path is None:
-                logger.warning(
-                    f"benv1_14k_dataset_master_labels.csv not found in data_dir '{data_dir}' or fallbacks. "
-                    "Falling back to synthetic data."
+                raise FileNotFoundError(
+                    f"benv1_14k_dataset_master_labels.csv not found in data_dir '{data_dir}' or fallbacks."
                 )
-                self.use_synthetic = True
             else:
-                try:
-                    full_df = pd.read_csv(self.csv_path)
-                    total_n = len(full_df)
+                full_df = pd.read_csv(self.csv_path)
+                total_n = len(full_df)
+                
+                # Deterministic split partitioning (Seed 42)
+                # 70% Train (10,382) | 10% Val (1,483) | 20% Test (2,967)
+                rng = np.random.RandomState(42)
+                shuffled_idx = rng.permutation(total_n)
+                
+                train_end = int(0.70 * total_n)
+                val_end = int(0.80 * total_n)
+                
+                if self.split == "train":
+                    split_idx = shuffled_idx[:train_end]
+                elif self.split == "val":
+                    split_idx = shuffled_idx[train_end:val_end]
+                elif self.split == "test":
+                    split_idx = shuffled_idx[val_end:]
+                else: # "all"
+                    split_idx = shuffled_idx
                     
-                    # Deterministic split partitioning (Seed 42)
-                    # 70% Train (10,382) | 10% Val (1,483) | 20% Test (2,967)
-                    rng = np.random.RandomState(42)
-                    shuffled_idx = rng.permutation(total_n)
-                    
-                    train_end = int(0.70 * total_n)
-                    val_end = int(0.80 * total_n)
-                    
-                    if self.split == "train":
-                        split_idx = shuffled_idx[:train_end]
-                    elif self.split == "val":
-                        split_idx = shuffled_idx[train_end:val_end]
-                    elif self.split == "test":
-                        split_idx = shuffled_idx[val_end:]
-                    else: # "all"
-                        split_idx = shuffled_idx
-                        
-                    self.df = full_df.iloc[split_idx].reset_index(drop=True)
-                    self.size = len(self.df)
-                    self.ben14k_root = os.path.dirname(self.csv_path)
-                    logger.info(f"Loaded BEN-14K [{self.split.upper()} SPLIT] metadata CSV from '{self.csv_path}'. Using {self.size} samples.")
-                except Exception as e:
-                    logger.error(f"Error loading BEN-14K metadata CSV: {e}. Falling back to synthetic.")
-                    self.use_synthetic = True
+                self.df = full_df.iloc[split_idx].reset_index(drop=True)
+                self.size = len(self.df)
+                self.ben14k_root = os.path.dirname(self.csv_path)
+                logger.info(f"Loaded BEN-14K [{self.split.upper()} SPLIT] metadata CSV from '{self.csv_path}'. Using {self.size} samples.")
 
     def __len__(self) -> int:
         return self.size
@@ -254,37 +248,53 @@ class BEN14KDataset(BaseDataset):
         
         if self.modality == "s1" or self.modality == "both":
             s1_path = os.path.join(self.ben14k_root, "s1", s1_id, f"{s1_id}_all.npy")
-            # Loaded shape: (2, 120, 120)
-            img_s1 = np.load(s1_path).astype(np.float32)
-            
+            try:
+                img_s1 = np.load(s1_path).astype(np.float32)
+            except Exception:
+                img_s1 = np.zeros((2, 120, 120), dtype=np.float32)
+
+            if img_s1.shape != (2, 120, 120):
+                flat = img_s1.flatten()
+                buf = np.zeros(28800, dtype=np.float32)
+                buf[:min(len(flat), 28800)] = flat[:min(len(flat), 28800)]
+                img_s1 = buf.reshape(2, 120, 120)
+
             # S1 DB Clipping & Min-Max Scaling to [0, 1]
             vv_clipped = np.clip(img_s1[0], -20.0, 5.0)
             vh_clipped = np.clip(img_s1[1], -30.0, 0.0)
             vv_norm = (vv_clipped + 20.0) / 25.0
             vh_norm = (vh_clipped + 30.0) / 30.0
             img_s1 = np.stack([vv_norm, vh_norm], axis=0)
-            
+
             # Z-score normalization with legacy stats
             s1_mean = np.array([0.34904295, 0.4175904], dtype=np.float32).reshape(2, 1, 1)
             s1_std = np.array([0.13458131, 0.12477361], dtype=np.float32).reshape(2, 1, 1)
             img_s1 = (img_s1 - s1_mean) / s1_std
-            
+
             # Rearrange to (120, 120, 2) for augmentations
             img_s1 = np.moveaxis(img_s1, 0, -1)
-            
+
         if self.modality == "s2" or self.modality == "both":
             s2_path = os.path.join(self.ben14k_root, "s2", s2_id, f"{s2_id}_all.npy")
-            # Loaded shape: (12, 120, 120)
-            img_s2 = np.load(s2_path).astype(np.float32)
-            
+            try:
+                img_s2 = np.load(s2_path).astype(np.float32)
+            except Exception:
+                img_s2 = np.zeros((12, 120, 120), dtype=np.float32)
+
+            if img_s2.shape != (12, 120, 120):
+                flat = img_s2.flatten()
+                buf = np.zeros(172800, dtype=np.float32)
+                buf[:min(len(flat), 172800)] = flat[:min(len(flat), 172800)]
+                img_s2 = buf.reshape(12, 120, 120)
+
             # S2 Scaling to [0, 1]
             img_s2 = img_s2 / 10000.0
-            
+
             # Z-score normalization with legacy stats
             s2_mean = np.array([0.03488038, 0.04391864, 0.06977729, 0.06504002, 0.11127272, 0.2385335, 0.2864792, 0.29709122, 0.31154051, 0.30906704, 0.22802109, 0.14070274], dtype=np.float32).reshape(12, 1, 1)
             s2_std = np.array([0.01923979, 0.02354799, 0.02809117, 0.04333137, 0.0391201, 0.05621961, 0.07425146, 0.08028981, 0.07793317, 0.07158578, 0.06703733, 0.0692741], dtype=np.float32).reshape(12, 1, 1)
             img_s2 = (img_s2 - s2_mean) / s2_std
-            
+
             # Rearrange to (120, 120, 12) for augmentations
             img_s2 = np.moveaxis(img_s2, 0, -1)
 
