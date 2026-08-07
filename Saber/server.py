@@ -140,6 +140,44 @@ def calculate_jaccard(labels1: np.ndarray, labels2: np.ndarray) -> float:
         return 1.0
     return float(intersection / union)
 
+def is_same_scene(q_name: str, q_idx: Optional[int], c_name: str, c_idx: Optional[int]) -> bool:
+    """
+    Returns True if candidate image is the query image itself OR its paired cross-modal image.
+    Excludes:
+      1. Matching indices (q_idx == c_idx)
+      2. Matching file names (q_name == c_name)
+      3. Matching base tile IDs (e.g., patch_234_s1_0 vs patch_234_s2_0 or patch_234)
+    """
+    if q_idx is not None and c_idx is not None:
+        try:
+            if int(q_idx) == int(c_idx) and int(q_idx) >= 0:
+                return True
+        except (ValueError, TypeError):
+            pass
+
+    q_str = str(q_name).strip().lower()
+    c_str = str(c_name).strip().lower()
+
+    if q_str == c_str:
+        return True
+
+    def extract_base_tile(name: str) -> str:
+        s = os.path.basename(name).lower()
+        for ext in ['.png', '.tif', '.tiff', '.jpg', '.jpeg']:
+            if s.endswith(ext):
+                s = s[:-len(ext)]
+        for tag in ['_s1_0', '_s2_0', '_s1', '_s2', '_pan', '_ms', '_both']:
+            s = s.replace(tag, '')
+        return s.strip()
+
+    q_base = extract_base_tile(q_str)
+    c_base = extract_base_tile(c_str)
+
+    if q_base and c_base and q_base == c_base:
+        return True
+
+    return False
+
 def _load_faiss_slot(key: tuple, index_path: str, metadata_path: str, dim: int):
     """Load a single FAISS index + metadata into state.indexes/metadatas/retrievers."""
     meta = {"names": [], "labels": np.zeros((0, 19)), "embeddings": None}
@@ -616,17 +654,22 @@ def execute_query(req: QueryRequest):
         # Compute cosine similarity dot product
         scores = np.matmul(g_norm, q_vec_n)
 
-        # Rank top_k matches
-        top_k = min(req.top_k, N_db)
-        top_indices = np.argpartition(scores, -top_k)[-top_k:]
+        # Rank top_k matches (excluding query image itself & its cross-modal pair)
+        fetch_k = min(req.top_k + 30, N_db)
+        top_indices = np.argpartition(scores, -fetch_k)[-fetch_k:]
         top_indices = top_indices[np.argsort(-scores[top_indices])]
 
         t1 = time.perf_counter_ns()
         total_ms = (t1 - t_start) / 1e6
 
         candidates = []
-        for rank, idx_m in enumerate(top_indices, 1):
+        for idx_m in top_indices:
             m_name = str(db["names"][idx_m])
+            
+            # EXCLUDE query image itself & its cross-modal pair
+            if is_same_scene(query_name, q_idx, m_name, idx_m):
+                continue
+
             m_score = float(scores[idx_m])
             m_label = db["labels"][idx_m].astype(np.float32)
 
@@ -637,7 +680,7 @@ def execute_query(req: QueryRequest):
             active_classes = [BIGEARTHNET_19_CLASSES[i] for i in label_indices if i < len(BIGEARTHNET_19_CLASSES)]
 
             candidates.append({
-                "rank": rank,
+                "rank": len(candidates) + 1,
                 "name": m_name,
                 "similarity_score": round(m_score * 100, 2),
                 "jaccard_overlap": round(jaccard * 100, 2),
@@ -645,6 +688,9 @@ def execute_query(req: QueryRequest):
                 "active_classes": active_classes,
                 "thumbnail": m_b64,
             })
+
+            if len(candidates) >= req.top_k:
+                break
 
         query_b64 = _get_gallery_thumbnail("ben14k", src, query_name)
         active_query_classes = [BIGEARTHNET_19_CLASSES[i] for i in np.where(query_gt_label > 0.5)[0].tolist() if i < len(BIGEARTHNET_19_CLASSES)]
@@ -791,7 +837,8 @@ def execute_query(req: QueryRequest):
 
     t6 = time.perf_counter_ns()
     # Unsupervised CBIR query: pass query_label=None to avoid label leakage and pass bridge uncertainty
-    ret_out = retriever.retrieve(query_emb, k=req.top_k, uncertainty=query_uncertainty, query_label=None, return_timings=True)
+    fetch_k = min(req.top_k + 30, len(ds))
+    ret_out = retriever.retrieve(query_emb, k=fetch_k, uncertainty=query_uncertainty, query_label=None, return_timings=True)
     if isinstance(ret_out, tuple):
         raw_matches, search_timings = ret_out
         faiss_ms = search_timings.get("faiss_search_ms", 0.0)
@@ -806,8 +853,14 @@ def execute_query(req: QueryRequest):
     total_ms = (t_end - t_start) / 1e6
 
     candidates = []
-    for rank, match in enumerate(raw_matches, 1):
-        m_name  = match["name"]
+    for match in raw_matches:
+        m_name = match["name"]
+        m_idx = match.get("idx", match.get("index", -1))
+
+        # EXCLUDE query image itself & its cross-modal pair
+        if is_same_scene(query_name, query_idx, m_name, m_idx):
+            continue
+
         m_score = float(match["score"])
         m_label = match["label"]
 
@@ -826,7 +879,7 @@ def execute_query(req: QueryRequest):
             active_classes = [class_list[i] for i in label_indices if i < len(class_list)]
 
         candidates.append({
-            "rank":             rank,
+            "rank":             len(candidates) + 1,
             "name":             m_name,
             "similarity_score": round(m_score * 100, 2),
             "jaccard_overlap":  round(jaccard * 100, 2),
@@ -834,6 +887,9 @@ def execute_query(req: QueryRequest):
             "active_classes":   active_classes,
             "thumbnail":        m_b64,
         })
+
+        if len(candidates) >= req.top_k:
+            break
 
     active_query_classes = [class_list[i] for i in np.where(query_gt_label > 0.5)[0].tolist() if i < len(class_list)]
 
