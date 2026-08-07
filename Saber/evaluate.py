@@ -94,11 +94,37 @@ def main() -> None:
             labels = db["labels"]
             names = db.get("names", np.array([f"sample_{i}" for i in range(len(labels))]))
             num_samples = len(labels)
+
+            # Apply deterministic dataset split partitioning matching BEN14K/DSRSID standard (Seed 42)
+            eval_split = args.split.lower() if args.split else "test"
+            rng = np.random.RandomState(42)
+            shuffled_idx = rng.permutation(num_samples)
+            train_end = int(0.70 * num_samples)
+            val_end = int(0.80 * num_samples)
+
+            if eval_split == "test":
+                q_idx = shuffled_idx[val_end:]       # 20% Held-Out Test Query set (2,967 samples)
+                g_idx = shuffled_idx[:val_end]       # 80% Train+Val Gallery set (11,865 samples)
+                split_desc = f"Held-Out Test Split (Query: {len(q_idx)}, Gallery: {len(g_idx)})"
+            elif eval_split == "val":
+                q_idx = shuffled_idx[train_end:val_end]  # 10% Validation Query set (1,483 samples)
+                g_idx = shuffled_idx[:train_end]        # 70% Train Gallery set (10,382 samples)
+                split_desc = f"Validation Split (Query: {len(q_idx)}, Gallery: {len(g_idx)})"
+            elif eval_split == "train":
+                q_idx = shuffled_idx[:train_end]
+                g_idx = shuffled_idx[:train_end]
+                split_desc = f"Train Split (Query: {len(q_idx)}, Gallery: {len(g_idx)})"
+            else:  # "all"
+                q_idx = np.arange(num_samples)
+                g_idx = np.arange(num_samples)
+                split_desc = f"Full Dataset (Query: {len(q_idx)}, Gallery: {len(g_idx)})"
+
             logger.info(f"Total Multi-Modal Database Samples: {num_samples}")
+            logger.info(f"Evaluation Split Partition: {split_desc}")
 
             from Saber.trainer.metrics import compute_retrieval_metrics
 
-            def evaluate_payload_embeddings(q_emb, g_emb, q_lbl, g_lbl, k_list=[5, 10], is_same_modal=False, q_names=None):
+            def evaluate_payload_embeddings(q_emb, g_emb, q_lbl, g_lbl, k_list=[5, 10], is_same_modal=False, q_names=None, g_names=None):
                 num_q = len(q_emb)
                 q_norm = q_emb / (np.linalg.norm(q_emb, axis=1, keepdims=True) + 1e-8)
                 g_norm = g_emb / (np.linalg.norm(g_emb, axis=1, keepdims=True) + 1e-8)
@@ -119,7 +145,7 @@ def main() -> None:
                             is_multilabel=True,
                             exclude_self_matches=is_same_modal,
                             query_names=q_names[b_start:b_end] if is_same_modal and q_names is not None else None,
-                            gallery_names=q_names if is_same_modal and q_names is not None else None
+                            gallery_names=g_names if is_same_modal and g_names is not None else None
                         )
                         prec_list.append(m_batch[f"precision@{k}"])
                         rec_list.append(m_batch[f"recall@{k}"])
@@ -132,10 +158,18 @@ def main() -> None:
                     res[f"map@{k}"] = float(np.mean(map_list))
                 return res
 
+            is_same = (eval_split == "all")
+
             # 1. Direct Cross-Modal SAR Encoder (s1_embeds -> s2_embeds)
             if "s1_embeds" in db and "s2_embeds" in db:
-                m_s1 = evaluate_payload_embeddings(db["s1_embeds"].astype(np.float32), db["s2_embeds"].astype(np.float32), labels, labels, k_list=[5, 10])
-                logger.info("--- [1/2] Cross-Modal SAR Encoder (S1 -> S2 Optical) ---")
+                m_s1 = evaluate_payload_embeddings(
+                    db["s1_embeds"][q_idx].astype(np.float32),
+                    db["s2_embeds"][g_idx].astype(np.float32),
+                    labels[q_idx],
+                    labels[g_idx],
+                    k_list=[5, 10]
+                )
+                logger.info(f"--- [1/2] Cross-Modal SAR Encoder (S1 -> S2 Optical) [{eval_split.upper()} SPLIT] ---")
                 logger.info(f"  mAP@5   : {m_s1['map@5']:.4f}  |  mAP@10  : {m_s1['map@10']:.4f}")
                 logger.info(f"  F1@5    : {m_s1['f1@5']:.4f}  |  F1@10   : {m_s1['f1@10']:.4f}")
                 logger.info(f"  PREC@5  : {m_s1['precision@5']:.4f}  |  PREC@10 : {m_s1['precision@10']:.4f}")
@@ -143,8 +177,17 @@ def main() -> None:
 
             # 2. Same-Modal Optical Ceiling (s2_embeds -> s2_embeds)
             if "s2_embeds" in db:
-                m_s2 = evaluate_payload_embeddings(db["s2_embeds"].astype(np.float32), db["s2_embeds"].astype(np.float32), labels, labels, k_list=[5, 10], is_same_modal=True, q_names=names)
-                logger.info("--- [2/2] Same-Modal Optical Ceiling (S2 -> S2 Optical) ---")
+                m_s2 = evaluate_payload_embeddings(
+                    db["s2_embeds"][q_idx].astype(np.float32),
+                    db["s2_embeds"][g_idx].astype(np.float32),
+                    labels[q_idx],
+                    labels[g_idx],
+                    k_list=[5, 10],
+                    is_same_modal=is_same,
+                    q_names=names[q_idx],
+                    g_names=names[g_idx]
+                )
+                logger.info(f"--- [2/2] Same-Modal Optical Ceiling (S2 -> S2 Optical) [{eval_split.upper()} SPLIT] ---")
                 logger.info(f"  mAP@5   : {m_s2['map@5']:.4f}  |  mAP@10  : {m_s2['map@10']:.4f}")
                 logger.info(f"  F1@5    : {m_s2['f1@5']:.4f}  |  F1@10   : {m_s2['f1@10']:.4f}")
                 logger.info(f"  PREC@5  : {m_s2['precision@5']:.4f}  |  PREC@10 : {m_s2['precision@10']:.4f}")
