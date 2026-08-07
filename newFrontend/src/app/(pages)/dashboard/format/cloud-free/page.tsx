@@ -26,10 +26,10 @@ const DEMO_PRESET = {
   s2Id: 'S2A_MSIL2A_20170803T094031_26_19',
   s1Id: 'S1A_IW_GRDH_1SDV_20170802T163350_34TCR_26_19',
   title: 'BEN-14K Dataset Scene (S2A_MSIL2A_20170803T094031_26_19)',
-  cloudCover: '99% Dense Storm Cloud Cover',
+  cloudCover: '92% Cloud Patch Overlay',
   cloudyOptImg: '/images/satellite/ben14k_optical_cloud_patched.png',
   sarImg: '/images/satellite/ben14k_real_sar.png',
-  originalOptImg: '/images/satellite/real_ben14k_opt_1.png',
+  originalOptImg: '/images/satellite/ben14k_real_optical.png',
   retrievedCandidates: [
     {
       rank: 1,
@@ -146,7 +146,7 @@ export default function CloudFreeDemoPage() {
               <Badge variant="outline" className="border-rose-500/40 text-rose-400 bg-rose-500/10 text-[10px] font-bold">
                 STAGE 1 · RAW S2 + CLOUD PATCH
               </Badge>
-              <span className="text-[10px] font-mono text-rose-400 font-bold">99% Cloud Obscuration</span>
+              <span className="text-[10px] font-mono text-rose-400 font-bold">92% Cloud Obscuration</span>
             </div>
 
             <div className="space-y-1">
