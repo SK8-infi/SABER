@@ -174,8 +174,9 @@ export default function EmbeddingSpaceGraph({ maxSamples = 1000 }: EmbeddingSpac
   }, [fetchData])
 
   // Active points based on modality
-  const getPointCoords = useCallback((p: EmbeddingPoint, mod: 's2' | 's1') => {
+  const getPointCoords = useCallback((p: EmbeddingPoint, mod: 's2' | 's1' | 'bridged') => {
     if (mod === 's1') return { x: p.s1_x, y: p.s1_y }
+    if (mod === 'bridged') return { x: p.bridged_x, y: p.bridged_y }
     return { x: p.s2_x, y: p.s2_y }
   }, [])
 
@@ -1014,10 +1015,7 @@ export default function EmbeddingSpaceGraph({ maxSamples = 1000 }: EmbeddingSpac
         onClose={() => setInspectorCandidate(null)}
         query={dualResults ? {
           name: dualResults.queryPoint.name,
-          index: dualResults.queryPoint.id,
           source_modality: modality,
-          target_modality: modality === 's1' ? 's2' : 's1',
-          label_indices: [dualResults.queryPoint.class_index],
           active_classes: [dualResults.queryPoint.dominant_class],
           thumbnail: dualResults.queryPoint.thumbnail || '',
         } : null}
