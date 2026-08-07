@@ -4,6 +4,7 @@ import { ReactNode } from "react";
 import { siteConfig } from "@/config/site";
 import { cn } from "@/lib/utils";
 
+import DashboardMockup from "@/components/shared/DashboardMockup";
 import Github from "../../logos/github";
 import { Badge } from "../../ui/badge";
 import Glow from "../../ui/glow";
@@ -48,15 +49,7 @@ const DEFAULT_HERO_BADGE = (
 );
 
 const DEFAULT_HERO_MOCKUP = (
-  <Screenshot
-    srcLight="/dashboard-light.png"
-    srcDark="/dashboard-dark.png"
-    alt="Launch UI app screenshot"
-    width={1248}
-    height={765}
-    loading="eager"
-    className="w-full"
-  />
+  <DashboardMockup />
 );
 
 export default function Hero({
