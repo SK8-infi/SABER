@@ -37,7 +37,7 @@ const DEMO_PRESET = {
       sim: 96.4,
       jaccard: 88.0,
       cloudCover: '0% (Original Restored)',
-      img: '/images/satellite/ben14k_real_optical.png',
+      img: '/images/satellite/real_ben14k_opt_1.png',
       tags: ['Arable land', 'Urban fabric', 'Cropland'],
     },
     {
@@ -46,7 +46,7 @@ const DEMO_PRESET = {
       sim: 94.1,
       jaccard: 85.2,
       cloudCover: '0%',
-      img: '/images/satellite/candidate_2.png',
+      img: '/images/satellite/real_ben14k_opt_2.png',
       tags: ['Arable land', 'Water body'],
     },
     {
@@ -55,7 +55,7 @@ const DEMO_PRESET = {
       sim: 92.8,
       jaccard: 81.4,
       cloudCover: '0.2%',
-      img: '/images/satellite/candidate_3.png',
+      img: '/images/satellite/real_ben14k_opt_3.png',
       tags: ['Pastures', 'Forest'],
     },
     {
@@ -64,7 +64,7 @@ const DEMO_PRESET = {
       sim: 89.5,
       jaccard: 78.6,
       cloudCover: '0%',
-      img: '/images/satellite/candidate_4.png',
+      img: '/images/satellite/real_ben14k_opt_4.png',
       tags: ['Coastal wetland'],
     },
     {
@@ -73,7 +73,7 @@ const DEMO_PRESET = {
       sim: 87.2,
       jaccard: 75.0,
       cloudCover: '0.5%',
-      img: '/images/satellite/candidate_5.png',
+      img: '/images/satellite/real_ben14k_opt_5.png',
       tags: ['Industrial zone'],
     },
   ],
