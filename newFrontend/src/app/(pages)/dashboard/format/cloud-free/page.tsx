@@ -22,25 +22,27 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 
 const DEMO_PRESET = {
-  id: 'ben14k_hardcoded',
-  title: 'BEN-14K Sentinel-1/2 Paired Scene (ROIs18_Nov2023_01)',
+  id: 'ben14k_real_dataset',
+  s2Id: 'S2A_MSIL2A_20170803T094031_26_19',
+  s1Id: 'S1A_IW_GRDH_1SDV_20170802T163350_34TCR_26_19',
+  title: 'BEN-14K Dataset Scene (S2A_MSIL2A_20170803T094031_26_19)',
   cloudCover: '92% Cloud Patch Overlay',
-  cloudyOptImg: '/images/satellite/dataset_optical_cloud_patched.png',
-  sarImg: '/images/satellite/dataset_sar_query.png',
-  originalOptImg: '/images/satellite/dataset_optical_original.png',
+  cloudyOptImg: '/images/satellite/ben14k_optical_cloud_patched.png',
+  sarImg: '/images/satellite/ben14k_real_sar.png',
+  originalOptImg: '/images/satellite/ben14k_real_optical.png',
   retrievedCandidates: [
     {
       rank: 1,
-      name: 'ROIs18_Nov2023_01_original.png',
+      name: 'S2A_MSIL2A_20170803T094031_26_19_original.png',
       sim: 96.4,
       jaccard: 88.0,
       cloudCover: '0% (Original Restored)',
-      img: '/images/satellite/dataset_optical_original.png',
+      img: '/images/satellite/ben14k_real_optical.png',
       tags: ['Arable land', 'Urban fabric', 'Cropland'],
     },
     {
       rank: 2,
-      name: 'ROIs18_Nov2023_02.png',
+      name: 'S2A_MSIL2A_20170803T094031_26_20.png',
       sim: 94.1,
       jaccard: 85.2,
       cloudCover: '0%',
@@ -49,7 +51,7 @@ const DEMO_PRESET = {
     },
     {
       rank: 3,
-      name: 'ROIs18_Nov2023_03.png',
+      name: 'S2A_MSIL2A_20170803T094031_27_16.png',
       sim: 92.8,
       jaccard: 81.4,
       cloudCover: '0.2%',
@@ -58,7 +60,7 @@ const DEMO_PRESET = {
     },
     {
       rank: 4,
-      name: 'ROIs18_Nov2023_04.png',
+      name: 'S2A_MSIL2A_20170803T094031_27_17.png',
       sim: 89.5,
       jaccard: 78.6,
       cloudCover: '0%',
@@ -67,7 +69,7 @@ const DEMO_PRESET = {
     },
     {
       rank: 5,
-      name: 'ROIs18_Nov2023_05.png',
+      name: 'S2A_MSIL2A_20170803T094031_27_18.png',
       sim: 87.2,
       jaccard: 75.0,
       cloudCover: '0.5%',
@@ -98,14 +100,14 @@ export default function CloudFreeDemoPage() {
             <div className="space-y-1.5">
               <div className="flex items-center gap-2.5 flex-wrap">
                 <h1 className="text-xl font-bold tracking-tight text-foreground font-sans">
-                  Cloud-Free Satellite Image Retrieval Demonstration
+                  BEN-14K Cloud-Free Image Retrieval Demonstration
                 </h1>
                 <Badge className="bg-[#FBBA72]/15 text-[#FBBA72] border-[#FBBA72]/40 font-semibold px-2.5 py-0.5 text-xs rounded-full font-sans">
                   SAR Microwave Cloud-Bypass Engine
                 </Badge>
               </div>
               <p className="text-xs text-muted-foreground font-sans max-w-2xl">
-                Demonstration using a hardcoded optical image from our BEN-14K dataset overlaid with a Gemini cloud patch. When querying its corresponding Sentinel-1 SAR Radar image, SABER bypasses the cloud obscuration via the CFM Latent ODE Bridge and retrieves the original 0%-cloud-cover optical dataset image at Rank #1.
+                Demonstration using raw images extracted directly from <code className="font-mono text-[#FBBA72]">Datasets/benv1_14k/</code> in this workspace. The optical scene (<code className="font-mono text-muted-foreground">{DEMO_PRESET.s2Id}</code>) is overlaid with a Gemini cloud patch. Querying its paired SAR scene (<code className="font-mono text-muted-foreground">{DEMO_PRESET.s1Id}</code>) via SABER&apos;s CFM Latent ODE Bridge retrieves the original 0%-cloud-cover BEN-14K optical dataset scene at Rank #1.
               </p>
             </div>
 
@@ -124,9 +126,9 @@ export default function CloudFreeDemoPage() {
 
           {/* Active Dataset Scene Info */}
           <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-border/40 text-xs font-sans">
-            <span className="text-muted-foreground font-mono">Dataset Scene:</span>
+            <span className="text-muted-foreground font-mono">Workspace Dataset Path:</span>
             <Badge variant="outline" className="border-border/60 bg-muted/20 text-foreground font-mono text-xs">
-              {DEMO_PRESET.title}
+              Datasets/benv1_14k/s2/{DEMO_PRESET.s2Id}
             </Badge>
             <Badge variant="outline" className="border-rose-500/40 text-rose-400 bg-rose-500/10 font-mono text-xs">
               {DEMO_PRESET.cloudCover}
@@ -142,20 +144,20 @@ export default function CloudFreeDemoPage() {
           <CardContent className="p-4 space-y-3">
             <div className="flex items-center justify-between">
               <Badge variant="outline" className="border-rose-500/40 text-rose-400 bg-rose-500/10 text-[10px] font-bold">
-                STAGE 1 · CLOUD-PATCHED OPTICAL
+                STAGE 1 · RAW S2 + CLOUD PATCH
               </Badge>
               <span className="text-[10px] font-mono text-rose-400 font-bold">92% Cloud Obscuration</span>
             </div>
 
             <div className="space-y-1">
-              <h3 className="text-sm font-bold text-foreground">Optical Scene + Gemini Cloud Patch</h3>
-              <p className="text-[11px] text-muted-foreground">Sentinel-2 Optical image with Gemini cloud overlay</p>
+              <h3 className="text-sm font-bold text-foreground">BEN-14K S2 + Gemini Cloud Patch</h3>
+              <p className="text-[11px] text-muted-foreground font-mono truncate">{DEMO_PRESET.s2Id}</p>
             </div>
 
             <div className="relative aspect-square rounded-xl overflow-hidden border border-rose-500/30 bg-zinc-950 group">
               <img
                 src={DEMO_PRESET.cloudyOptImg}
-                alt="Dataset Optical Scene with Gemini Cloud Patch"
+                alt="BEN-14K S2 Optical Scene with Gemini Cloud Patch"
                 className="w-full h-full object-cover"
               />
               <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
@@ -166,7 +168,7 @@ export default function CloudFreeDemoPage() {
             </div>
 
             <p className="text-[11px] text-muted-foreground leading-relaxed pt-1">
-              Optical image from our dataset obscured by cloud patch generated via Gemini. Direct optical search fails due to cloud pixel corruption.
+              Raw BEN-14K Sentinel-2 optical bands (B04, B03, B02) converted to RGB and obscured by Gemini cloud patch.
             </p>
           </CardContent>
         </Card>
@@ -176,21 +178,21 @@ export default function CloudFreeDemoPage() {
           <CardContent className="p-4 space-y-3">
             <div className="flex items-center justify-between">
               <Badge variant="outline" className="border-sky-500/40 text-sky-400 bg-sky-500/10 text-[10px] font-bold">
-                STAGE 2 · CORRESPONDING SAR QUERY
+                STAGE 2 · PAIRED S1 SAR QUERY
               </Badge>
               <span className="text-[10px] font-mono text-sky-400 font-bold">100% Cloud Bypass</span>
             </div>
 
             <div className="space-y-1">
-              <h3 className="text-sm font-bold text-foreground">Corresponding Sentinel-1 SAR Scene</h3>
-              <p className="text-[11px] text-muted-foreground">Microwave radar image of the exact same coordinate</p>
+              <h3 className="text-sm font-bold text-foreground">Paired BEN-14K S1 SAR Radar</h3>
+              <p className="text-[11px] text-muted-foreground font-mono truncate">{DEMO_PRESET.s1Id}</p>
             </div>
 
             <div className="relative aspect-square rounded-xl overflow-hidden border border-sky-500/30 bg-zinc-950 group">
               <img
                 src={DEMO_PRESET.sarImg}
-                alt="Corresponding Sentinel-1 SAR Radar Scene"
-                className="w-full h-full object-cover grayscale contrast-125 brightness-90"
+                alt="Paired BEN-14K S1 SAR Radar Scene"
+                className="w-full h-full object-cover"
               />
               <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
               <div className="absolute bottom-2 left-2 right-2 p-2 rounded-lg bg-black/80 backdrop-blur-md border border-sky-500/40 flex items-center justify-between text-[10px]">
@@ -200,7 +202,7 @@ export default function CloudFreeDemoPage() {
             </div>
 
             <p className="text-[11px] text-muted-foreground leading-relaxed pt-1">
-              Sentinel-1 SAR microwave radar pulses pass straight through cloud cover, capturing the exact ground texture and land-cover geometry.
+              Raw paired BEN-14K Sentinel-1 SAR radar VV/VH microwave backscatter bands converted to 3-channel composite.
             </p>
           </CardContent>
         </Card>
@@ -272,7 +274,7 @@ export default function CloudFreeDemoPage() {
                 Retrieved Top-5 Cloud-Free Optical Scenes from BEN-14K Dataset
               </h2>
               <Badge className="bg-emerald-500/10 text-emerald-400 border-emerald-500/30 text-xs font-semibold">
-                Original Cloud-Free Optical Scene Restored at #1
+                Raw BEN-14K Cloud-Free Optical Scene Restored at #1
               </Badge>
             </div>
             <span className="text-xs font-mono text-muted-foreground">
