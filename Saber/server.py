@@ -251,104 +251,6 @@ def _load_faiss_slot(key: tuple, index_path: str, metadata_path: str, dim: int):
     )
 
 
-class ISROEncoder(nn.Module):
-    def __init__(self, in_chans: int):
-        super().__init__()
-        import timm
-        self.backbone = timm.create_model('pvt_v2_b2', in_chans=in_chans, num_classes=0)
-        self.projection = nn.Sequential(
-            nn.Linear(512, 768),
-            nn.LayerNorm(768),
-            nn.GELU(),
-            nn.Dropout(0.1),
-            nn.Linear(768, 768),
-            nn.LayerNorm(768)
-        )
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        feats = self.backbone(x)
-        z = self.projection(feats)
-        return z / torch.norm(z, p=2, dim=1, keepdim=True)
-
-
-@app.on_event("startup")
-def startup_event():
-    """Initialize SABER pipeline, datasets, checkpoints, and FAISS indexes on server start."""
-    print("=========================================================")
-    print("   SABER SCIENTIFIC DEMONSTRATION PLATFORM BACKEND API    ")
-    print("   ISRO BAH 2026 Grand Finale · Problem Statement 11      ")
-    print("=========================================================")
-
-    config_path = "Saber/configs/config.yaml"
-    state.config = load_config(config_path)
-    state.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    print(f"[Init] Computation Device: {state.device}")
-
-    state.eval_transform = get_transforms(image_size=state.config.dataset.image_size, is_train=False)
-    dim = state.config.model.projection_head.out_dim
-
-    # ── Zero-GPU Pre-Computed Embedding Database (saber_search_db.pth) ──────
-    state.search_db = None
-    for db_path in ["saber_search_db.pth", "saber_search_db (1).pth", "Saber/saber_search_db.pth"]:
-        if os.path.exists(db_path):
-            try:
-                state.search_db = torch.load(db_path, map_location="cpu", weights_only=False)
-                num_s = state.search_db.get("num_samples", len(state.search_db.get("names", [])))
-                print(f"[Init] Loaded Pre-Computed SABER Database from '{db_path}' ({num_s} samples) -- Zero-GPU Search Active!")
-                break
-            except Exception as e:
-                print(f"[Init] Database load warning ({db_path}): {e}")
-
-    # ── BEN-14K Dataset ──────────────────────────────────────
-    ben14k_path = getattr(state.config.dataset, "data_dir", None) or "datasets/benv1_14k"
-    state.ben14k_dataset = BEN14KDataset(
-        data_dir=ben14k_path,
-        use_synthetic=False,
-        image_size=state.config.dataset.image_size,
-        transform=state.eval_transform,
-        modality="both",
-        is_train=False,
-        split="all",
-    )
-    print(f"[Init] BEN-14K Dataset: {len(state.ben14k_dataset)} samples from {ben14k_path}")
-
-    # Build BEN-14K name→index lookup from the CSV dataframe (zero disk I/O — no .npy loading)
-    state.ben14k_name_to_idx = {}
-    if hasattr(state.ben14k_dataset, "df") and state.ben14k_dataset.df is not None:
-        for i, row in state.ben14k_dataset.df.iterrows():
-            s2_id = row["S2_ID"]
-            paired_name = f"{s2_id}_paired.png"
-            state.ben14k_name_to_idx[paired_name] = i
-            state.ben14k_name_to_idx[f"{s2_id}.png"] = i
-            state.ben14k_name_to_idx[f"{row['S1_ID']}.png"] = i
-        print(f"[Init] BEN-14K name map built: {len(state.ben14k_name_to_idx)} entries (CSV fast path)")
-
-    # ── DSRSID Dataset ────────────────────────────────────────
-    dsrsid_path = getattr(state.config.dataset, "dsrsid_path", None) or "datasets/DSRSID.mat"
-    try:
-        state.dsrsid_dataset = DSRSIDDataset(
-            data_dir=dsrsid_path,
-            use_synthetic=False,
-            size=10000,
-            image_size=state.config.dataset.image_size,
-            transform=state.eval_transform,
-            modality="both",
-            is_train=False,
-            split="all",
-        )
-        print(f"[Init] DSRSID Dataset: {len(state.dsrsid_dataset)} samples")
-    except Exception as e:
-        state.dsrsid_dataset = None
-        print(f"[Init] DSRSID Dataset load warning: {e}")
-
-    # Build DSRSID name→index lookup
-    state.dsrsid_name_to_idx = {}
-    if state.dsrsid_dataset is not None:
-        for i in range(min(len(state.dsrsid_dataset), 11865)):
-            name_pan = f"DSRSID_pan_{i}.png"
-            name_ms  = f"DSRSID_ms_{i}.png"
-            state.dsrsid_name_to_idx[name_pan] = i
-            state.dsrsid_name_to_idx[name_ms]  = i
-
     # ── Load all FAISS slots ──────────────────────────────────
     _load_faiss_slot(("ben14k", "s2"),
         "checkpoints/ben14k/faiss_index.bin",
@@ -367,35 +269,10 @@ def startup_event():
         "checkpoints/crossmodal/faiss_index.bin",
         "checkpoints/crossmodal/faiss_index_metadata.pth", dim)
 
-    # ISRO Official Best Model slot
-    _load_faiss_slot(("ben14k", "isro"),
-        "checkpoints/isro_ben14k/faiss_index.bin",
-        "checkpoints/isro_ben14k/faiss_index_metadata.pth", dim)
-
     # Legacy aliases for old code paths
     state.faiss_index = state.indexes.get(("ben14k", "s2"))
     state.metadata    = state.metadatas.get(("ben14k", "s2"))
     state.retriever   = state.retrievers.get(("ben14k", "s2"))
-
-    # ── Load ISRO Official Best Model ────────────────────────
-    isro_ckpt_path = "checkpoints/best_ben14k_isro_retrieval.pt"
-    if os.path.exists(isro_ckpt_path):
-        try:
-            ckpt_isro = torch.load(isro_ckpt_path, map_location="cpu", weights_only=False)
-            sd_isro = ckpt_isro["model"]
-            
-            state.isro_s1_model = ISROEncoder(6).to(state.device)
-            s1_sd = {k.replace("s1_encoder.", ""): v for k, v in sd_isro.items() if k.startswith("s1_encoder.")}
-            state.isro_s1_model.load_state_dict(s1_sd, strict=True)
-            state.isro_s1_model.eval()
-
-            state.isro_s2_model = ISROEncoder(16).to(state.device)
-            s2_sd = {k.replace("s2_encoder.", ""): v for k, v in sd_isro.items() if k.startswith("s2_encoder.")}
-            state.isro_s2_model.load_state_dict(s2_sd, strict=True)
-            state.isro_s2_model.eval()
-            print(f"[Init] ISRO Official Best Model loaded successfully from '{isro_ckpt_path}'")
-        except Exception as e:
-            print(f"[Init] Failed to load ISRO Model: {e}")
 
     # ── SABER Model ───────────────────────────────────────────
     state.saber_model = SABER(config=state.config, in_channels=14).to(state.device)
@@ -810,25 +687,14 @@ def execute_query(req: QueryRequest):
             query_uncertainty = 0.0
             query_emb = state.saber_model.retrieval_head(z).float().cpu().numpy()[0]
 
-    # Choose the right FAISS slot based on model + dataset + target modality
+    # Choose the right FAISS slot based on dataset + target modality
     tgt = req.target_modality.lower()
     ds_key = req.dataset_name.lower()
-    if req.model_name and req.model_name.lower() == "isro_official":
-        isro_retriever = state.retrievers.get(("ben14k", "isro"))
-        if isro_retriever and hasattr(isro_retriever.index, "vectors") and isro_retriever.index.vectors is not None:
-            retriever = isro_retriever
-        else:
-            retriever = (
-                state.retrievers.get((ds_key, tgt))
-                or state.retrievers.get((ds_key, "s2"))
-                or state.retriever
-            )
-    else:
-        retriever = (
-            state.retrievers.get((ds_key, tgt))
-            or state.retrievers.get((ds_key, "ms" if ds_key == "dsrsid" else "s2"))
-            or state.retriever
-        )
+    retriever = (
+        state.retrievers.get((ds_key, tgt))
+        or state.retrievers.get((ds_key, "ms" if ds_key == "dsrsid" else "s2"))
+        or state.retriever
+    )
 
     retriever.rerank_enabled = req.enable_rerank
     if req.enable_rerank and getattr(retriever, "reranker", None) is None:

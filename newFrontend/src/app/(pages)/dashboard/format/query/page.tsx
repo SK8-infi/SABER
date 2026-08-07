@@ -10,6 +10,8 @@ import {
   CheckCircle2Icon,
   RotateCw,
   AlertCircle,
+  LayersIcon,
+  ImageIcon,
 } from 'lucide-react'
 
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
@@ -248,15 +250,12 @@ export default function QueryPage() {
   const { params, setTelemetry } = useRetrievalParams()
   const { dataset, srcMod, qIdx, topK, bridge, rerank, odeSteps } = params
 
-  // Auto-derive same-modal and cross-modal targets
   const isBen = dataset === 'ben14k'
-  const sameTarget = srcMod  // same sensor
   const crossTarget = isBen
     ? (srcMod === 's1' ? 's2' : 's1')
     : (srcMod === 'pan' ? 'ms' : 'pan')
 
-  // Human-readable modality labels
-  const modLabel = (mod: string) => {
+  const getModalityLabel = (mod: string) => {
     const labels: Record<string, string> = {
       s1: 'Sentinel-1 SAR', s2: 'Sentinel-2 MS',
       pan: 'Gaofen-1 PAN', ms: 'Gaofen-1 MS',
@@ -264,27 +263,19 @@ export default function QueryPage() {
     return labels[mod] ?? mod.toUpperCase()
   }
 
-  // 4 result slots: saber-same, saber-cross, isro-same, isro-cross
+  // 2 result slots: saber-same, saber-cross
   const [saberSameResult,  setSaberSameResult]  = useState<QueryResult | null>(null)
   const [saberCrossResult, setSaberCrossResult] = useState<QueryResult | null>(null)
-  const [isroSameResult,   setIsroSameResult]   = useState<QueryResult | null>(null)
-  const [isroCrossResult,  setIsroCrossResult]  = useState<QueryResult | null>(null)
 
   const [saberSameLoading,  setSaberSameLoading]  = useState(false)
   const [saberCrossLoading, setSaberCrossLoading] = useState(false)
-  const [isroSameLoading,   setIsroSameLoading]   = useState(false)
-  const [isroCrossLoading,  setIsroCrossLoading]  = useState(false)
 
   const [saberSameError,  setSaberSameError]  = useState<string | null>(null)
   const [saberCrossError, setSaberCrossError] = useState<string | null>(null)
-  const [isroSameError,   setIsroSameError]   = useState<string | null>(null)
-  const [isroCrossError,  setIsroCrossError]  = useState<string | null>(null)
 
   const runQuery = useCallback(async () => {
     setSaberSameLoading(true);  setSaberCrossLoading(true)
-    setIsroSameLoading(true);   setIsroCrossLoading(true)
     setSaberSameError(null);    setSaberCrossError(null)
-    setIsroSameError(null);     setIsroCrossError(null)
 
     const makeBody = (tgt: string, useBridge: boolean, useRerank: boolean) => ({
       dataset_name:    dataset,
@@ -304,12 +295,10 @@ export default function QueryPage() {
         body: JSON.stringify(body),
       })
 
-    // Fire all 4 in parallel
-    const [saberSameRes, saberCrossRes, isroSameRes, isroCrossRes] = await Promise.allSettled([
-      doFetch(makeBody(sameTarget,  false, false)),       // SABER same-modal (no bridge for same)
-      doFetch(makeBody(crossTarget, bridge, rerank)),     // SABER cross-modal (bridge ON)
-      doFetch(makeBody(sameTarget,  false, false)),       // ISRO same-modal baseline
-      doFetch(makeBody(crossTarget, false, false)),       // ISRO cross-modal baseline
+    // Fire SABER Same and SABER Cross in parallel
+    const [saberSameRes, saberCrossRes] = await Promise.allSettled([
+      doFetch(makeBody(srcMod,  false, false)),       // SABER same-modal
+      doFetch(makeBody(crossTarget, bridge, rerank)),     // SABER cross-modal
     ])
 
     // Process results
@@ -339,16 +328,14 @@ export default function QueryPage() {
     await Promise.all([
       processResult(saberSameRes,  setSaberSameResult,  setSaberSameError,  setSaberSameLoading,  'SABER Same'),
       processResult(saberCrossRes, setSaberCrossResult, setSaberCrossError, setSaberCrossLoading, 'SABER Cross'),
-      processResult(isroSameRes,   setIsroSameResult,   setIsroSameError,   setIsroSameLoading,   'ISRO Same'),
-      processResult(isroCrossRes,  setIsroCrossResult,  setIsroCrossError,  setIsroCrossLoading,  'ISRO Cross'),
     ])
-  }, [dataset, qIdx, srcMod, sameTarget, crossTarget, topK, bridge, rerank, odeSteps, setTelemetry])
+  }, [dataset, qIdx, srcMod, crossTarget, topK, bridge, rerank, odeSteps, setTelemetry])
 
   useEffect(() => { runQuery() }, [runQuery])
 
   // Use any available result for the query info card
-  const queryInfo = saberSameResult?.query ?? saberCrossResult?.query ?? isroSameResult?.query
-  const topLoading = saberSameLoading && saberCrossLoading && isroSameLoading && isroCrossLoading
+  const queryInfo = saberSameResult?.query ?? saberCrossResult?.query
+  const topLoading = saberSameLoading && saberCrossLoading
 
   const [inspectorCandidate, setInspectorCandidate] = useState<Candidate | null>(null)
 
@@ -358,75 +345,44 @@ export default function QueryPage() {
       {/* ── Top query image card ── */}
       <Card className='border-border/60 shadow-sm overflow-hidden'>
         <CardContent className='p-3'>
-          <div className='flex flex-col sm:flex-row gap-3'>
+          {/* Query Scene Details */}
+          <div className='flex flex-wrap items-center justify-between gap-3 text-sm font-sans border-b border-border/40 pb-3 mb-3'>
+            <div className='flex items-center gap-2 font-mono font-semibold text-foreground text-xs'>
+              <LayersIcon className='size-4 text-[#FBBA72]' />
+              <span>{queryInfo?.name || `sample_${qIdx}`}</span>
+            </div>
+            <div className='flex items-center gap-2'>
+              <Badge variant='outline' className='border-sky-500/40 text-sky-400 bg-sky-500/10 text-xs font-mono font-semibold'>
+                Source: {getModalityLabel(srcMod)}
+              </Badge>
+              <Badge variant='outline' className='border-emerald-500/40 text-emerald-400 bg-emerald-500/10 text-xs font-mono font-semibold'>
+                Target: {getModalityLabel(crossTarget)}
+              </Badge>
+            </div>
+          </div>
 
-            {/* Image panel */}
-            <div className='relative w-full sm:w-48 aspect-square sm:shrink-0 bg-muted/20 overflow-hidden self-center rounded-xl'>
-              {topLoading ? (
-                <div className='w-full h-full bg-muted/30 animate-pulse' />
-              ) : queryInfo?.thumbnail ? (
+          <div className='grid grid-cols-1 md:grid-cols-4 gap-4 items-center'>
+            <div className='relative w-full h-28 rounded-xl border border-border/50 bg-muted/20 overflow-hidden'>
+              {queryInfo?.thumbnail ? (
                 <img src={queryInfo.thumbnail} alt={queryInfo.name} className='w-full h-full object-cover' />
               ) : (
-                <div className='w-full h-full bg-muted/20 flex items-center justify-center'>
-                  <SearchIcon className='size-8 text-muted-foreground/30' />
+                <div className='w-full h-full flex items-center justify-center text-muted-foreground/30'>
+                  <ImageIcon className='size-6' />
                 </div>
               )}
-              <span className='absolute top-3 left-3 bg-black/75 backdrop-blur-sm text-white text-[10px] font-semibold px-2 py-0.5 rounded-full font-sans tracking-wider border border-white/10'>
-                {queryInfo?.source_modality?.toUpperCase() ?? srcMod.toUpperCase()}
-              </span>
             </div>
-
-            {/* Info panel */}
-            <div className='flex flex-col justify-between gap-4 p-5 flex-1 min-w-0'>
-
-              {/* Filename + class badges */}
-              <div className='flex flex-col gap-2'>
-                <div className='flex items-start justify-between gap-2 flex-wrap'>
-                  <h3 className='text-sm font-bold text-foreground font-sans tracking-tight leading-tight'>
-                    {topLoading
-                      ? <span className='inline-block w-48 h-4 rounded bg-muted/40 animate-pulse' />
-                      : (queryInfo?.name ?? `Scene #${qIdx}`)}
-                  </h3>
-                  {queryInfo && (
-                    <div className='flex flex-wrap gap-1'>
-                      {queryInfo.active_classes.slice(0, 2).map((cl, i) => (
-                        <Badge
-                          key={i}
-                          variant='outline'
-                          className='border-[#FBBA72]/40 text-[#FBBA72] bg-[#FBBA72]/10 text-xs font-semibold px-3 py-1 rounded-full font-sans shrink-0'
-                        >
-                          {cl}
-                        </Badge>
-                      ))}
-                    </div>
-                  )}
-                </div>
-                <p className='text-[11px] text-muted-foreground font-sans'>Query image for dual-modal retrieval</p>
+            <div className='md:col-span-3 space-y-2 font-sans'>
+              <div className='flex flex-wrap items-center gap-2 text-xs'>
+                <span className='text-muted-foreground font-medium'>Active Land Cover Classes:</span>
+                {queryInfo?.active_classes?.map((cls, idx) => (
+                  <Badge key={idx} variant='secondary' className='text-[10px] px-2 py-0.5 bg-muted/60 text-foreground border border-border/40'>
+                    {cls}
+                  </Badge>
+                )) ?? <span className='text-muted-foreground italic text-xs'>Loading taxonomy...</span>}
               </div>
-
-              {/* Divider */}
-              <div className='h-px bg-border/40 w-full' />
-
-              {/* Meta grid */}
-              <div className='grid grid-cols-3 gap-3'>
-                <div className='flex flex-col gap-0.5'>
-                  <span className='text-[9px] font-semibold uppercase tracking-widest text-muted-foreground font-sans'>Same-Modal</span>
-                  <span className='text-sm font-bold text-foreground font-sans'>
-                    {modLabel(sameTarget)}
-                  </span>
-                </div>
-                <div className='flex flex-col gap-0.5'>
-                  <span className='text-[9px] font-semibold uppercase tracking-widest text-muted-foreground font-sans'>Cross-Modal</span>
-                  <span className='text-sm font-bold text-[#FBBA72] font-sans'>
-                    {modLabel(crossTarget)}
-                  </span>
-                </div>
-                <div className='flex flex-col gap-0.5'>
-                  <span className='text-[9px] font-semibold uppercase tracking-widest text-muted-foreground font-sans'>Retrieve</span>
-                  <span className='text-sm font-bold text-foreground font-sans'>Top-{topK}</span>
-                </div>
-              </div>
-
+              <p className='text-xs text-muted-foreground leading-relaxed'>
+                Multi-sensor query execution using SABER continuous flow matching (CFM) bridge translation and cosine similarity FAISS retrieval.
+              </p>
             </div>
           </div>
         </CardContent>
@@ -437,7 +393,7 @@ export default function QueryPage() {
         <h2 className='text-lg font-bold font-sans text-foreground flex items-center gap-2'>
           <span>Same-Modal Retrieval</span>
           <span className='text-xs font-medium text-muted-foreground bg-muted/50 border border-border/50 px-2.5 py-0.5 rounded-full'>
-            {srcMod.toUpperCase()} → {sameTarget.toUpperCase()}
+            {srcMod.toUpperCase()} → {srcMod.toUpperCase()}
           </span>
         </h2>
         <p className='text-xs text-muted-foreground font-sans'>Retrieving within the same sensor — no bridge translation needed</p>
@@ -450,19 +406,6 @@ export default function QueryPage() {
         result={saberSameResult}
         loading={saberSameLoading}
         error={saberSameError}
-        onRetry={runQuery}
-        topK={topK}
-        onInspectCandidate={c => setInspectorCandidate(c)}
-      />
-
-      <ModelSection
-        label='ISRO Baseline'
-        modelName='ISRO Best Model — Same Sensor'
-        logo='/images/brands/isro-logo.png'
-        logoBg='bg-black'
-        result={isroSameResult}
-        loading={isroSameLoading}
-        error={isroSameError}
         onRetry={runQuery}
         topK={topK}
         onInspectCandidate={c => setInspectorCandidate(c)}
@@ -486,19 +429,6 @@ export default function QueryPage() {
         result={saberCrossResult}
         loading={saberCrossLoading}
         error={saberCrossError}
-        onRetry={runQuery}
-        topK={topK}
-        onInspectCandidate={c => setInspectorCandidate(c)}
-      />
-
-      <ModelSection
-        label='ISRO Baseline'
-        modelName='ISRO Best Model — No Bridge'
-        logo='/images/brands/isro-logo.png'
-        logoBg='bg-black'
-        result={isroCrossResult}
-        loading={isroCrossLoading}
-        error={isroCrossError}
         onRetry={runQuery}
         topK={topK}
         onInspectCandidate={c => setInspectorCandidate(c)}
