@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState } from 'react'
+import React from 'react'
 import {
   Activity,
   Layers,
@@ -20,89 +20,6 @@ import {
 import LogoSvg from '@/assets/svg/logo'
 import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
-
-function SyntheticSAR() {
-  return (
-    <svg viewBox="0 0 120 120" className="w-full h-full bg-zinc-950">
-      <defs>
-        <linearGradient id="sarGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" stopColor="#0f172a" />
-          <stop offset="50%" stopColor="#1e293b" />
-          <stop offset="100%" stopColor="#090d16" />
-        </linearGradient>
-      </defs>
-      <rect width="120" height="120" fill="url(#sarGrad)" />
-      {Array.from({ length: 24 }).map((_, i) => (
-        <line
-          key={i}
-          x1={0}
-          y1={i * 5}
-          x2={120}
-          y2={i * 5 + Math.sin(i) * 4}
-          stroke={`rgba(56, 189, 248, ${0.15 + (i % 3) * 0.1})`}
-          strokeWidth={1}
-        />
-      ))}
-      {Array.from({ length: 6 }).map((_, i) => (
-        <rect
-          key={`b${i}`}
-          x={15 + i * 16}
-          y={20 + (i % 3) * 28}
-          width={10 + (i % 3) * 6}
-          height={10 + (i % 2) * 8}
-          fill="rgba(251, 186, 114, 0.4)"
-          rx={2}
-        />
-      ))}
-    </svg>
-  )
-}
-
-function SyntheticOpticalTile({ variant = 0 }: { variant?: number }) {
-  const colors = [
-    { bg: "#1e3a29", field1: "#2d5a3f", field2: "#407a52", river: "#0284c7" },
-    { bg: "#1c382b", field1: "#346648", field2: "#4a8a62", river: "#0369a1" },
-    { bg: "#233d28", field1: "#3a6140", field2: "#52855b", river: "#38bdf8" },
-    { bg: "#1b3324", field1: "#2e543b", field2: "#437854", river: "#0284c7" },
-    { bg: "#25422f", fill: "#3b6b4a", field2: "#508c62", river: "#0ea5e9" },
-  ]
-  const c = colors[variant % colors.length]
-  return (
-    <svg viewBox="0 0 120 120" className="w-full h-full">
-      <rect width="120" height="120" fill={c.bg} />
-      <rect x="10" y="10" width="45" height="40" fill={c.field1} rx="4" />
-      <rect x="60" y="15" width="50" height="35" fill={c.field2} rx="4" />
-      <rect x="15" y="55" width="40" height="55" fill={c.field2} rx="4" />
-      <rect x="60" y="55" width="50" height="50" fill={c.field1} rx="4" />
-      <path d="M0 40 Q 60 70 120 45" stroke={c.river} strokeWidth="6" fill="none" opacity="0.8" />
-    </svg>
-  )
-}
-
-function DatasetImg({
-  src,
-  alt,
-  fallbackVariant = 0,
-  className,
-}: {
-  src: string
-  alt: string
-  fallbackVariant?: number
-  className?: string
-}) {
-  const [error, setError] = useState(false)
-  if (error) {
-    return <SyntheticOpticalTile variant={fallbackVariant} />
-  }
-  return (
-    <img
-      src={src}
-      alt={alt}
-      className={cn("w-full h-full object-cover", className)}
-      onError={() => setError(true)}
-    />
-  )
-}
 
 export default function DashboardMockup() {
   return (
@@ -203,11 +120,10 @@ export default function DashboardMockup() {
           {/* Active Query Scene Card */}
           <div className="p-4 rounded-2xl border border-border/60 bg-card/80 backdrop-blur-md shadow-sm flex flex-col sm:flex-row items-start sm:items-center gap-4">
             <div className="relative size-24 rounded-xl overflow-hidden border border-border/60 bg-zinc-950 shrink-0">
-              <DatasetImg
-                src="/images/dataset/demo_11_1.png"
-                alt="BEN-14K Query Scene"
-                fallbackVariant={0}
-                className="grayscale contrast-125 brightness-90"
+              <img
+                src="/images/satellite/demo_4_0.png"
+                alt="Sentinel-1 SAR Satellite Query Scene"
+                className="w-full h-full object-cover grayscale contrast-125 brightness-90"
               />
               <span className="absolute top-1 left-1 px-1.5 py-0.5 rounded bg-sky-500/80 text-[9px] font-bold font-mono text-white">S1</span>
             </div>
@@ -219,7 +135,7 @@ export default function DashboardMockup() {
                     S2A_MSIL2A_20170803T094031_58_90_paired.png
                   </h3>
                   <p className="text-[11px] text-muted-foreground font-sans">
-                    Query scene for multi-sensor dual-modal retrieval
+                    Sentinel-1 SAR query scene for multi-sensor dual-modal retrieval
                   </p>
                 </div>
 
@@ -260,11 +176,11 @@ export default function DashboardMockup() {
 
             <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
               {[
-                { rank: 1, name: "ROIs18_Nov2023_01", sim: 96.4, jaccard: 88.0, img: "/images/dataset/demo_18_0.png" },
-                { rank: 2, name: "ROIs18_Nov2023_02", sim: 94.1, jaccard: 85.2, img: "/images/dataset/demo_4_0.png" },
-                { rank: 3, name: "ROIs18_Nov2023_03", sim: 92.8, jaccard: 81.4, img: "/images/dataset/demo_11_1.png" },
-                { rank: 4, name: "ROIs18_Nov2023_04", sim: 89.5, jaccard: 78.6, img: "/images/dataset/demo_18_0.png" },
-                { rank: 5, name: "ROIs18_Nov2023_05", sim: 87.2, jaccard: 75.0, img: "/images/dataset/demo_4_0.png" },
+                { rank: 1, name: "ROIs18_Nov2023_01", sim: 96.4, jaccard: 88.0, img: "/images/satellite/demo_18_0.png" },
+                { rank: 2, name: "ROIs18_Nov2023_02", sim: 94.1, jaccard: 85.2, img: "/images/satellite/demo_11_1.png" },
+                { rank: 3, name: "ROIs18_Nov2023_03", sim: 92.8, jaccard: 81.4, img: "/images/satellite/demo_4_0.png" },
+                { rank: 4, name: "ROIs18_Nov2023_04", sim: 89.5, jaccard: 78.6, img: "/images/satellite/demo_18_0.png" },
+                { rank: 5, name: "ROIs18_Nov2023_05", sim: 87.2, jaccard: 75.0, img: "/images/satellite/demo_11_1.png" },
               ].map((c) => (
                 <div
                   key={c.rank}
@@ -278,10 +194,10 @@ export default function DashboardMockup() {
                   </div>
 
                   <div className="relative aspect-square rounded-lg overflow-hidden border border-border/40 bg-zinc-950">
-                    <DatasetImg
+                    <img
                       src={c.img}
-                      alt={c.name}
-                      fallbackVariant={c.rank}
+                      alt={`Sentinel-2 Satellite Match #${c.rank}`}
+                      className="w-full h-full object-cover"
                     />
                   </div>
 

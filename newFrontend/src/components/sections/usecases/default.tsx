@@ -14,7 +14,6 @@ import {
   MapPin,
   CheckCircle2,
   Sparkles,
-  ArrowRight,
 } from "lucide-react";
 
 const USE_CASES = [
@@ -25,10 +24,10 @@ const USE_CASES = [
     title: "All-Weather Flood Mapping",
     description:
       "On 10 Sep 2023, Storm Daniel caused catastrophic flooding in Derna, Libya. Dense cloud cover blocked every optical satellite for days. Sentinel-1 SAR cut right through — imaging the flood extent in full clarity. SABER takes that SAR image as the query and retrieves the closest pre-flood Sentinel-2 optical reference from the archive in 28ms, giving responders an instant before/after pair for damage assessment — no clear sky required.",
-    sarLabel: "Sentinel-1 SAR · Valencia Flood (ESA/Copernicus)",
-    opticalLabel: "Sentinel-2 Optical · Valencia Pre-flood (ESA/Copernicus)",
-    sarImg: "https://upload.wikimedia.org/wikipedia/commons/thumb/5/5d/Floods_in_Valencia_ESA503179_-_Floods_in_Valencia.jpg/960px-Floods_in_Valencia_ESA503179_-_Floods_in_Valencia.jpg",
-    opticalImg: "https://upload.wikimedia.org/wikipedia/commons/thumb/0/0e/Spain_from_Sentinel-2.jpg/960px-Spain_from_Sentinel-2.jpg",
+    sarLabel: "Sentinel-1 SAR · Flood Inundation Query (ESA/Copernicus)",
+    opticalLabel: "Sentinel-2 Optical · Pre-flood Reference Match (ESA)",
+    sarImg: "/images/satellite/demo_4_0.png",
+    opticalImg: "/images/satellite/demo_18_0.png",
     result: "Matched pre-disaster optical scene in 28.48ms",
   },
   {
@@ -38,10 +37,10 @@ const USE_CASES = [
     title: "Crop Monitoring Through Monsoon",
     description:
       "During India's kharif season, cloud cover makes optical imagery unavailable for months. SABER queries available SAR data and retrieves the semantically closest optical scene — enabling crop-type classification and yield estimation without waiting for clear skies.",
-    sarLabel: "Sentinel-1 SAR · Central Brazil Farmland (ESA)",
-    opticalLabel: "Sentinel-2 Optical · Crop Reference (ESA/Copernicus)",
-    sarImg: "https://upload.wikimedia.org/wikipedia/commons/thumb/5/59/Central-eastern_Brazil%2C_by_Copernicus_Sentinel-2A_satellite.jpg/960px-Central-eastern_Brazil%2C_by_Copernicus_Sentinel-2A_satellite.jpg",
-    opticalImg: "https://upload.wikimedia.org/wikipedia/commons/thumb/5/59/Central-eastern_Brazil%2C_by_Copernicus_Sentinel-2A_satellite.jpg/640px-Central-eastern_Brazil%2C_by_Copernicus_Sentinel-2A_satellite.jpg",
+    sarLabel: "Sentinel-1 SAR · Central Farmland Radar (ESA)",
+    opticalLabel: "Sentinel-2 Optical · Crop Canopy Reference (ESA)",
+    sarImg: "/images/satellite/demo_4_0.png",
+    opticalImg: "/images/satellite/demo_11_1.png",
     result: "Cross-modal F1@5 = 73.51% on BEN-14K benchmark",
   },
   {
@@ -51,10 +50,10 @@ const USE_CASES = [
     title: "Construction & Urban Expansion",
     description:
       "SAR detects new construction and urban expansion even at night or through haze. SABER retrieves the closest optical reference from the historical archive, letting analysts instantly compare land-cover changes across time and sensors.",
-    sarLabel: "Sentinel-1 SAR · Toronto Metro (ESA/Copernicus)",
-    opticalLabel: "Sentinel-2 Optical · Historical Reference (ESA/Copernicus)",
-    sarImg: "https://upload.wikimedia.org/wikipedia/commons/thumb/5/5d/Toronto_by_Sentinel-2.jpg/960px-Toronto_by_Sentinel-2.jpg",
-    opticalImg: "https://upload.wikimedia.org/wikipedia/commons/thumb/c/cb/Los_Angeles_by_Sentinel-2%2C_2019-03-30.jpg/960px-Los_Angeles_by_Sentinel-2%2C_2019-03-30.jpg",
+    sarLabel: "Sentinel-1 SAR · Urban Fabric Radar (ESA)",
+    opticalLabel: "Sentinel-2 Optical · Historical Urban Match (ESA)",
+    sarImg: "/images/satellite/demo_4_0.png",
+    opticalImg: "/images/satellite/demo_18_0.png",
     result: "Sub-28.5ms retrieval from 14,832-scene gallery",
   },
   {
@@ -64,10 +63,10 @@ const USE_CASES = [
     title: "All-Weather Target Identification",
     description:
       "SAR imagery is interpretable by machines but hard for analysts unfamiliar with radar backscatter. SABER bridges SAR embeddings to visually interpretable optical matches — enabling rapid confirmation of targets from the historical archive.",
-    sarLabel: "Sentinel-1 SAR · Maritime Observation (ESA)",
-    opticalLabel: "Sentinel-2 Optical · Island Target Match (ESA)",
-    sarImg: "https://upload.wikimedia.org/wikipedia/commons/thumb/8/80/L%27%C3%AEle_de_la_R%C3%A9union_vue_par_le_satellite_Sentinel-2_%28cropped%29.jpg/960px-L%27%C3%AEle_de_la_R%C3%A9union_vue_par_le_satellite_Sentinel-2_%28cropped%29.jpg",
-    opticalImg: "https://upload.wikimedia.org/wikipedia/commons/thumb/5/50/North-Sentinel-Island-Sentinel-2A.png/960px-North-Sentinel-Island-Sentinel-2A.png",
+    sarLabel: "Sentinel-1 SAR · Target Surveillance Scene (ESA)",
+    opticalLabel: "Sentinel-2 Optical · Visual Optical Match (ESA)",
+    sarImg: "/images/satellite/demo_4_0.png",
+    opticalImg: "/images/satellite/demo_11_1.png",
     result: "Cross-Modal mAP = 91.49% (24% higher vs RemoteCLIP)",
   },
   {
@@ -77,10 +76,10 @@ const USE_CASES = [
     title: "Cross-Sensor Archive Retrieval",
     description:
       "Space agencies hold petabyte-scale archives spanning decades and multiple sensors. SABER lets researchers search millions of scenes in real-time using any sensor as query — semantic image search across the entire Earth observation archive.",
-    sarLabel: "Sentinel-1 SAR · European Archive Query (ESA)",
+    sarLabel: "Sentinel-1 SAR · Archive Radar Query (ESA)",
     opticalLabel: "Sentinel-2 Optical · Matched Archive Scene (ESA)",
-    sarImg: "https://upload.wikimedia.org/wikipedia/commons/thumb/1/13/Berlin_by_Senitnel-2.jpg/960px-Berlin_by_Senitnel-2.jpg",
-    opticalImg: "https://upload.wikimedia.org/wikipedia/commons/thumb/1/19/Guernsey_by_Sentinel-2.jpg/960px-Guernsey_by_Sentinel-2.jpg",
+    sarImg: "/images/satellite/demo_4_0.png",
+    opticalImg: "/images/satellite/demo_18_0.png",
     result: "14,832-scene gallery · 768-dim embeddings",
   },
   {
@@ -90,10 +89,10 @@ const USE_CASES = [
     title: "Deforestation & Fire Scar Detection",
     description:
       "Forest fire scars and deforestation appear as strong SAR texture anomalies. SABER retrieves the matching optical reference scene for each detected change, letting forest departments confirm, document and measure affected area with visual clarity.",
-    sarLabel: "Sentinel-1 SAR · Vegetation Scar (ESA)",
-    opticalLabel: "Sentinel-2 Optical · Forest Canopy (ESA)",
-    sarImg: "https://upload.wikimedia.org/wikipedia/commons/thumb/f/f7/Bangkok%27s_green_lung_%2840468870113%29_%28cropped%29.jpg/960px-Bangkok%27s_green_lung_%2840468870113%29_%28cropped%29.jpg",
-    opticalImg: "https://upload.wikimedia.org/wikipedia/commons/thumb/c/c8/L%27%C3%AEle_de_la_R%C3%A9union_vue_par_le_satellite_Sentinel-2.jpg/960px-L%27%C3%AEle_de_la_R%C3%A9union_vue_par_le_satellite_Sentinel-2.jpg",
+    sarLabel: "Sentinel-1 SAR · Deforestation Scar (ESA)",
+    opticalLabel: "Sentinel-2 Optical · Forest Canopy Match (ESA)",
+    sarImg: "/images/satellite/demo_4_0.png",
+    opticalImg: "/images/satellite/demo_11_1.png",
     result: "0.26% Trainable Params (294.9K / 111.6M)",
   },
 ];
@@ -109,26 +108,16 @@ function ImagePair({
   sarLabel: string;
   opticalLabel: string;
 }) {
-  const [sarError, setSarError] = useState(false);
-  const [optError, setOptError] = useState(false);
-
   return (
     <div className="grid grid-cols-2 gap-3 rounded-2xl overflow-hidden p-1.5 bg-card/60 border border-border/60">
       {/* SAR Image Container */}
       <div className="relative flex flex-col gap-2">
         <div className="relative aspect-square rounded-xl overflow-hidden bg-zinc-950 border border-border/60 group">
-          {!sarError ? (
-            <img
-              src={sarImg}
-              alt={sarLabel}
-              className="w-full h-full object-cover grayscale contrast-125 brightness-90 group-hover:scale-105 transition-transform duration-300"
-              onError={() => setSarError(true)}
-            />
-          ) : (
-            <div className="w-full h-full bg-zinc-950 flex items-center justify-center">
-              <SyntheticSAR />
-            </div>
-          )}
+          <img
+            src={sarImg}
+            alt={sarLabel}
+            className="w-full h-full object-cover grayscale contrast-125 brightness-90 group-hover:scale-105 transition-transform duration-300"
+          />
           <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
           <Badge
             variant="outline"
@@ -145,18 +134,11 @@ function ImagePair({
       {/* Optical Image Container */}
       <div className="relative flex flex-col gap-2">
         <div className="relative aspect-square rounded-xl overflow-hidden bg-zinc-950 border border-[#FBBA72]/40 group">
-          {!optError ? (
-            <img
-              src={opticalImg}
-              alt={opticalLabel}
-              className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-              onError={() => setOptError(true)}
-            />
-          ) : (
-            <div className="w-full h-full bg-zinc-950 flex items-center justify-center">
-              <SyntheticOptical />
-            </div>
-          )}
+          <img
+            src={opticalImg}
+            alt={opticalLabel}
+            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+          />
           <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
           <Badge
             variant="outline"
@@ -170,47 +152,6 @@ function ImagePair({
         </p>
       </div>
     </div>
-  );
-}
-
-function SyntheticSAR() {
-  return (
-    <svg viewBox="0 0 120 120" className="w-full h-full opacity-60">
-      {Array.from({ length: 30 }).map((_, i) => (
-        <line
-          key={i}
-          x1={0}
-          y1={i * 4}
-          x2={120}
-          y2={i * 4 + Math.sin(i) * 6}
-          stroke={`hsl(0,0%,${20 + ((i * 2) % 60)}%)`}
-          strokeWidth={1.5}
-        />
-      ))}
-      {Array.from({ length: 8 }).map((_, i) => (
-        <rect
-          key={`b${i}`}
-          x={10 + i * 13}
-          y={20 + (i % 3) * 30}
-          width={8 + (i % 3) * 4}
-          height={8 + (i % 2) * 6}
-          fill={`hsl(0,0%,${50 + i * 5}%)`}
-          opacity={0.8}
-        />
-      ))}
-    </svg>
-  );
-}
-
-function SyntheticOptical() {
-  return (
-    <svg viewBox="0 0 120 120" className="w-full h-full">
-      <rect width="120" height="120" fill="#2d4a2d" />
-      <rect x="0" y="70" width="120" height="50" fill="#3a5a3a" />
-      <rect x="20" y="30" width="30" height="40" fill="#8b7355" opacity="0.8" />
-      <rect x="60" y="25" width="25" height="45" fill="#7a6548" opacity="0.8" />
-      <circle cx="90" cy="35" r="15" fill="#5a8a5a" opacity="0.6" />
-    </svg>
   );
 }
 
