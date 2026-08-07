@@ -49,7 +49,7 @@ export default function Navbar({
   name = "SABER",
   homeUrl = "/",
   mobileLinks = [
-    { text: "Results & Metrics", href: "/#results" },
+    { text: "Results & Metrics", href: "/dashboard/format/training" },
     { text: "Query Space (Embeddings)", href: "/dashboard/format/embeddings" },
     { text: "Query Inspector", href: "/dashboard/format/query" },
     { text: "Ablation Studies", href: "/dashboard/format/abliation" },

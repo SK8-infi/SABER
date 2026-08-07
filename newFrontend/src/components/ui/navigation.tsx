@@ -52,16 +52,11 @@ export default function Navigation({
     {
       title: "Results & Metrics",
       isLink: true,
-      href: "/#results",
+      href: "/dashboard/format/training",
     },
     {
       title: "Dashboard Format",
       content: "format-modules",
-    },
-    {
-      title: "Live Dashboard",
-      isLink: true,
-      href: "/dashboard/format/embeddings",
     },
   ],
   formatModules = [
