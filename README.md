@@ -273,8 +273,12 @@ To train the Conditional Flow Matching (CFM) alignment bridge, you must first ex
     ```
 
 ### 5. Evaluate Retrieval Performance
-Evaluate cross-modal retrieval metrics (Precision@K, Recall@K, F1@K, mAP) using the FAISS index database:
-*   **Sentinel-1 $\rightarrow$ Sentinel-2 (BEN-14K)**:
+Evaluate cross-modal retrieval metrics (Precision@K, Recall@K, F1@K, mAP):
+*   **Direct Database Evaluation Mode (`saber_search_db.pth`)**:
+    ```bash
+    python Saber/evaluate.py --db saber_search_db.pth --split test
+    ```
+*   **Model Checkpoint Evaluation (BEN-14K)**:
     ```bash
     python Saber/evaluate.py --architecture saber --dataset_name ben14k --modality both --synthetic false --data_dir Datasets/benv1_14k
     ```
@@ -283,14 +287,22 @@ Evaluate cross-modal retrieval metrics (Precision@K, Recall@K, F1@K, mAP) using 
     python Saber/evaluate.py --architecture saber --checkpoint checkpoints/latest_dsrsid.pth --dataset_name dsrsid --modality both --synthetic false --data_dir Datasets/DSRSID/DSRSID-001.mat
     ```
 
-### 6. Visual Query Search Demonstration
-Run a single query image search and save the top-5 retrieved gallery images to a visualization grid:
-*   **Sentinel-1 $\rightarrow$ Sentinel-2 (BEN-14K)**:
+### 6. Export Database Embeddings (.pth)
+To export pre-computed 768-D embeddings and FAISS index into a lightweight, zero-GPU database file:
+```bash
+python Saber/export_embeddings.py --checkpoint checkpoints/latest_ben14k.pth --output saber_search_db.pth
+```
+
+### 7. Run Web Application (Next.js 16 + FastAPI)
+To launch the interactive search dashboard:
+*   **Start FastAPI Backend**:
     ```bash
-    python Saber/demo.py --dataset_name ben14k --checkpoint checkpoints/latest_ben14k.pth --query_index 4 --synthetic false --data_dir Datasets/benv1_14k
+    python -m uvicorn Saber.server:app --host 0.0.0.0 --port 8000
     ```
-*   **Gaofen-1 PAN $\rightarrow$ Multispectral (DSRSID)**:
+*   **Start Next.js Frontend**:
     ```bash
-    python Saber/demo.py --dataset_name dsrsid --checkpoint checkpoints/latest_dsrsid.pth --query_index 10 --synthetic false --data_dir Datasets/DSRSID/DSRSID-001.mat
+    cd newFrontend
+    npm run dev
     ```
+*   Access the web app at `http://localhost:3000`.
 
