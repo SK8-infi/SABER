@@ -213,96 +213,194 @@ SABER contains significant optimizations to standard satellite data loaders:
 
 ```
 SABER/
-├── Saber/              # Unified SABER Codebase Module
-│   ├── configs/        # Hyperparameters (config.yaml)
-│   ├── datasets/       # DSRSID and BEN-14K loaders and augmentations
-│   ├── models/         # DOFA backbone, LoRA adapters, and CFM bridge
-│   ├── trainer/        # Trainer loop and evaluator metrics
-│   ├── retrieval/      # FAISS index builders
-│   ├── train.py        # Encoder training script
-│   ├── train_bridge.py # CFM Bridge training script
-│   ├── evaluate.py     # Evaluation and FAISS indexing script
-│   └── benchmark.py    # Latency and throughput profiler
-├── docs/               # Technical reports and implementation plans
-├── checkpoints/        # Saved model checkpoints (.pth)
-└── visualizations/     # t-SNE, UMAP, and retrieval results
+├── Saber/                             # Unified SABER Core Engine
+│   ├── configs/                       # Configuration files (config.yaml)
+│   ├── datasets/                      # BEN-14K and DSRSID loaders & augmentation pipelines
+│   ├── models/                        # DOFA ViT backbone, LoRA adapters, predictor & CFM bridge
+│   ├── trainer/                       # Training loops, loss functions & retrieval metrics
+│   ├── retrieval/                     # FAISS IndexFlatIP vector search index builders
+│   ├── train.py                       # Base encoder training script (DOFA + LoRA)
+│   ├── train_cfm_standalone.py        # Standalone CFM bridge training pipeline
+│   ├── export_embeddings.py           # Pre-computed DB payload exporter (.pth)
+│   ├── evaluate.py                    # Multi-split retrieval evaluation script
+│   ├── evaluate_all_directions.py     # All-direction (S1->S2, S2->S1, S1->S1, S2->S2) evaluator
+│   ├── build_dsrsid_1000_db.py        # DSRSID database index builder
+│   ├── extract_and_search_real_dsrsid.py # DSRSID real feature extractor & searcher
+│   ├── search_dsrsid_image.py         # Image query search pipeline for DSRSID
+│   ├── demo.py                        # Single-query visual retrieval demonstrator
+│   ├── render_retrieval_grid.py       # High-res retrieval result grid renderer
+│   ├── server.py                      # Production FastAPI REST backend (<0.5ms search)
+│   └── benchmark.py                   # Hardware latency & throughput profiler
+├── newFrontend/                       # Next.js 16 + React Bits + Shadcn UI Web App
+├── scripts/                           # Optimization & latency testing scripts
+│   └── test_latency_optimizations.py  # GPU FP16 / FP32 vs CPU NumPy matrix mult profiler
+├── docs/                              # Technical architecture reports & benchmarking guides
+├── checkpoints/                       # Model weight checkpoints (.pth)
+└── visualizations/                    # Retrieval grids, t-SNE & UMAP embeddings plots
 ```
 
 ---
 
-## 🚀 Getting Started
+## 🚀 Complete Step-by-Step Execution Guide
 
-### 1. Installation
-Ensure PyTorch and CUDA are installed, then set up the environment:
+### 1. Installation & Environment Setup
+Clone the repository and install all Python & Node.js dependencies:
+
+#### A. Backend (Python 3.10+ / PyTorch + CUDA)
 ```bash
 git clone https://github.com/SK8-infi/SABER
 cd SABER
 python -m venv .venv
+
+# On Windows PowerShell:
 .venv\Scripts\activate
+# On Linux/macOS:
+# source .venv/bin/activate
+
 pip install -r Saber/requirements.txt
 ```
 
-### 2. Run Latency Profiling
-Measure the GPU forward pass and FAISS search times on your hardware:
+#### B. Frontend (Node.js 18+ / Next.js 16)
+```bash
+cd newFrontend
+npm install
+cd ..
+```
+
+---
+
+### 2. Model Training
+
+#### A. Fine-Tuning the Base Foundation Encoder (DOFA + LoRA)
+Train the wavelength-conditioned DOFA ViT encoder with LoRA adapters ($r=16, \alpha=32$):
+* **Sentinel-1 / Sentinel-2 (BEN-14K)**:
+  ```bash
+  python Saber/train.py --dataset_name ben14k --modality both --data_dir Datasets/benv1_14k --epochs 5 --synthetic false
+  ```
+* **Gaofen-1 PAN / MS (DSRSID)**:
+  ```bash
+  python Saber/train.py --dataset_name dsrsid --data_dir Datasets/DSRSID/DSRSID-001.mat --epochs 5 --synthetic false
+  ```
+
+#### B. Training the Conditional Flow Matching (CFM) Latent Bridge
+Train the generative CFM bridge ODE vector field:
+* **Standalone CFM Bridge Training**:
+  ```bash
+  python Saber/train_cfm_standalone.py --epochs 80 --lr 0.001
+  ```
+* **Pipeline Feature Extraction + Bridge Training**:
+  ```bash
+  python Saber/extract_features.py --checkpoint checkpoints/latest_ben14k.pth --output_dir checkpoints/extracted
+  python Saber/train_bridge.py --features_dir checkpoints/extracted --epochs 80
+  ```
+
+---
+
+### 3. Database Export & Pre-Computation
+Export pre-computed 768-D normalized embeddings and serialized FAISS indices into lightweight, zero-GPU database payloads:
+```bash
+python Saber/export_embeddings.py \
+    --checkpoint checkpoints/latest_ben14k.pth \
+    --bridge checkpoints/bridge_best_ben14k.pth \
+    --output saber_search_db.pth
+```
+
+---
+
+### 4. Comprehensive Retrieval Evaluation
+
+#### A. Direct Database Evaluation (`saber_search_db.pth`)
+Evaluate retrieval performance across specific split partitions (Seed 42 70/10/20 split):
+```bash
+# Evaluate on held-out test split (2,967 query vs 11,865 gallery)
+python Saber/evaluate.py --db saber_search_db.pth --split test
+
+# Evaluate on full dataset (All-vs-All 14,832 samples)
+python Saber/evaluate.py --db saber_search_db.pth --split all
+```
+
+#### B. All-Direction Retrieval Protocol (S1->S2, S2->S1, S1->S1, S2->S2)
+Run full 4-direction evaluation matching CR-JEPA & X-JEPA benchmarks:
+```bash
+python Saber/evaluate_all_directions.py --db saber_search_db.pth
+```
+
+#### C. Live Model Checkpoint Evaluation
+```bash
+python Saber/evaluate.py --architecture saber --checkpoint checkpoints/latest_ben14k.pth --dataset_name ben14k --modality both --synthetic false --data_dir Datasets/benv1_14k
+```
+
+---
+
+### 5. DSRSID Gaofen-1 Query & Index Operations
+
+#### A. Build DSRSID 1000-Sample Index
+```bash
+python Saber/build_dsrsid_1000_db.py
+```
+
+#### B. Real DSRSID Embedding Extraction & Search
+```bash
+python Saber/extract_and_search_real_dsrsid.py
+```
+
+#### C. Image Query Search on DSRSID
+```bash
+python Saber/search_dsrsid_image.py --query_idx 10
+```
+
+---
+
+### 6. Visual Query Search Demos & Grid Rendering
+
+#### A. Single Query Visual Demonstration
+```bash
+python Saber/demo.py --dataset_name ben14k --checkpoint checkpoints/latest_ben14k.pth --query_index 4 --synthetic false --data_dir Datasets/benv1_14k
+```
+
+#### B. Render High-Resolution Retrieval Result Grids
+```bash
+python Saber/render_retrieval_grid.py
+```
+
+---
+
+### 7. Latency & Hardware Profiling
+
+#### A. End-to-End Latency & Throughput Benchmark
 ```bash
 python Saber/benchmark.py
 ```
 
-### 3. Model Training (Fine-Tuning Encoder)
-To train the base encoder (DOFA ViT + trainable LoRA adapters) on Sentinel-1/2 or Gaofen-1 datasets:
-*   **Sentinel-1/2 (BEN-14K)**:
-    ```bash
-    python Saber/train.py --dataset_name ben14k --modality both --data_dir Datasets/benv1_14k --epochs 5 --synthetic false
-    ```
-*   **Gaofen-1 (DSRSID)**:
-    ```bash
-    python Saber/train.py --dataset_name dsrsid --data_dir Datasets/DSRSID/DSRSID-001.mat --epochs 5 --synthetic false
-    ```
-
-### 4. CFM Latent Bridge Training
-To train the Conditional Flow Matching (CFM) alignment bridge, you must first extract the projection embeddings from the trained encoder:
-*   **Sentinel-1/2 (BEN-14K)**:
-    ```bash
-    python Saber/extract_features.py --checkpoint checkpoints/latest_ben14k.pth --output_dir checkpoints/extracted
-    python Saber/train_bridge.py --features_dir checkpoints/extracted --epochs 80
-    ```
-*   **Gaofen-1 (DSRSID)**:
-    ```bash
-    python Saber/extract_features.py --checkpoint checkpoints/latest_dsrsid.pth --output_dir checkpoints/extracted_dsrsid
-    python Saber/train_bridge.py --features_dir checkpoints/extracted_dsrsid --epochs 80
-    ```
-
-### 5. Evaluate Retrieval Performance
-Evaluate cross-modal retrieval metrics (Precision@K, Recall@K, F1@K, mAP):
-*   **Direct Database Evaluation Mode (`saber_search_db.pth`)**:
-    ```bash
-    python Saber/evaluate.py --db saber_search_db.pth --split test
-    ```
-*   **Model Checkpoint Evaluation (BEN-14K)**:
-    ```bash
-    python Saber/evaluate.py --architecture saber --dataset_name ben14k --modality both --synthetic false --data_dir Datasets/benv1_14k
-    ```
-*   **Gaofen-1 PAN $\rightarrow$ Multispectral (DSRSID)**:
-    ```bash
-    python Saber/evaluate.py --architecture saber --checkpoint checkpoints/latest_dsrsid.pth --dataset_name dsrsid --modality both --synthetic false --data_dir Datasets/DSRSID/DSRSID-001.mat
-    ```
-
-### 6. Export Database Embeddings (.pth)
-To export pre-computed 768-D embeddings and FAISS index into a lightweight, zero-GPU database file:
+#### B. GPU FP16 / FP32 vs CPU Matrix Multiplication Profiler
 ```bash
-python Saber/export_embeddings.py --checkpoint checkpoints/latest_ben14k.pth --output saber_search_db.pth
+python scripts/test_latency_optimizations.py
 ```
 
-### 7. Run Web Application (Next.js 16 + FastAPI)
-To launch the interactive search dashboard:
-*   **Start FastAPI Backend**:
-    ```bash
-    python -m uvicorn Saber.server:app --host 0.0.0.0 --port 8000
-    ```
-*   **Start Next.js Frontend**:
-    ```bash
-    cd newFrontend
-    npm run dev
-    ```
-*   Access the web app at `http://localhost:3000`.
+---
+
+### 8. Interactive Web Application (Next.js 16 + FastAPI)
+
+#### Step 1: Launch FastAPI Backend Server
+Start the production zero-GPU search API (<0.5ms query time):
+```bash
+python -m uvicorn Saber.server:app --host 0.0.0.0 --port 8000
+```
+
+#### Step 2: Launch Next.js Frontend Development Server
+In a second terminal window:
+```bash
+cd newFrontend
+npm run dev
+```
+
+#### Step 3: Access Dashboard
+Open your browser and navigate to:
+```
+http://localhost:3000
+```
+* **Query Inspector**: `http://localhost:3000/dashboard/format/query`
+* **DSRSID Search**: `http://localhost:3000/dashboard/format/dsrsid-search`
+* **Cloud-Free Optical Synthesis**: `http://localhost:3000/dashboard/format/cloud-free`
+* **Latent Space Explorer**: `http://localhost:3000/dashboard/format/embeddings`
 
