@@ -596,7 +596,7 @@ export default function EmbeddingSpaceGraph({ maxSamples = 350 }: EmbeddingSpace
             </button>
           </div>
 
-          {/* Active Modality Indicator Badge */}
+          {/* Active Modality Indicator Badge (Top-Left) */}
           <div className="absolute top-4 left-4 px-3 py-1 rounded-full border border-border/60 bg-background/80 backdrop-blur-md text-xs font-mono text-foreground flex items-center gap-2 z-10 shadow-sm">
             <span
               className={cn(
@@ -608,6 +608,53 @@ export default function EmbeddingSpaceGraph({ maxSamples = 350 }: EmbeddingSpace
               View: {modality === 's2' ? 'Optical (S2)' : modality === 's1' ? 'SAR (S1)' : 'SABER Bridged (CFM)'}
             </span>
           </div>
+
+          {/* Floating Land Cover Cluster Legend Overlay (Top-Right) */}
+          {data && data.class_legend && (
+            <div className="absolute top-4 right-4 z-10 max-w-[320px] sm:max-w-[400px] p-3 rounded-2xl border border-border/60 bg-background/85 backdrop-blur-md shadow-md">
+              <div className="flex items-center justify-between gap-2 mb-2">
+                <h4 className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5 font-sans">
+                  <Layers className="size-3.5 text-[#FBBA72]" />
+                  Land Cover Clusters ({data.class_legend.length})
+                </h4>
+                {selectedClass !== null && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      setSelectedClass(null)
+                    }}
+                    className="text-[11px] text-[#FBBA72] hover:underline font-semibold font-sans"
+                  >
+                    Clear Filter
+                  </button>
+                )}
+              </div>
+
+              <div className="flex flex-wrap gap-1.5 max-h-[140px] overflow-y-auto pr-1">
+                {data.class_legend.map(cls => {
+                  const isSelected = selectedClass === cls.class_index
+                  return (
+                    <button
+                      key={cls.class_index}
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        setSelectedClass(isSelected ? null : cls.class_index)
+                      }}
+                      className={cn(
+                        'flex items-center gap-1.5 px-2 py-1 rounded-md text-[11px] transition-all font-sans border text-left',
+                        isSelected
+                          ? 'border-[#FBBA72] bg-[#FBBA72]/20 text-foreground font-semibold shadow-xs'
+                          : 'border-border/40 bg-muted/30 text-muted-foreground hover:text-foreground hover:bg-muted/60',
+                      )}
+                    >
+                      <span className="size-2 rounded-full shrink-0" style={{ backgroundColor: cls.color }} />
+                      <span className="truncate max-w-[140px]">{cls.name}</span>
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Selected / Hovered Sample Inspector Panel */}
@@ -901,49 +948,6 @@ export default function EmbeddingSpaceGraph({ maxSamples = 350 }: EmbeddingSpace
             </CardContent>
           </Card>
         </div>
-      )}
-
-      {/* Land Cover Class Legend Filter */}
-      {data && data.class_legend && (
-        <Card className="border-border/60 bg-card/60 backdrop-blur-md shadow-sm">
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between mb-3">
-              <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-2 font-sans">
-                <Layers className="size-3.5 text-[#FBBA72]" />
-                Land Cover Clusters ({data.class_legend.length} Classes)
-              </h4>
-              {selectedClass !== null && (
-                <button
-                  onClick={() => setSelectedClass(null)}
-                  className="text-xs text-[#FBBA72] hover:underline font-medium font-sans"
-                >
-                  Clear Filter
-                </button>
-              )}
-            </div>
-
-            <div className="flex flex-wrap gap-2">
-              {data.class_legend.map(cls => {
-                const isSelected = selectedClass === cls.class_index
-                return (
-                  <button
-                    key={cls.class_index}
-                    onClick={() => setSelectedClass(isSelected ? null : cls.class_index)}
-                    className={cn(
-                      'flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs transition-all font-sans border',
-                      isSelected
-                        ? 'border-[#FBBA72] bg-[#FBBA72]/15 text-foreground font-semibold shadow-xs'
-                        : 'border-border/40 bg-muted/20 text-muted-foreground hover:text-foreground hover:bg-muted/40',
-                    )}
-                  >
-                    <span className="size-2.5 rounded-full" style={{ backgroundColor: cls.color }} />
-                    <span>{cls.name}</span>
-                  </button>
-                )
-              })}
-            </div>
-          </CardContent>
-        </Card>
       )}
     </div>
   )
