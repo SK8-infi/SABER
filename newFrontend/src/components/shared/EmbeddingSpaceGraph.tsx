@@ -90,7 +90,7 @@ export default function EmbeddingSpaceGraph({ maxSamples = 1000 }: EmbeddingSpac
   const [sampleCount, setSampleCount] = useState<number>(maxSamples)
 
   // Interactive state
-  const [modality, setModality] = useState<'s2' | 's1' | 'bridged'>('s2')
+  const [modality, setModality] = useState<'s2' | 's1'>('s2')
   const [selectedClass, setSelectedClass] = useState<number | null>(null)
   const [hoveredPoint, setHoveredPoint] = useState<EmbeddingPoint | null>(null)
   const [selectedPoint, setSelectedPoint] = useState<EmbeddingPoint | null>(null)
@@ -146,9 +146,8 @@ export default function EmbeddingSpaceGraph({ maxSamples = 1000 }: EmbeddingSpac
   }, [fetchData])
 
   // Active points based on modality
-  const getPointCoords = useCallback((p: EmbeddingPoint, mod: 's2' | 's1' | 'bridged') => {
+  const getPointCoords = useCallback((p: EmbeddingPoint, mod: 's2' | 's1') => {
     if (mod === 's1') return { x: p.s1_x, y: p.s1_y }
-    if (mod === 'bridged') return { x: p.bridged_x, y: p.bridged_y }
     return { x: p.s2_x, y: p.s2_y }
   }, [])
 
@@ -511,7 +510,7 @@ export default function EmbeddingSpaceGraph({ maxSamples = 1000 }: EmbeddingSpac
             {/* Sample Count Density Selector */}
             <div className="flex items-center gap-1 p-1 rounded-xl bg-background/80 border border-border/60">
               <span className="text-[10px] text-muted-foreground font-mono px-1.5 font-semibold">Density:</span>
-              {[350, 750, 1000, 2500, 5000].map(cnt => (
+              {[350, 750, 1000, 1500].map(cnt => (
                 <button
                   key={cnt}
                   onClick={() => setSampleCount(cnt)}
@@ -522,7 +521,7 @@ export default function EmbeddingSpaceGraph({ maxSamples = 1000 }: EmbeddingSpac
                       : 'text-muted-foreground hover:text-foreground hover:bg-muted/40'
                   )}
                 >
-                  {cnt >= 1000 ? `${cnt / 1000}k` : cnt}
+                  {cnt === 1500 ? '1.5k (Max)' : cnt >= 1000 ? `${cnt / 1000}k` : cnt}
                 </button>
               ))}
             </div>
@@ -550,17 +549,6 @@ export default function EmbeddingSpaceGraph({ maxSamples = 1000 }: EmbeddingSpac
                 )}
               >
                 SAR (Sentinel-1)
-              </button>
-              <button
-                onClick={() => setModality('bridged')}
-                className={cn(
-                  'px-3 py-1.5 text-xs font-semibold rounded-lg transition-all font-sans',
-                  modality === 'bridged'
-                    ? 'bg-[#FBBA72]/20 border border-[#FBBA72]/50 text-[#FBBA72] shadow-xs'
-                    : 'text-muted-foreground hover:text-foreground hover:bg-muted/40',
-                )}
-              >
-                SABER Bridged (CFM)
               </button>
             </div>
           </div>
@@ -639,11 +627,11 @@ export default function EmbeddingSpaceGraph({ maxSamples = 1000 }: EmbeddingSpac
             <span
               className={cn(
                 'size-2 rounded-full animate-pulse',
-                modality === 's2' ? 'bg-sky-400' : modality === 's1' ? 'bg-emerald-400' : 'bg-[#FBBA72]',
+                modality === 's2' ? 'bg-sky-400' : 'bg-emerald-400',
               )}
             />
             <span>
-              View: {modality === 's2' ? 'Optical (S2)' : modality === 's1' ? 'SAR (S1)' : 'SABER Bridged (CFM)'}
+              View: {modality === 's2' ? 'Optical (S2)' : 'SAR (S1)'}
             </span>
           </div>
 
