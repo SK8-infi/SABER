@@ -59,6 +59,16 @@ export const navItems: NavItem[] = [
         label: 'Classic Query Inspector',
         href: '/dashboard/format/query'
       },
+      {
+        icon: 'Sliders',
+        label: 'Ablation Studies',
+        href: '/dashboard/format/abliation'
+      },
+      {
+        icon: 'Activity',
+        label: 'Training Telemetry',
+        href: '/dashboard/format/training'
+      }
     ]
   }
 ]

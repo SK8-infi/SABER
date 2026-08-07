@@ -51,12 +51,12 @@ export default function Navigation({
     {
       title: "Results & Metrics",
       isLink: true,
-      href: "#results",
+      href: "/dashboard/format/embeddings",
     },
     {
       title: "Live Dashboard",
       isLink: true,
-      href: "/dashboard/format/query",
+      href: "/dashboard/format/embeddings",
     },
   ],
   components = [
@@ -98,7 +98,7 @@ export default function Navigation({
     },
     {
       title: "Sub-30ms Search",
-      href: "/dashboard/format/query",
+      href: "/dashboard/format/embeddings",
       description: "Real-time FAISS ANN search with k-reciprocal land-cover graph re-ranking.",
     },
   ],

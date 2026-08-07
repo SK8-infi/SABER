@@ -50,12 +50,12 @@ export default function Navbar({
   homeUrl = "/",
   mobileLinks = [
     { text: "Results & Metrics", href: "#results" },
-    { text: "Live Dashboard", href: "/dashboard/format/query" },
+    { text: "Live Dashboard", href: "/dashboard/format/embeddings" },
   ],
   actions = [
     {
       text: "Launch Dashboard",
-      href: "/dashboard/format/query",
+      href: "/dashboard/format/embeddings",
       isButton: true,
       variant: "default",
     },

@@ -1,7 +1,7 @@
 export const siteConfig = {
   name: "Launch UI",
   url: "https://launchuicomponents.com",
-  getStartedUrl: "/dashboard/format/query",
+  getStartedUrl: "/dashboard/format/embeddings",
   ogImage: "https://launchuicomponents.com/og.jpg",
   description:
     "Landing page components built with React, Shadcn/ui and Tailwind that will make your website feel premium.",
