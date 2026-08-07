@@ -442,9 +442,11 @@ export default function CustomImageQueryUpload({ className }: CustomImageQueryUp
                   </>
                 )}
               </Button>
-              <p className="text-[10px] text-muted-foreground text-center font-mono">
-                BEN-14K Multi-Spectral Ingestion · Sub-28.5ms Latency
-              </p>
+              <div className="flex flex-col gap-1 text-[10px] text-muted-foreground text-center font-mono">
+                <span className="text-[#FBBA72] font-semibold">Active Model Checkpoints:</span>
+                <span>Encoder: <code className="text-foreground">latest_ben14k.pth</code> (595.9MB)</span>
+                <span>CFM Bridge: <code className="text-foreground">bridge_best_ben14k.pth</code> (89.8MB)</span>
+              </div>
             </div>
           </div>
         </CardContent>
