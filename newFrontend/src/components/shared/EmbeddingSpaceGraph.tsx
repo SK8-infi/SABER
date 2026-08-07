@@ -19,6 +19,7 @@ import {
   CheckCircle2,
   X,
   ArrowRight,
+  ChevronDown,
 } from 'lucide-react'
 
 import { Badge } from '@/components/ui/badge'
@@ -93,6 +94,10 @@ export default function EmbeddingSpaceGraph({ maxSamples = 350 }: EmbeddingSpace
   const [hoveredPoint, setHoveredPoint] = useState<EmbeddingPoint | null>(null)
   const [selectedPoint, setSelectedPoint] = useState<EmbeddingPoint | null>(null)
 
+  // Top-Right Land Cover Popup state
+  const [legendOpen, setLegendOpen] = useState(false)
+  const legendRef = useRef<HTMLDivElement | null>(null)
+
   // Dual Top 5 Retrieval State (Auto-fetched on node selection)
   const [dualResults, setDualResults] = useState<DualRetrievalData | null>(null)
   const [retrievalLoading, setRetrievalLoading] = useState(false)
@@ -104,6 +109,17 @@ export default function EmbeddingSpaceGraph({ maxSamples = 350 }: EmbeddingSpace
 
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const containerRef = useRef<HTMLDivElement | null>(null)
+
+  // Click outside listener for legend popup
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (legendRef.current && !legendRef.current.contains(e.target as Node)) {
+        setLegendOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
 
   // Fetch data
   const fetchData = useCallback(async () => {
@@ -609,50 +625,77 @@ export default function EmbeddingSpaceGraph({ maxSamples = 350 }: EmbeddingSpace
             </span>
           </div>
 
-          {/* Floating Land Cover Cluster Legend Overlay (Top-Right) */}
+          {/* Top-Right Popup Button for Land Cover Clusters */}
           {data && data.class_legend && (
-            <div className="absolute top-4 right-4 z-10 max-w-[320px] sm:max-w-[400px] p-3 rounded-2xl border border-border/60 bg-background/85 backdrop-blur-md shadow-md">
-              <div className="flex items-center justify-between gap-2 mb-2">
-                <h4 className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5 font-sans">
-                  <Layers className="size-3.5 text-[#FBBA72]" />
-                  Land Cover Clusters ({data.class_legend.length})
-                </h4>
-                {selectedClass !== null && (
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      setSelectedClass(null)
-                    }}
-                    className="text-[11px] text-[#FBBA72] hover:underline font-semibold font-sans"
-                  >
-                    Clear Filter
-                  </button>
+            <div ref={legendRef} className="absolute top-4 right-4 z-20">
+              <button
+                onClick={(e) => {
+                  e.stopPropagation()
+                  setLegendOpen(prev => !prev)
+                }}
+                className={cn(
+                  'flex items-center gap-2 px-3.5 py-1.5 rounded-full border border-border/60 bg-background/85 backdrop-blur-md text-xs font-semibold text-foreground shadow-sm transition-all hover:bg-muted/80',
+                  selectedClass !== null && 'border-[#FBBA72]/60 text-[#FBBA72] bg-[#FBBA72]/15',
                 )}
-              </div>
+              >
+                <Layers className="size-3.5 text-[#FBBA72]" />
+                <span>
+                  {selectedClass !== null
+                    ? data.class_legend.find(c => c.class_index === selectedClass)?.name || 'Filtered'
+                    : 'Land Cover Clusters'}
+                </span>
+                <ChevronDown className={cn('size-3.5 transition-transform duration-200 text-muted-foreground', legendOpen && 'rotate-180')} />
+              </button>
 
-              <div className="flex flex-wrap gap-1.5 max-h-[140px] overflow-y-auto pr-1">
-                {data.class_legend.map(cls => {
-                  const isSelected = selectedClass === cls.class_index
-                  return (
-                    <button
-                      key={cls.class_index}
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        setSelectedClass(isSelected ? null : cls.class_index)
-                      }}
-                      className={cn(
-                        'flex items-center gap-1.5 px-2 py-1 rounded-md text-[11px] transition-all font-sans border text-left',
-                        isSelected
-                          ? 'border-[#FBBA72] bg-[#FBBA72]/20 text-foreground font-semibold shadow-xs'
-                          : 'border-border/40 bg-muted/30 text-muted-foreground hover:text-foreground hover:bg-muted/60',
-                      )}
-                    >
-                      <span className="size-2 rounded-full shrink-0" style={{ backgroundColor: cls.color }} />
-                      <span className="truncate max-w-[140px]">{cls.name}</span>
-                    </button>
-                  )
-                })}
-              </div>
+              {/* Popup Menu */}
+              {legendOpen && (
+                <div className="absolute right-0 mt-2 w-72 sm:w-80 p-3 rounded-2xl border border-border/60 bg-background/95 backdrop-blur-xl shadow-xl z-30 animate-appear">
+                  <div className="flex items-center justify-between gap-2 mb-2.5 pb-2 border-b border-border/40">
+                    <h4 className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5 font-sans">
+                      <Layers className="size-3.5 text-[#FBBA72]" />
+                      Filter Land Cover ({data.class_legend.length} Classes)
+                    </h4>
+                    {selectedClass !== null && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          setSelectedClass(null)
+                        }}
+                        className="text-[11px] text-[#FBBA72] hover:underline font-semibold font-sans"
+                      >
+                        Reset All
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="flex flex-col gap-1 max-h-[220px] overflow-y-auto pr-1">
+                    {data.class_legend.map(cls => {
+                      const isSelected = selectedClass === cls.class_index
+                      return (
+                        <button
+                          key={cls.class_index}
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            setSelectedClass(isSelected ? null : cls.class_index)
+                          }}
+                          className={cn(
+                            'flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs transition-all font-sans border text-left',
+                            isSelected
+                              ? 'border-[#FBBA72]/60 bg-[#FBBA72]/20 text-foreground font-semibold shadow-xs'
+                              : 'border-transparent hover:border-border/40 hover:bg-muted/40 text-muted-foreground hover:text-foreground',
+                          )}
+                        >
+                          <div className="flex items-center gap-2 truncate">
+                            <span className="size-2.5 rounded-full shrink-0" style={{ backgroundColor: cls.color }} />
+                            <span className="truncate">{cls.name}</span>
+                          </div>
+                          {isSelected && <CheckCircle2 className="size-3.5 text-[#FBBA72] shrink-0 ml-1" />}
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </div>
