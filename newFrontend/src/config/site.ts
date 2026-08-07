@@ -1,15 +1,13 @@
 export const siteConfig = {
-  name: "Launch UI",
-  url: "https://launchuicomponents.com",
+  name: "SABER",
+  url: "https://github.com/SK8-infi/SABER",
   getStartedUrl: "/dashboard/format/embeddings",
-  ogImage: "https://launchuicomponents.com/og.jpg",
+  ogImage: "https://github.com/SK8-infi/SABER/raw/master/visualizations/saber_banner.png",
   description:
-    "Landing page components built with React, Shadcn/ui and Tailwind that will make your website feel premium.",
-  version: "v2.10",
+    "Sensor-Agnostic Bridged Embedding Retrieval Platform for Multi-Sensor Satellite Data (ISRO BAH 2026)",
+  version: "v1.0",
   links: {
-    twitter: "https://twitter.com/mikolajdobrucki",
-    github: "https://github.com/launch-ui/launch-ui",
-    email: "mailto:contact@mikolajdobrucki.com",
+    github: "https://github.com/SK8-infi/SABER",
   },
   pricing: {
     pro: "https://launchui.lemonsqueezy.com/buy/b4798c68-c858-4c34-860b-069b5a0d6c4e",
