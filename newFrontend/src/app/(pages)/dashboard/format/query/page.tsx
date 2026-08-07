@@ -361,27 +361,27 @@ export default function QueryPage() {
             </div>
           </div>
 
-          <div className='grid grid-cols-1 md:grid-cols-4 gap-4 items-center'>
-            <div className='relative w-full h-28 rounded-xl border border-border/50 bg-muted/20 overflow-hidden'>
+          <div className='flex flex-col sm:flex-row items-center sm:items-start gap-4 p-1'>
+            <div className='relative aspect-square size-36 sm:size-40 rounded-xl border border-border/60 bg-muted/20 overflow-hidden shrink-0 shadow-xs'>
               {queryInfo?.thumbnail ? (
-                <img src={queryInfo.thumbnail} alt={queryInfo.name} className='w-full h-full object-cover' />
+                <img src={queryInfo.thumbnail} alt={queryInfo.name} className='w-full h-full object-cover hover:scale-105 transition-transform duration-300' />
               ) : (
                 <div className='w-full h-full flex items-center justify-center text-muted-foreground/30'>
                   <ImageIcon className='size-6' />
                 </div>
               )}
             </div>
-            <div className='md:col-span-3 space-y-2 font-sans'>
+            <div className='flex-1 space-y-3 font-sans pt-1'>
               <div className='flex flex-wrap items-center gap-2 text-xs'>
-                <span className='text-muted-foreground font-medium'>Active Land Cover Classes:</span>
+                <span className='text-muted-foreground font-semibold uppercase tracking-wide text-[11px]'>Active Land Cover Classes:</span>
                 {queryInfo?.active_classes?.map((cls, idx) => (
-                  <Badge key={idx} variant='secondary' className='text-[10px] px-2 py-0.5 bg-muted/60 text-foreground border border-border/40'>
+                  <Badge key={idx} variant='secondary' className='text-[11px] font-medium px-2.5 py-0.5 bg-muted/60 text-foreground border border-border/40'>
                     {cls}
                   </Badge>
                 )) ?? <span className='text-muted-foreground italic text-xs'>Loading taxonomy...</span>}
               </div>
               <p className='text-xs text-muted-foreground leading-relaxed'>
-                Multi-sensor query execution using SABER continuous flow matching (CFM) bridge translation and cosine similarity FAISS retrieval.
+                Multi-sensor query scene execution using SABER continuous flow matching (CFM) probability ODE bridge translation and cosine similarity FAISS retrieval.
               </p>
             </div>
           </div>
