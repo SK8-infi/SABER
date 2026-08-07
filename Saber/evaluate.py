@@ -132,28 +132,19 @@ def main() -> None:
                     res[f"map@{k}"] = float(np.mean(map_list))
                 return res
 
-            # 1. Direct SAR Encoder (s1_embeds -> s2_embeds)
+            # 1. Direct Cross-Modal SAR Encoder (s1_embeds -> s2_embeds)
             if "s1_embeds" in db and "s2_embeds" in db:
                 m_s1 = evaluate_payload_embeddings(db["s1_embeds"].astype(np.float32), db["s2_embeds"].astype(np.float32), labels, labels, k_list=[5, 10])
-                logger.info("--- [1/3] Cross-Modal SAR Encoder (S1 -> S2 Optical) ---")
+                logger.info("--- [1/2] Cross-Modal SAR Encoder (S1 -> S2 Optical) ---")
                 logger.info(f"  mAP@5   : {m_s1['map@5']:.4f}  |  mAP@10  : {m_s1['map@10']:.4f}")
                 logger.info(f"  F1@5    : {m_s1['f1@5']:.4f}  |  F1@10   : {m_s1['f1@10']:.4f}")
                 logger.info(f"  PREC@5  : {m_s1['precision@5']:.4f}  |  PREC@10 : {m_s1['precision@10']:.4f}")
                 logger.info(f"  REC@5   : {m_s1['recall@5']:.4f}  |  REC@10  : {m_s1['recall@10']:.4f}")
 
-            # 2. CFM Translated SAR (s1_translated_embeds -> s2_embeds)
-            if "s1_translated_embeds" in db and "s2_embeds" in db:
-                m_trans = evaluate_payload_embeddings(db["s1_translated_embeds"].astype(np.float32), db["s2_embeds"].astype(np.float32), labels, labels, k_list=[5, 10])
-                logger.info("--- [2/3] CFM Latent Bridge Translation (S1_trans -> S2 Optical) ---")
-                logger.info(f"  mAP@5   : {m_trans['map@5']:.4f}  |  mAP@10  : {m_trans['map@10']:.4f}")
-                logger.info(f"  F1@5    : {m_trans['f1@5']:.4f}  |  F1@10   : {m_trans['f1@10']:.4f}")
-                logger.info(f"  PREC@5  : {m_trans['precision@5']:.4f}  |  PREC@10 : {m_trans['precision@10']:.4f}")
-                logger.info(f"  REC@5   : {m_trans['recall@5']:.4f}  |  REC@10  : {m_trans['recall@10']:.4f}")
-
-            # 3. Same-Modal Optical Ceiling (s2_embeds -> s2_embeds)
+            # 2. Same-Modal Optical Ceiling (s2_embeds -> s2_embeds)
             if "s2_embeds" in db:
                 m_s2 = evaluate_payload_embeddings(db["s2_embeds"].astype(np.float32), db["s2_embeds"].astype(np.float32), labels, labels, k_list=[5, 10], is_same_modal=True, q_names=names)
-                logger.info("--- [3/3] Same-Modal Optical Ceiling (S2 -> S2 Optical) ---")
+                logger.info("--- [2/2] Same-Modal Optical Ceiling (S2 -> S2 Optical) ---")
                 logger.info(f"  mAP@5   : {m_s2['map@5']:.4f}  |  mAP@10  : {m_s2['map@10']:.4f}")
                 logger.info(f"  F1@5    : {m_s2['f1@5']:.4f}  |  F1@10   : {m_s2['f1@10']:.4f}")
                 logger.info(f"  PREC@5  : {m_s2['precision@5']:.4f}  |  PREC@10 : {m_s2['precision@10']:.4f}")
