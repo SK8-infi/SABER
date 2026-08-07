@@ -111,18 +111,16 @@ export default function Navbar({
                 <a
                   key={`${action.href}-${action.text}`}
                   href={action.href}
-                  className="hidden text-sm md:block"
+                  className="text-muted-foreground hover:text-foreground text-sm font-medium"
                 >
                   {action.text}
                 </a>
               ),
             )}
             <Sheet>
-              <SheetTrigger asChild>
-                <Button variant="ghost" size="icon" className="shrink-0 md:hidden">
-                  <Menu className="size-5" />
-                  <span className="sr-only">Toggle navigation menu</span>
-                </Button>
+              <SheetTrigger className={cn(buttonVariants({ variant: "ghost", size: "icon" }), "shrink-0 md:hidden")}>
+                <Menu className="size-5" />
+                <span className="sr-only">Toggle navigation menu</span>
               </SheetTrigger>
               <SheetContent side="right">
                 <SheetTitle className="sr-only">Navigation menu</SheetTitle>

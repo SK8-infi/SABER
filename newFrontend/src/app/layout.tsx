@@ -30,6 +30,7 @@ const geistMono = Geist_Mono({
 })
 
 export const metadata: Metadata = {
+  metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'),
   title: 'SABER - Scientific Retrieval Platform',
   description:
     'Sensor-Agnostic Bridged Embedding Retrieval Platform for Multi-Sensor Satellite Data (ISRO BAH 2026)',

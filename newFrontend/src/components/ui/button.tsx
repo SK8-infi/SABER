@@ -61,13 +61,14 @@ function Button({
   ...props
 }: ButtonProps) {
   const renderElem = asChild && children && React.isValidElement(children) ? children : render
+  const computedNativeButton = nativeButton !== undefined ? nativeButton : !renderElem
 
   return (
     <ButtonPrimitive
       data-slot='button'
       className={cn(buttonVariants({ variant, size, className }))}
       render={renderElem}
-      nativeButton={nativeButton}
+      nativeButton={computedNativeButton}
       {...(props as any)}
     >
       {asChild ? null : children}
