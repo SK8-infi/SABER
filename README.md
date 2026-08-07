@@ -39,8 +39,8 @@ graph TD
         Proj_G["Patch Projection Layer"]
         ViT_Q["Frozen DOFA ViT blocks"]
         ViT_G["Frozen DOFA ViT blocks"]
-        LoRA_Q["Trainable LoRA Adapters (r=8, α=16)"]:::process
-        LoRA_G["Trainable LoRA Adapters (r=8, α=16)"]:::process
+        LoRA_Q["Trainable LoRA Adapters (r=16, α=32)"]:::process
+        LoRA_G["Trainable LoRA Adapters (r=16, α=32)"]:::process
         ProjHead_Q["3-Layer Projection Head (MLP)"]
         ProjHead_G["3-Layer Projection Head (MLP)"]
     end
@@ -52,7 +52,7 @@ graph TD
 
     subgraph Alignment ["Stochastic Latent Bridge (Flow Matching)"]
         CFM["Conditional Flow Matching (CFM) Bridge"]
-        Euler["5-Step Euler ODE Solver"]:::process
+        Euler["10-Step Euler ODE Solver"]:::process
         Z1_to_Z2["Mapped Embeddings (z1 -> z2)"]:::query
     end
 
@@ -113,16 +113,16 @@ Rather than using static RGB backbones, SABER uses a domain-oriented foundation 
 This dynamic conditioning allows the model to inherently adapt to the spectral characteristics of the sensor.
 
 ### 2. Parameter-Efficient Fine-Tuning (PEFT LoRA)
-To adapt the pre-trained foundation encoder to Earth observation tasks without overfitting or representation collapse, Low-Rank Adaptation (LoRA) adapters are applied to the query, value, and key projection heads of the Transformer blocks:
-*   **Rank ($r$)**: 8, **Alpha ($\alpha$)**: 16
-*   **Parameter Profile**: **99.74%** of the ViT backbone parameters remain completely frozen (`111.3M` frozen, `294.9K` trainable). This ensures training stability and a low memory footprint (VRAM $< 1\,\text{GB}$).
+To adapt the pre-trained foundation encoder to Earth observation tasks without overfitting or representation collapse, Low-Rank Adaptation (LoRA) adapters are applied to the attention (`qkv`) and MLP (`fc1`, `fc2`) layers of the Transformer blocks:
+*   **Rank ($r$)**: 16, **Alpha ($\alpha$)**: 32
+*   **Parameter Profile**: **~98.18%** of the ViT backbone parameters remain completely frozen (`111.3M` frozen, `2.06M` trainable adapters). This ensures training stability, high representation capability, and a low memory footprint (VRAM $< 1\,\text{GB}$).
 
 ### 3. Stochastic Latent Bridge (Conditional Flow Matching)
 To map the representations of a source modality $z_{1}$ (e.g. SAR) to a target modality $z_{2}$ (e.g. MS), we train a generative **Conditional Flow Matching (CFM)** latent bridge. CFM models a vector field $v(z, \tau)$ that defines a probability path transporting the source probability distribution to the target hypersphere:
 
 $$\frac{\text{d}z}{\text{d}\tau} = v(z, \tau; z_{query}), \quad \tau \in [0, 1]$$
 
-At inference, we integrate the vector field using a **5-step Euler ODE solver** on the GPU to generate highly aligned target-like query descriptors.
+At inference, we integrate the vector field using a **10-step Euler ODE solver** on the GPU to generate highly aligned target-like query descriptors.
 
 ### 4. Metric-Aware Embedding Geometry (VICReg + Jaccard Ranking)
 The aligned space is optimized using a joint loss constraint:
