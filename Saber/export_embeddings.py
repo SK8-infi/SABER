@@ -160,8 +160,8 @@ def export_embeddings(
             x_s1 = images[:, :2, :, :]
             x_s2 = images[:, 2:, :, :]
 
-            z1_raw, z2_raw, _, logits_s1, logits_s2 = model(x_s1, x_s2)
-            z1 = F.normalize(z1_raw, p=2, dim=-1)
+            z1_raw, z2_raw, z1_pred_raw, logits_s1, logits_s2 = model(x_s1, x_s2)
+            z1 = F.normalize(z1_pred_raw if z1_pred_raw is not None else z1_raw, p=2, dim=-1)
             z2 = F.normalize(z2_raw, p=2, dim=-1)
 
             p1 = torch.sigmoid(logits_s1)
