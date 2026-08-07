@@ -21,45 +21,65 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 
-const DEMO_PRESETS = [
-  {
-    id: 'derna',
-    title: 'Storm Daniel Flood Inundation (Derna, Libya)',
-    cloudCover: '95% Cloud Cover',
-    sarImg: '/images/satellite/query_sar_hero.png',
-    cloudyOptImg: '/images/satellite/cloudy_optical.png',
-    retrievedOptImg: '/images/satellite/candidate_1.png',
-    retrievedCandidates: [
-      { rank: 1, name: 'S2_ClearSky_PreFlood_01.png', sim: 96.4, jaccard: 88.0, cloudCover: '0%', img: '/images/satellite/candidate_1.png', tags: ['Urban fabric', 'Arable land'] },
-      { rank: 2, name: 'S2_ClearSky_Archive_02.png', sim: 94.1, jaccard: 85.2, cloudCover: '0%', img: '/images/satellite/candidate_2.png', tags: ['Arable land', 'Water body'] },
-      { rank: 3, name: 'S2_ClearSky_Archive_03.png', sim: 92.8, jaccard: 81.4, cloudCover: '0.2%', img: '/images/satellite/candidate_3.png', tags: ['Pastures', 'Forest'] },
-      { rank: 4, name: 'S2_ClearSky_Archive_04.png', sim: 89.5, jaccard: 78.6, cloudCover: '0%', img: '/images/satellite/candidate_4.png', tags: ['Coastal wetland'] },
-      { rank: 5, name: 'S2_ClearSky_Archive_05.png', sim: 87.2, jaccard: 75.0, cloudCover: '0.5%', img: '/images/satellite/candidate_5.png', tags: ['Industrial zone'] },
-    ],
-  },
-  {
-    id: 'monsoon',
-    title: 'Monsoon Farmland Cloud Cover (Central Brazil)',
-    cloudCover: '88% Overcast',
-    sarImg: '/images/satellite/usecase_crop_sar.png',
-    cloudyOptImg: '/images/satellite/cloudy_optical.png',
-    retrievedOptImg: '/images/satellite/usecase_crop_opt.png',
-    retrievedCandidates: [
-      { rank: 1, name: 'S2_ClearSky_Kharif_01.png', sim: 95.8, jaccard: 87.2, cloudCover: '0%', img: '/images/satellite/usecase_crop_opt.png', tags: ['Cropland', 'Agriculture'] },
-      { rank: 2, name: 'S2_ClearSky_Farmland_02.png', sim: 93.4, jaccard: 84.0, cloudCover: '0%', img: '/images/satellite/candidate_2.png', tags: ['Irrigated crops'] },
-      { rank: 3, name: 'S2_ClearSky_Farmland_03.png', sim: 91.2, jaccard: 80.5, cloudCover: '0%', img: '/images/satellite/candidate_3.png', tags: ['Pastures'] },
-      { rank: 4, name: 'S2_ClearSky_Farmland_04.png', sim: 88.9, jaccard: 77.8, cloudCover: '0.1%', img: '/images/satellite/candidate_4.png', tags: ['Vegetation'] },
-      { rank: 5, name: 'S2_ClearSky_Farmland_05.png', sim: 86.5, jaccard: 74.2, cloudCover: '0.3%', img: '/images/satellite/candidate_5.png', tags: ['Soil'] },
-    ],
-  },
-]
+const DEMO_PRESET = {
+  id: 'ben14k_hardcoded',
+  title: 'BEN-14K Sentinel-1/2 Paired Scene (ROIs18_Nov2023_01)',
+  cloudCover: '92% Cloud Patch Overlay',
+  cloudyOptImg: '/images/satellite/dataset_optical_cloud_patched.png',
+  sarImg: '/images/satellite/dataset_sar_query.png',
+  originalOptImg: '/images/satellite/dataset_optical_original.png',
+  retrievedCandidates: [
+    {
+      rank: 1,
+      name: 'ROIs18_Nov2023_01_original.png',
+      sim: 96.4,
+      jaccard: 88.0,
+      cloudCover: '0% (Original Restored)',
+      img: '/images/satellite/dataset_optical_original.png',
+      tags: ['Arable land', 'Urban fabric', 'Cropland'],
+    },
+    {
+      rank: 2,
+      name: 'ROIs18_Nov2023_02.png',
+      sim: 94.1,
+      jaccard: 85.2,
+      cloudCover: '0%',
+      img: '/images/satellite/candidate_2.png',
+      tags: ['Arable land', 'Water body'],
+    },
+    {
+      rank: 3,
+      name: 'ROIs18_Nov2023_03.png',
+      sim: 92.8,
+      jaccard: 81.4,
+      cloudCover: '0.2%',
+      img: '/images/satellite/candidate_3.png',
+      tags: ['Pastures', 'Forest'],
+    },
+    {
+      rank: 4,
+      name: 'ROIs18_Nov2023_04.png',
+      sim: 89.5,
+      jaccard: 78.6,
+      cloudCover: '0%',
+      img: '/images/satellite/candidate_4.png',
+      tags: ['Coastal wetland'],
+    },
+    {
+      rank: 5,
+      name: 'ROIs18_Nov2023_05.png',
+      sim: 87.2,
+      jaccard: 75.0,
+      cloudCover: '0.5%',
+      img: '/images/satellite/candidate_5.png',
+      tags: ['Industrial zone'],
+    },
+  ],
+}
 
 export default function CloudFreeDemoPage() {
-  const [selectedPresetId, setSelectedPresetId] = useState<string>('derna')
   const [isProcessing, setIsProcessing] = useState<boolean>(false)
   const [hasRetrieved, setHasRetrieved] = useState<boolean>(true)
-
-  const activePreset = DEMO_PRESETS.find((p) => p.id === selectedPresetId) ?? DEMO_PRESETS[0]
 
   const handleRunRetrieval = () => {
     setIsProcessing(true)
@@ -78,14 +98,14 @@ export default function CloudFreeDemoPage() {
             <div className="space-y-1.5">
               <div className="flex items-center gap-2.5 flex-wrap">
                 <h1 className="text-xl font-bold tracking-tight text-foreground font-sans">
-                  Cloud-Free Image Retrieval Demonstration
+                  Cloud-Free Satellite Image Retrieval Demonstration
                 </h1>
                 <Badge className="bg-[#FBBA72]/15 text-[#FBBA72] border-[#FBBA72]/40 font-semibold px-2.5 py-0.5 text-xs rounded-full font-sans">
                   SAR Microwave Cloud-Bypass Engine
                 </Badge>
               </div>
               <p className="text-xs text-muted-foreground font-sans max-w-2xl">
-                Optical satellite sensors (Sentinel-2) cannot see ground features when blocked by dense clouds. SABER inputs the matching Sentinel-1 SAR Radar image, transports its embedding through the CFM Latent ODE Bridge, and retrieves the Top-5 historical cloud-free optical reference scenes with 0% cloud cover.
+                Demonstration using a hardcoded optical image from our BEN-14K dataset overlaid with a Gemini cloud patch. When querying its corresponding Sentinel-1 SAR Radar image, SABER bypasses the cloud obscuration via the CFM Latent ODE Bridge and retrieves the original 0%-cloud-cover optical dataset image at Rank #1.
               </p>
             </div>
 
@@ -102,56 +122,40 @@ export default function CloudFreeDemoPage() {
             </div>
           </div>
 
-          {/* Preset Scenario Selector Buttons */}
-          <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-border/40">
-            <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mr-2 font-mono">
-              Select Demo Scenario:
-            </span>
-            {DEMO_PRESETS.map((preset) => {
-              const isActive = preset.id === selectedPresetId
-              return (
-                <button
-                  key={preset.id}
-                  onClick={() => {
-                    setSelectedPresetId(preset.id)
-                    setHasRetrieved(true)
-                  }}
-                  className={cn(
-                    'px-3.5 py-1.5 rounded-full text-xs font-semibold border transition-all cursor-pointer font-sans',
-                    isActive
-                      ? 'border-[#FBBA72]/60 bg-[#FBBA72]/15 text-[#FBBA72] shadow-xs'
-                      : 'border-border/60 bg-muted/20 text-muted-foreground hover:text-foreground hover:bg-muted/40',
-                  )}
-                >
-                  {preset.title} ({preset.cloudCover})
-                </button>
-              )
-            })}
+          {/* Active Dataset Scene Info */}
+          <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-border/40 text-xs font-sans">
+            <span className="text-muted-foreground font-mono">Dataset Scene:</span>
+            <Badge variant="outline" className="border-border/60 bg-muted/20 text-foreground font-mono text-xs">
+              {DEMO_PRESET.title}
+            </Badge>
+            <Badge variant="outline" className="border-rose-500/40 text-rose-400 bg-rose-500/10 font-mono text-xs">
+              {DEMO_PRESET.cloudCover}
+            </Badge>
           </div>
         </CardContent>
       </Card>
 
       {/* ── 3-Stage Pipeline Demonstration View ── */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        {/* Stage 1: Cloud-Obscured Optical Input */}
+        {/* Stage 1: Cloud-Obscured Optical Input (Gemini Cloud Patch) */}
         <Card className="border-border/60 bg-card/60 backdrop-blur-xs flex flex-col justify-between">
           <CardContent className="p-4 space-y-3">
             <div className="flex items-center justify-between">
               <Badge variant="outline" className="border-rose-500/40 text-rose-400 bg-rose-500/10 text-[10px] font-bold">
-                STAGE 1 · OPTICAL BLINDSPOT
+                STAGE 1 · CLOUD-PATCHED OPTICAL
               </Badge>
-              <span className="text-[10px] font-mono text-rose-400 font-bold">{activePreset.cloudCover}</span>
+              <span className="text-[10px] font-mono text-rose-400 font-bold">92% Cloud Obscuration</span>
             </div>
 
             <div className="space-y-1">
-              <h3 className="text-sm font-bold text-foreground">Cloud-Obscured Optical Scene</h3>
-              <p className="text-[11px] text-muted-foreground">Sentinel-2 Multispectral · Ground hidden under storm clouds</p>
+              <h3 className="text-sm font-bold text-foreground">Optical Scene + Gemini Cloud Patch</h3>
+              <p className="text-[11px] text-muted-foreground">Sentinel-2 Optical image with Gemini cloud overlay</p>
             </div>
 
             <div className="relative aspect-square rounded-xl overflow-hidden border border-rose-500/30 bg-zinc-950 group">
               <img
-                src={activePreset.cloudyOptImg}
-                alt="Cloud-obscured Optical Scene"
+                src={DEMO_PRESET.cloudyOptImg}
+                alt="Dataset Optical Scene with Gemini Cloud Patch"
                 className="w-full h-full object-cover"
               />
               <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
@@ -162,30 +166,30 @@ export default function CloudFreeDemoPage() {
             </div>
 
             <p className="text-[11px] text-muted-foreground leading-relaxed pt-1">
-              Optical sensors operate in visible/infrared spectrum and cannot penetrate dense clouds or smoke. Ground features are completely obscured.
+              Optical image from our dataset obscured by cloud patch generated via Gemini. Direct optical search fails due to cloud pixel corruption.
             </p>
           </CardContent>
         </Card>
 
-        {/* Stage 2: Sentinel-1 SAR Cloud-Penetrating Query */}
+        {/* Stage 2: Sentinel-1 SAR Radar Query */}
         <Card className="border-border/60 bg-card/60 backdrop-blur-xs flex flex-col justify-between">
           <CardContent className="p-4 space-y-3">
             <div className="flex items-center justify-between">
               <Badge variant="outline" className="border-sky-500/40 text-sky-400 bg-sky-500/10 text-[10px] font-bold">
-                STAGE 2 · SAR RADAR QUERY
+                STAGE 2 · CORRESPONDING SAR QUERY
               </Badge>
               <span className="text-[10px] font-mono text-sky-400 font-bold">100% Cloud Bypass</span>
             </div>
 
             <div className="space-y-1">
-              <h3 className="text-sm font-bold text-foreground">Sentinel-1 SAR Radar Query</h3>
-              <p className="text-[11px] text-muted-foreground">Microwave backscatter · Sees through clouds & darkness</p>
+              <h3 className="text-sm font-bold text-foreground">Corresponding Sentinel-1 SAR Scene</h3>
+              <p className="text-[11px] text-muted-foreground">Microwave radar image of the exact same coordinate</p>
             </div>
 
             <div className="relative aspect-square rounded-xl overflow-hidden border border-sky-500/30 bg-zinc-950 group">
               <img
-                src={activePreset.sarImg}
-                alt="Sentinel-1 SAR Radar Scene"
+                src={DEMO_PRESET.sarImg}
+                alt="Corresponding Sentinel-1 SAR Radar Scene"
                 className="w-full h-full object-cover grayscale contrast-125 brightness-90"
               />
               <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
@@ -196,7 +200,7 @@ export default function CloudFreeDemoPage() {
             </div>
 
             <p className="text-[11px] text-muted-foreground leading-relaxed pt-1">
-              Sentinel-1 Synthetic Aperture Radar (SAR) transmits microwave pulses (5.405 GHz) that pass right through cloud cover, capturing ground surface geometry.
+              Sentinel-1 SAR microwave radar pulses pass straight through cloud cover, capturing the exact ground texture and land-cover geometry.
             </p>
           </CardContent>
         </Card>
@@ -265,10 +269,10 @@ export default function CloudFreeDemoPage() {
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <h2 className="text-base font-bold text-foreground font-sans">
-                Retrieved Top-5 Cloud-Free Historical Optical Scenes (Sentinel-2)
+                Retrieved Top-5 Cloud-Free Optical Scenes from BEN-14K Dataset
               </h2>
               <Badge className="bg-emerald-500/10 text-emerald-400 border-emerald-500/30 text-xs font-semibold">
-                0% Cloud Cover Guaranteed
+                Original Cloud-Free Optical Scene Restored at #1
               </Badge>
             </div>
             <span className="text-xs font-mono text-muted-foreground">
@@ -277,7 +281,7 @@ export default function CloudFreeDemoPage() {
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-5 gap-3">
-            {activePreset.retrievedCandidates.map((candidate) => (
+            {DEMO_PRESET.retrievedCandidates.map((candidate) => (
               <Card
                 key={candidate.rank}
                 className={cn(
@@ -296,7 +300,7 @@ export default function CloudFreeDemoPage() {
                           : 'border-[#FBBA72]/50 text-[#FBBA72] bg-[#FBBA72]/10',
                       )}
                     >
-                      #{candidate.rank} {candidate.rank === 1 ? 'TOP MATCH' : ''}
+                      #{candidate.rank} {candidate.rank === 1 ? 'ORIGINAL RESTORED' : ''}
                     </Badge>
                     <span className="font-mono font-bold text-foreground">{candidate.sim}%</span>
                   </div>
@@ -308,7 +312,7 @@ export default function CloudFreeDemoPage() {
                       className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                     />
                     <div className="absolute top-1.5 right-1.5 px-1.5 py-0.5 rounded bg-emerald-500/90 text-white font-mono text-[9px] font-bold">
-                      {candidate.cloudCover} Clouds
+                      {candidate.cloudCover}
                     </div>
                   </div>
 
