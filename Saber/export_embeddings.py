@@ -167,12 +167,12 @@ def export_embeddings(
             p1 = torch.sigmoid(logits_s1)
             p2 = torch.sigmoid(logits_s2)
 
-            # CFM Bridge translation S1 -> S2 (raw CFM translated latent vector)
-            try:
-                z1_trans_raw = model.bridge(z1, c_class=p1)
-            except TypeError:
+            # CFM Bridge translation S1 -> S2 (clean 10-step ODE translation without un-trained class noise)
+            if getattr(model, "bridge", None) is not None:
                 z1_trans_raw = model.bridge(z1)
-            z1_trans = F.normalize(z1_trans_raw, p=2, dim=-1)
+                z1_trans = F.normalize(z1_trans_raw, p=2, dim=-1)
+            else:
+                z1_trans = z1
 
             s1_list.append(z1.cpu().numpy())
             s2_list.append(z2.cpu().numpy())
