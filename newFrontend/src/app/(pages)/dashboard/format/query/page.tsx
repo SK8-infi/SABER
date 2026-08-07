@@ -22,6 +22,7 @@ import { UserViewLeftPanel, type SceneData } from '@/views/apps/users/view/user-
 import { useRetrievalParams } from '@/contexts/retrieval-params-context'
 
 import MultiSensorInspector from '@/components/shared/MultiSensorInspector'
+import CustomImageQueryUpload from '@/components/shared/CustomImageQueryUpload'
 
 /* ── API types ─────────────────────────────────────────────── */
 interface Candidate {
@@ -340,7 +341,9 @@ export default function QueryPage() {
   const [inspectorCandidate, setInspectorCandidate] = useState<Candidate | null>(null)
 
   return (
-    <div className='w-full space-y-6'>
+    <div className='w-full space-y-6 font-sans'>
+      {/* ── Custom Image Query Upload ── */}
+      <CustomImageQueryUpload />
 
       {/* ── Top query image card ── */}
       <Card className='border-border/60 shadow-sm overflow-hidden'>

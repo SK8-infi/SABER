@@ -1,5 +1,6 @@
 import React from 'react'
 import EmbeddingSpaceGraph from '@/components/shared/EmbeddingSpaceGraph'
+import CustomImageQueryUpload from '@/components/shared/CustomImageQueryUpload'
 import { Badge } from '@/components/ui/badge'
 import { SparklesIcon, LayersIcon } from 'lucide-react'
 
@@ -39,6 +40,9 @@ export default function EmbeddingSpacePage() {
 
       {/* Main Graph Component */}
       <EmbeddingSpaceGraph maxSamples={1000} />
+
+      {/* Custom Image Upload Query Engine */}
+      <CustomImageQueryUpload />
     </div>
   )
 }
