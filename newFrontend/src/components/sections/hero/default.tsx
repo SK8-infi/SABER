@@ -40,15 +40,11 @@ const DEFAULT_HERO_BUTTONS: HeroButtonProps[] = [
 ];
 
 const DEFAULT_HERO_BADGE = (
-  <Badge variant="outline" className="animate-appear">
-    <span className="text-muted-foreground">
-      New version of Launch UI is out!
-    </span>
-    <a href={siteConfig.getStartedUrl} className="flex items-center gap-1">
-      Get started
-      <ArrowRightIcon className="size-3" />
-    </a>
-  </Badge>
+  <div className="animate-appear flex flex-wrap items-center justify-center gap-2">
+    <Badge variant="outline">ISRO BAH 2026</Badge>
+    <Badge variant="outline">PS-11</Badge>
+    <Badge variant="outline">Team Sentinel8</Badge>
+  </div>
 );
 
 const DEFAULT_HERO_MOCKUP = (
@@ -64,8 +60,8 @@ const DEFAULT_HERO_MOCKUP = (
 );
 
 export default function Hero({
-  title = "Give your big idea the design it deserves",
-  description = "Professionally designed blocks and templates built with React, Shadcn/ui and Tailwind that will help your product stand out.",
+  title = "SABER — Sensor-Agnostic Bridged Embedding Retrieval",
+  description = "Cross-modal satellite image retrieval. SAR & Multispectral EO modalities unified onto a metric-optimised hypersphere via wavelength hypernetworks, LoRA adapters, and Conditional Flow Matching ODE latent bridges.",
   mockup = DEFAULT_HERO_MOCKUP,
   badge = DEFAULT_HERO_BADGE,
   buttons = DEFAULT_HERO_BUTTONS,
@@ -74,17 +70,17 @@ export default function Hero({
   return (
     <Section
       className={cn(
-        "fade-bottom overflow-hidden pb-0 sm:pb-0 md:pb-0",
+        "fade-bottom overflow-hidden pt-10 sm:pt-14 pb-0 sm:pb-0 md:pb-0",
         className,
       )}
     >
-      <div className="max-w-container mx-auto flex flex-col gap-12 pt-16 sm:gap-24">
-        <div className="flex flex-col items-center gap-6 text-center sm:gap-12">
+      <div className="max-w-container mx-auto flex flex-col gap-8 pt-4 sm:gap-12">
+        <div className="flex flex-col items-center gap-4 text-center sm:gap-6">
           {badge !== false && badge}
-          <h1 className="animate-appear relative z-10 inline-block bg-gradient-to-r from-foreground via-brand-foreground to-foreground bg-clip-text text-4xl leading-tight font-semibold text-balance text-transparent drop-shadow-[0_0_35px_rgba(251,186,114,0.35)] sm:text-6xl sm:leading-tight md:text-8xl md:leading-tight">
+          <h1 className="animate-appear from-foreground to-foreground dark:to-muted-foreground relative z-10 inline-block bg-linear-to-r bg-clip-text text-3xl font-semibold tracking-tight text-balance text-transparent drop-shadow-2xl sm:text-5xl md:text-6xl leading-tight sm:leading-tight md:leading-[1.15]">
             {title}
           </h1>
-          <p className="text-md animate-appear text-muted-foreground relative z-10 max-w-[740px] font-medium text-balance opacity-0 delay-100 sm:text-xl">
+          <p className="text-sm animate-appear text-muted-foreground relative z-10 max-w-[850px] font-medium text-balance opacity-0 delay-100 sm:text-lg">
             {description}
           </p>
           {buttons !== false && buttons.length > 0 && (
@@ -118,7 +114,7 @@ export default function Hero({
               </MockupFrame>
               <Glow
                 variant="top"
-                className="animate-appear-zoom opacity-0 delay-1000"
+                className="animate-appear-zoom opacity-100 delay-500"
               />
             </div>
           )}

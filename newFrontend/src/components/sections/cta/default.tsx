@@ -24,16 +24,18 @@ const DEFAULT_CTA_BUTTONS: CTAButtonProps[] = [
 ];
 
 export default function CTA({
-  title = "Start building",
+  title = "",
   buttons = DEFAULT_CTA_BUTTONS,
   className,
 }: CTAProps) {
   return (
-    <Section className={cn("group relative overflow-hidden", className)}>
+    <Section className={cn("group relative py-16 sm:py-24", className)}>
       <div className="max-w-container relative z-10 mx-auto flex flex-col items-center gap-6 text-center sm:gap-8">
-        <h2 className="max-w-[640px] text-3xl leading-tight font-semibold sm:text-5xl sm:leading-tight">
-          {title}
-        </h2>
+        {title ? (
+          <h2 className="max-w-[640px] text-3xl leading-tight font-semibold sm:text-5xl sm:leading-tight">
+            {title}
+          </h2>
+        ) : null}
         {buttons !== false && buttons.length > 0 && (
           <div className="flex justify-center gap-4">
             {buttons.map((button) => (
@@ -51,8 +53,8 @@ export default function CTA({
           </div>
         )}
       </div>
-      <div className="absolute top-0 left-0 h-full w-full translate-y-[1rem] opacity-80 transition-all duration-500 ease-in-out group-hover:translate-y-[-2rem] group-hover:opacity-100">
-        <Glow variant="bottom" />
+      <div className="absolute inset-0 pointer-events-none opacity-90 transition-opacity duration-500 group-hover:opacity-100 [mask-image:radial-gradient(ellipse_at_center,black_35%,transparent_85%)]">
+        <Glow variant="center" />
       </div>
     </Section>
   );

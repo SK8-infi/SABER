@@ -61,6 +61,11 @@ export const navItems: NavItem[] = [
         icon: 'Activity',
         label: 'Training',
         href: '/dashboard/format/training'
+      },
+      {
+        icon: 'Share2',
+        label: 'Embedding Space',
+        href: '/dashboard/format/embeddings'
       }
     ]
   }
