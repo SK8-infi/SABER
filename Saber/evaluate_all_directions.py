@@ -127,16 +127,14 @@ def main() -> None:
     configured_dir = config.get("checkpoint_dir", "checkpoints")
     local_encoder_candidates = [
         args.checkpoint if args.checkpoint else None,
+        "/content/drive/MyDrive/SABER_Data/SOTA/latest_ben14k.pth",
+        "/content/drive/Shareddrives/SABER_Data/SOTA/latest_ben14k.pth",
+        "/content/drive/MyDrive/SOTA/latest_ben14k.pth",
         "checkpoints/latest_ben14k.pth",
         "checkpoints/latest_dsrsid.pth",
         "checkpoints/latest.pth",
         "/content/SABER/checkpoints/latest_ben14k.pth",
-        "/content/drive/Shareddrives/SABER_Data/SOTA/latest_ben14k.pth",
-        "/content/drive/MyDrive/SABER_Data/SOTA/latest_ben14k.pth",
-        "/content/drive/MyDrive/SOTA/latest_ben14k.pth",
         os.path.join(configured_dir, "latest_ben14k.pth"),
-        "checkpoints/saber_unified_clean.pth",
-        "checkpoints/saber_unified.pth",
     ]
 
     encoder_loaded = False
@@ -165,14 +163,13 @@ def main() -> None:
     if getattr(model, "bridge", None) is not None:
         local_bridge_candidates = [
             args.bridge_checkpoint if args.bridge_checkpoint else None,
+            "/content/drive/MyDrive/SABER_Data/SOTA/bridge_best_ben14k.pth",
+            "/content/drive/Shareddrives/SABER_Data/SOTA/bridge_best_ben14k.pth",
+            "/content/drive/MyDrive/SOTA/bridge_best_ben14k.pth",
             "checkpoints/bridge_best_ben14k.pth",
             "checkpoints/bridge_best.pth",
             "/content/SABER/checkpoints/bridge_best_ben14k.pth",
-            "/content/drive/Shareddrives/SABER_Data/SOTA/bridge_best_ben14k.pth",
-            "/content/drive/MyDrive/SABER_Data/SOTA/bridge_best_ben14k.pth",
-            "/content/drive/MyDrive/SOTA/bridge_best_ben14k.pth",
             os.path.join(configured_dir, "bridge_best_ben14k.pth"),
-            "checkpoints/bridge_unified.pth",
         ]
 
         bridge_loaded = False

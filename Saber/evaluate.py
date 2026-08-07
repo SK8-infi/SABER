@@ -145,18 +145,14 @@ def main() -> None:
     configured_dir = config.get("checkpoint_dir", "checkpoints")
     local_encoder_candidates = [
         args.checkpoint if args.checkpoint else None,
+        "/content/drive/MyDrive/SABER_Data/SOTA/latest_ben14k.pth",
+        "/content/drive/Shareddrives/SABER_Data/SOTA/latest_ben14k.pth",
+        "/content/drive/MyDrive/SOTA/latest_ben14k.pth",
         "checkpoints/latest_ben14k.pth",
         "checkpoints/latest_dsrsid.pth",
         "checkpoints/latest.pth",
         "/content/SABER/checkpoints/latest_ben14k.pth",
-        "/content/drive/Shareddrives/SABER_Data/SOTA/latest_ben14k.pth",
-        "/content/drive/MyDrive/SABER_Data/SOTA/latest_ben14k.pth",
-        "/content/drive/MyDrive/SOTA/latest_ben14k.pth",
         os.path.join(configured_dir, "latest_ben14k.pth"),
-        "checkpoints/saber_unified_clean.pth",
-        "checkpoints/saber_unified.pth",
-        os.path.join(configured_dir, "saber_unified_clean.pth"),
-        os.path.join(configured_dir, "saber_unified.pth"),
     ]
 
     encoder_loaded = False
@@ -186,15 +182,13 @@ def main() -> None:
         configured_bridge_path = config.get("bridge", {}).get("checkpoint", "checkpoints/bridge_best_ben14k.pth")
         local_bridge_candidates = [
             configured_bridge_path if configured_bridge_path and os.path.exists(configured_bridge_path) and os.path.getsize(configured_bridge_path) > 100000 else None,
+            "/content/drive/MyDrive/SABER_Data/SOTA/bridge_best_ben14k.pth",
+            "/content/drive/Shareddrives/SABER_Data/SOTA/bridge_best_ben14k.pth",
+            "/content/drive/MyDrive/SOTA/bridge_best_ben14k.pth",
             "checkpoints/bridge_best_ben14k.pth",
             "checkpoints/bridge_best.pth",
             "/content/SABER/checkpoints/bridge_best_ben14k.pth",
-            "/content/drive/Shareddrives/SABER_Data/SOTA/bridge_best_ben14k.pth",
-            "/content/drive/MyDrive/SABER_Data/SOTA/bridge_best_ben14k.pth",
-            "/content/drive/MyDrive/SOTA/bridge_best_ben14k.pth",
             os.path.join(configured_dir, "bridge_best_ben14k.pth"),
-            "checkpoints/bridge_unified.pth",
-            os.path.join(configured_dir, "bridge_unified.pth"),
         ]
 
         bridge_loaded = False
