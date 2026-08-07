@@ -50,9 +50,7 @@ export const navItems: NavItem[] = [
       {
         icon: 'Share2',
         label: 'Interactive Query Space',
-        href: '/dashboard/format/embeddings',
-        badge: 'DEFAULT',
-        badgeClassName: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
+        href: '/dashboard/format/embeddings'
       },
       {
         icon: 'FileText',
@@ -62,9 +60,7 @@ export const navItems: NavItem[] = [
       {
         icon: 'Database',
         label: 'DSRSID 1,000 Scene Search',
-        href: '/dashboard/format/dsrsid-search',
-        badge: '1000 SCENES',
-        badgeClassName: 'bg-sky-500/10 text-sky-400 border-sky-500/30'
+        href: '/dashboard/format/dsrsid-search'
       },
       {
         icon: 'Sliders',
@@ -79,9 +75,7 @@ export const navItems: NavItem[] = [
       {
         icon: 'CloudOff',
         label: 'Cloud-Free Demonstration',
-        href: '/dashboard/format/cloud-free',
-        badge: 'DEMO',
-        badgeClassName: 'bg-[#FBBA72]/15 text-[#FBBA72] border-[#FBBA72]/40'
+        href: '/dashboard/format/cloud-free'
       }
     ]
   }
