@@ -26,6 +26,8 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { cn } from '@/lib/utils'
+import { UserViewLeftPanel, type SceneData } from '@/views/apps/users/view/user-view-left-panel'
+import MultiSensorInspector from '@/components/shared/MultiSensorInspector'
 
 export interface EmbeddingPoint {
   id: number
@@ -79,6 +81,27 @@ export interface DualRetrievalData {
   }
 }
 
+function graphCandidateToSceneData(c: RetrievedCandidate, queryClass: string): SceneData {
+  const sim = c.similarity
+  const pct = Math.min(Math.max(Math.round(sim), 0), 100)
+  const candidateClasses = c.classes && c.classes.length > 0 ? c.classes : [queryClass]
+  const hasOverlap = c.jaccard > 0 || candidateClasses.includes(queryClass)
+
+  return {
+    sceneId: c.name,
+    progressColor: 'bg-[#FBBA72]',
+    progressWidth: `w-[${pct}%]`,
+    jaccard: `${c.jaccard}%`,
+    rank: `#${c.rank}`,
+    matched: hasOverlap,
+    matchScore: `${sim}%`,
+    tags: candidateClasses.slice(0, 4).map(label => ({
+      label,
+      checked: label === queryClass || c.jaccard > 0,
+    })),
+  }
+}
+
 interface EmbeddingSpaceGraphProps {
   maxSamples?: number
 }
@@ -102,6 +125,7 @@ export default function EmbeddingSpaceGraph({ maxSamples = 1000 }: EmbeddingSpac
   // Dual Top 5 Retrieval State (Auto-fetched on node selection)
   const [dualResults, setDualResults] = useState<DualRetrievalData | null>(null)
   const [retrievalLoading, setRetrievalLoading] = useState(false)
+  const [inspectorCandidate, setInspectorCandidate] = useState<any | null>(null)
 
   // Zoom & Pan
   const [transform, setTransform] = useState({ zoom: 1.0, panX: 0, panY: 0 })
@@ -857,96 +881,36 @@ export default function EmbeddingSpaceGraph({ maxSamples = 1000 }: EmbeddingSpac
 
               {/* Same Modality Candidates */}
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
-                {dualResults.same.candidates.map((candidate) => {
-                  const queryClass = dualResults.queryPoint.dominant_class
-                  const candidateClasses = candidate.classes && candidate.classes.length > 0
-                    ? candidate.classes
-                    : [queryClass]
-                  const isMatch = candidate.jaccard > 0 || candidateClasses.includes(queryClass)
-
-                  return (
-                    <div
-                      key={`same-${candidate.rank}`}
-                      className="group relative flex flex-col justify-between gap-3 p-3 rounded-xl border border-border/60 bg-muted/10 hover:border-sky-500/50 hover:bg-muted/20 transition-all cursor-pointer"
-                      onClick={() => {
-                        const matchPoint = data?.points.find(p => p.id === candidate.id)
-                        if (matchPoint) setSelectedPoint(matchPoint)
-                      }}
-                    >
-                      <div className="flex items-center justify-between text-xs gap-1">
-                        <Badge variant="outline" className="border-sky-500/40 text-sky-400 bg-sky-500/10 font-bold px-2 py-0.5 shrink-0">
-                          Rank #{candidate.rank}
-                        </Badge>
-                        <span className="font-mono text-[11px] font-bold text-foreground shrink-0">
-                          {candidate.similarity}% match
-                        </span>
-                      </div>
-
-                      <div className="relative w-full h-32 rounded-lg border border-border/50 overflow-hidden bg-muted/40">
-                        {candidate.thumbnail ? (
-                          <img
-                            src={candidate.thumbnail}
-                            alt={candidate.name}
-                            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                          />
-                        ) : (
-                          <div className="w-full h-full flex items-center justify-center text-muted-foreground/30">
-                            <ImageIcon className="size-6" />
-                          </div>
-                        )}
-
-                        {/* Top-Right Label Match Badge */}
-                        <div className="absolute top-1.5 right-1.5">
-                          {isMatch ? (
-                            <Badge className="bg-emerald-500/90 text-white font-semibold text-[9px] px-1.5 py-0.5 shadow-sm border-0 flex items-center gap-0.5">
-                              <CheckCircle2 className="size-2.5" /> MATCHED
-                            </Badge>
-                          ) : (
-                            <Badge variant="secondary" className="bg-background/80 text-muted-foreground text-[9px] px-1.5 py-0.5 border border-border/60 backdrop-blur-md">
-                              DIFF
-                            </Badge>
-                          )}
-                        </div>
-                      </div>
-
-                      <div className="space-y-2">
-                        <p className="text-xs font-mono font-medium text-foreground truncate" title={candidate.name}>
-                          {candidate.name}
-                        </p>
-                        <div className="w-full bg-muted/40 h-1.5 rounded-full overflow-hidden">
-                          <div className="bg-sky-400 h-full rounded-full" style={{ width: `${candidate.similarity}%` }} />
-                        </div>
-
-                        {/* Class Label Matching Badges */}
-                        <div className="flex flex-wrap gap-1 pt-1">
-                          {candidateClasses.slice(0, 3).map((lbl, idx) => {
-                            const lblMatches = lbl === queryClass || candidate.jaccard > 0
-                            return (
-                              <Badge
-                                key={idx}
-                                variant="outline"
-                                className={cn(
-                                  'text-[9px] px-1.5 py-0.2 rounded-md font-sans font-medium transition-colors',
-                                  lblMatches
-                                    ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-400 font-semibold'
-                                    : 'border-border/40 text-muted-foreground bg-muted/20',
-                                )}
-                              >
-                                {lblMatches && <CheckCircle2 className="size-2.5 mr-0.5 inline text-emerald-400" />}
-                                {lbl}
-                              </Badge>
-                            )
-                          })}
-                        </div>
-
-                        <div className="flex items-center justify-between text-[10px] text-muted-foreground font-sans pt-1 border-t border-border/30">
-                          <span>Jaccard Overlap:</span>
-                          <span className="font-mono font-bold text-emerald-400">{candidate.jaccard}%</span>
-                        </div>
-                      </div>
-                    </div>
-                  )
-                })}
+                {dualResults.same.candidates.map((candidate, i) => (
+                  <UserViewLeftPanel
+                    key={`same-${candidate.rank}`}
+                    user={{
+                      id: String(candidate.id || i),
+                      name: candidate.name,
+                      avatar: candidate.thumbnail,
+                      email: '',
+                      role: 'Guest' as const,
+                      plan: 'Basic' as const,
+                      status: 'Active' as const,
+                      billing: 'Manual' as const,
+                      joinedDate: '',
+                    }}
+                    sceneData={graphCandidateToSceneData(candidate, dualResults.queryPoint.dominant_class)}
+                    onInspect={() => {
+                      const matchPoint = data?.points.find(p => p.id === candidate.id)
+                      if (matchPoint) setSelectedPoint(matchPoint)
+                      setInspectorCandidate({
+                        rank: candidate.rank,
+                        name: candidate.name,
+                        thumbnail: candidate.thumbnail,
+                        similarity_score: candidate.similarity,
+                        jaccard_overlap: candidate.jaccard,
+                        active_classes: candidate.classes && candidate.classes.length > 0 ? candidate.classes : [dualResults.queryPoint.dominant_class],
+                      })
+                    }}
+                    className="w-full hover:border-sky-500/40 transition-all cursor-pointer"
+                  />
+                ))}
               </div>
             </CardContent>
           </Card>
@@ -995,101 +959,57 @@ export default function EmbeddingSpaceGraph({ maxSamples = 1000 }: EmbeddingSpac
 
               {/* Cross Modality Candidates */}
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
-                {dualResults.cross.candidates.map((candidate) => {
-                  const queryClass = dualResults.queryPoint.dominant_class
-                  const candidateClasses = candidate.classes && candidate.classes.length > 0
-                    ? candidate.classes
-                    : [queryClass]
-                  const isMatch = candidate.jaccard > 0 || candidateClasses.includes(queryClass)
-
-                  return (
-                    <div
-                      key={`cross-${candidate.rank}`}
-                      className="group relative flex flex-col justify-between gap-3 p-3 rounded-xl border border-border/60 bg-muted/10 hover:border-[#FBBA72]/50 hover:bg-muted/20 transition-all cursor-pointer"
-                      onClick={() => {
-                        const matchPoint = data?.points.find(p => p.id === candidate.id)
-                        if (matchPoint) setSelectedPoint(matchPoint)
-                      }}
-                    >
-                      <div className="flex items-center justify-between text-xs gap-1">
-                        <Badge variant="outline" className="border-[#FBBA72]/50 text-[#FBBA72] bg-[#FBBA72]/10 font-bold px-2 py-0.5 shrink-0">
-                          Rank #{candidate.rank}
-                        </Badge>
-                        <span className="font-mono text-[11px] font-bold text-foreground shrink-0">
-                          {candidate.similarity}% match
-                        </span>
-                      </div>
-
-                      <div className="relative w-full h-32 rounded-lg border border-border/50 overflow-hidden bg-muted/40">
-                        {candidate.thumbnail ? (
-                          <img
-                            src={candidate.thumbnail}
-                            alt={candidate.name}
-                            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                          />
-                        ) : (
-                          <div className="w-full h-full flex items-center justify-center text-muted-foreground/30">
-                            <ImageIcon className="size-6" />
-                          </div>
-                        )}
-
-                        {/* Top-Right Label Match Badge */}
-                        <div className="absolute top-1.5 right-1.5">
-                          {isMatch ? (
-                            <Badge className="bg-emerald-500/90 text-white font-semibold text-[9px] px-1.5 py-0.5 shadow-sm border-0 flex items-center gap-0.5">
-                              <CheckCircle2 className="size-2.5" /> MATCHED
-                            </Badge>
-                          ) : (
-                            <Badge variant="secondary" className="bg-background/80 text-muted-foreground text-[9px] px-1.5 py-0.5 border border-border/60 backdrop-blur-md">
-                              DIFF
-                            </Badge>
-                          )}
-                        </div>
-                      </div>
-
-                      <div className="space-y-2">
-                        <p className="text-xs font-mono font-medium text-foreground truncate" title={candidate.name}>
-                          {candidate.name}
-                        </p>
-                        <div className="w-full bg-muted/40 h-1.5 rounded-full overflow-hidden">
-                          <div className="bg-[#FBBA72] h-full rounded-full" style={{ width: `${candidate.similarity}%` }} />
-                        </div>
-
-                        {/* Class Label Matching Badges */}
-                        <div className="flex flex-wrap gap-1 pt-1">
-                          {candidateClasses.slice(0, 3).map((lbl, idx) => {
-                            const lblMatches = lbl === queryClass || candidate.jaccard > 0
-                            return (
-                              <Badge
-                                key={idx}
-                                variant="outline"
-                                className={cn(
-                                  'text-[9px] px-1.5 py-0.2 rounded-md font-sans font-medium transition-colors',
-                                  lblMatches
-                                    ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-400 font-semibold'
-                                    : 'border-border/40 text-muted-foreground bg-muted/20',
-                                )}
-                              >
-                                {lblMatches && <CheckCircle2 className="size-2.5 mr-0.5 inline text-emerald-400" />}
-                                {lbl}
-                              </Badge>
-                            )
-                          })}
-                        </div>
-
-                        <div className="flex items-center justify-between text-[10px] text-muted-foreground font-sans pt-1 border-t border-border/30">
-                          <span>Jaccard Overlap:</span>
-                          <span className="font-mono font-bold text-emerald-400">{candidate.jaccard}%</span>
-                        </div>
-                      </div>
-                    </div>
-                  )
-                })}
+                {dualResults.cross.candidates.map((candidate, i) => (
+                  <UserViewLeftPanel
+                    key={`cross-${candidate.rank}`}
+                    user={{
+                      id: String(candidate.id || i),
+                      name: candidate.name,
+                      avatar: candidate.thumbnail,
+                      email: '',
+                      role: 'Guest' as const,
+                      plan: 'Basic' as const,
+                      status: 'Active' as const,
+                      billing: 'Manual' as const,
+                      joinedDate: '',
+                    }}
+                    sceneData={graphCandidateToSceneData(candidate, dualResults.queryPoint.dominant_class)}
+                    onInspect={() => {
+                      const matchPoint = data?.points.find(p => p.id === candidate.id)
+                      if (matchPoint) setSelectedPoint(matchPoint)
+                      setInspectorCandidate({
+                        rank: candidate.rank,
+                        name: candidate.name,
+                        thumbnail: candidate.thumbnail,
+                        similarity_score: candidate.similarity,
+                        jaccard_overlap: candidate.jaccard,
+                        active_classes: candidate.classes && candidate.classes.length > 0 ? candidate.classes : [dualResults.queryPoint.dominant_class],
+                      })
+                    }}
+                    className="w-full hover:border-[#FBBA72]/40 transition-all cursor-pointer"
+                  />
+                ))}
               </div>
             </CardContent>
           </Card>
         </div>
       )}
+
+      {/* Multi-Sensor Inspector Modal */}
+      <MultiSensorInspector
+        open={!!inspectorCandidate}
+        onClose={() => setInspectorCandidate(null)}
+        query={dualResults ? {
+          name: dualResults.queryPoint.name,
+          index: dualResults.queryPoint.id,
+          source_modality: modality,
+          target_modality: modality === 's1' ? 's2' : 's1',
+          label_indices: [dualResults.queryPoint.class_index],
+          active_classes: [dualResults.queryPoint.dominant_class],
+          thumbnail: dualResults.queryPoint.thumbnail || '',
+        } : null}
+        candidate={inspectorCandidate}
+      />
     </div>
   )
 }
