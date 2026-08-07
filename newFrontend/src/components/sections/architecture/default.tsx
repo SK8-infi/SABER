@@ -284,11 +284,11 @@ export default function Architecture() {
                 </div>
               </div>
 
-              {/* Satellite Retrieval Visualizer Preview */}
+              {/* Satellite Scene Imagery Preview */}
               <div className="relative aspect-video rounded-xl overflow-hidden border border-border/60 bg-zinc-950 shadow-inner group">
                 <img
-                  src="/images/satellite/ben14k_retrieval_results.png"
-                  alt="SABER Real Satellite Retrieval Visualizer"
+                  src="/images/satellite/demo_18_0.png"
+                  alt="Sentinel-2 Multispectral Satellite Scene"
                   className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                 />
                 <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent" />
