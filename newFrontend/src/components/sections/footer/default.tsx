@@ -3,7 +3,7 @@ import { ReactNode } from "react";
 import { siteConfig } from "@/config/site";
 import { cn } from "@/lib/utils";
 
-import LaunchUI from "../../logos/launch-ui";
+import LogoSvg from "@/assets/svg/logo";
 import {
   Footer,
   FooterBottom,
@@ -33,37 +33,37 @@ interface FooterProps {
 }
 
 export default function FooterSection({
-  logo = <LaunchUI />,
-  name = "Launch UI",
+  logo = <LogoSvg className="size-7" />,
+  name = "SABER",
   columns = [
     {
-      title: "Product",
+      title: "Project",
       links: [
-        { text: "Changelog", href: siteConfig.url },
-        { text: "Documentation", href: siteConfig.url },
+        { text: "GitHub Repository", href: siteConfig.links.github },
+        { text: "Documentation", href: `${siteConfig.links.github}/tree/master/docs` },
+        { text: "Training Guide", href: `${siteConfig.links.github}/blob/master/docs/TRAINING_DOCUMENTATION.md` },
       ],
     },
     {
-      title: "Company",
+      title: "Dashboard",
       links: [
-        { text: "About", href: siteConfig.url },
-        { text: "Careers", href: siteConfig.url },
-        { text: "Blog", href: siteConfig.url },
+        { text: "Live Query Inspector", href: "/dashboard/format/query" },
+        { text: "Embedding Space", href: "/dashboard/format/embeddings" },
+        { text: "Training Telemetry", href: "/dashboard/format/training" },
       ],
     },
     {
-      title: "Contact",
+      title: "Team Sentinel8",
       links: [
-        { text: "Discord", href: siteConfig.url },
-        { text: "Twitter", href: siteConfig.url },
+        { text: "ISRO BAH 2026", href: siteConfig.links.github },
+        { text: "Problem Statement 11", href: siteConfig.links.github },
         { text: "GitHub", href: siteConfig.links.github },
       ],
     },
   ],
-  copyright = "© 2026 Mikołaj Dobrucki. All rights reserved",
+  copyright = `© 2026 Team Sentinel8 · ISRO BAH 2026 · PS-11. All rights reserved.`,
   policies = [
-    { text: "Privacy Policy", href: siteConfig.url },
-    { text: "Terms of Service", href: siteConfig.url },
+    { text: "MIT License", href: `${siteConfig.links.github}/blob/master/LICENSE` },
   ],
   showModeToggle = true,
   className,
