@@ -940,7 +940,7 @@ CLASS_COLOR_PALETTE = [
 ]
 
 @app.api_route("/api/embedding/points", methods=["GET", "HEAD"])
-def get_embedding_points(max_samples: int = Query(300, ge=50, le=1000)):
+def get_embedding_points(max_samples: int = Query(1000, ge=50, le=5000)):
     """
     Returns 2D projected embedding points from saber_search_db.pth for visualization in shared space.
     Computes PCA 2D coordinates so that similar embeddings cluster together.

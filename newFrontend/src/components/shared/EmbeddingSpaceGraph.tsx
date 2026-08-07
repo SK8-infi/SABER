@@ -83,10 +83,11 @@ interface EmbeddingSpaceGraphProps {
   maxSamples?: number
 }
 
-export default function EmbeddingSpaceGraph({ maxSamples = 350 }: EmbeddingSpaceGraphProps) {
+export default function EmbeddingSpaceGraph({ maxSamples = 1000 }: EmbeddingSpaceGraphProps) {
   const [data, setData] = useState<ApiResponse | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [sampleCount, setSampleCount] = useState<number>(maxSamples)
 
   // Interactive state
   const [modality, setModality] = useState<'s2' | 's1' | 'bridged'>('s2')
@@ -126,7 +127,7 @@ export default function EmbeddingSpaceGraph({ maxSamples = 350 }: EmbeddingSpace
     setLoading(true)
     setError(null)
     try {
-      const res = await fetch(`/api/embedding/points?max_samples=${maxSamples}`)
+      const res = await fetch(`/api/embedding/points?max_samples=${sampleCount}`)
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
       const json: ApiResponse = await res.json()
       setData(json)
@@ -138,7 +139,7 @@ export default function EmbeddingSpaceGraph({ maxSamples = 350 }: EmbeddingSpace
     } finally {
       setLoading(false)
     }
-  }, [maxSamples])
+  }, [sampleCount])
 
   useEffect(() => {
     fetchData()
@@ -506,41 +507,62 @@ export default function EmbeddingSpaceGraph({ maxSamples = 350 }: EmbeddingSpace
             </div>
           </div>
 
-          {/* Modality selector buttons */}
-          <div className="flex items-center gap-1.5 p-1 rounded-xl bg-background/80 border border-border/60">
-            <button
-              onClick={() => setModality('s2')}
-              className={cn(
-                'px-3 py-1.5 text-xs font-semibold rounded-lg transition-all font-sans',
-                modality === 's2'
-                  ? 'bg-sky-500/15 border border-sky-500/40 text-sky-400 shadow-xs'
-                  : 'text-muted-foreground hover:text-foreground hover:bg-muted/40',
-              )}
-            >
-              Optical (Sentinel-2)
-            </button>
-            <button
-              onClick={() => setModality('s1')}
-              className={cn(
-                'px-3 py-1.5 text-xs font-semibold rounded-lg transition-all font-sans',
-                modality === 's1'
-                  ? 'bg-emerald-500/15 border border-emerald-500/40 text-emerald-400 shadow-xs'
-                  : 'text-muted-foreground hover:text-foreground hover:bg-muted/40',
-              )}
-            >
-              SAR (Sentinel-1)
-            </button>
-            <button
-              onClick={() => setModality('bridged')}
-              className={cn(
-                'px-3 py-1.5 text-xs font-semibold rounded-lg transition-all font-sans',
-                modality === 'bridged'
-                  ? 'bg-[#FBBA72]/20 border border-[#FBBA72]/50 text-[#FBBA72] shadow-xs'
-                  : 'text-muted-foreground hover:text-foreground hover:bg-muted/40',
-              )}
-            >
-              SABER Bridged (CFM)
-            </button>
+          <div className="flex flex-wrap items-center gap-2">
+            {/* Sample Count Density Selector */}
+            <div className="flex items-center gap-1 p-1 rounded-xl bg-background/80 border border-border/60">
+              <span className="text-[10px] text-muted-foreground font-mono px-1.5 font-semibold">Density:</span>
+              {[350, 750, 1000, 2500, 5000].map(cnt => (
+                <button
+                  key={cnt}
+                  onClick={() => setSampleCount(cnt)}
+                  className={cn(
+                    'px-2 py-1 text-[11px] font-mono rounded-lg transition-all',
+                    sampleCount === cnt
+                      ? 'bg-[#FBBA72]/20 text-[#FBBA72] border border-[#FBBA72]/40 font-bold shadow-xs'
+                      : 'text-muted-foreground hover:text-foreground hover:bg-muted/40'
+                  )}
+                >
+                  {cnt >= 1000 ? `${cnt / 1000}k` : cnt}
+                </button>
+              ))}
+            </div>
+
+            {/* Modality selector buttons */}
+            <div className="flex items-center gap-1.5 p-1 rounded-xl bg-background/80 border border-border/60">
+              <button
+                onClick={() => setModality('s2')}
+                className={cn(
+                  'px-3 py-1.5 text-xs font-semibold rounded-lg transition-all font-sans',
+                  modality === 's2'
+                    ? 'bg-sky-500/15 border border-sky-500/40 text-sky-400 shadow-xs'
+                    : 'text-muted-foreground hover:text-foreground hover:bg-muted/40',
+                )}
+              >
+                Optical (Sentinel-2)
+              </button>
+              <button
+                onClick={() => setModality('s1')}
+                className={cn(
+                  'px-3 py-1.5 text-xs font-semibold rounded-lg transition-all font-sans',
+                  modality === 's1'
+                    ? 'bg-emerald-500/15 border border-emerald-500/40 text-emerald-400 shadow-xs'
+                    : 'text-muted-foreground hover:text-foreground hover:bg-muted/40',
+                )}
+              >
+                SAR (Sentinel-1)
+              </button>
+              <button
+                onClick={() => setModality('bridged')}
+                className={cn(
+                  'px-3 py-1.5 text-xs font-semibold rounded-lg transition-all font-sans',
+                  modality === 'bridged'
+                    ? 'bg-[#FBBA72]/20 border border-[#FBBA72]/50 text-[#FBBA72] shadow-xs'
+                    : 'text-muted-foreground hover:text-foreground hover:bg-muted/40',
+                )}
+              >
+                SABER Bridged (CFM)
+              </button>
+            </div>
           </div>
         </CardContent>
       </Card>

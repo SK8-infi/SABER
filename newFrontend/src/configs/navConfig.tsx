@@ -48,25 +48,17 @@ export const navItems: NavItem[] = [
     groupLabel: 'Format',
     items: [
       {
+        icon: 'Share2',
+        label: 'Interactive Query Space',
+        href: '/dashboard/format/embeddings',
+        badge: 'DEFAULT',
+        badgeClassName: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
+      },
+      {
         icon: 'FileText',
-        label: 'Query',
+        label: 'Classic Query Inspector',
         href: '/dashboard/format/query'
       },
-      {
-        icon: 'Sliders',
-        label: 'Abliation',
-        href: '/dashboard/format/abliation'
-      },
-      {
-        icon: 'Activity',
-        label: 'Training',
-        href: '/dashboard/format/training'
-      },
-      {
-        icon: 'Share2',
-        label: 'Embedding Space',
-        href: '/dashboard/format/embeddings'
-      }
     ]
   }
 ]
