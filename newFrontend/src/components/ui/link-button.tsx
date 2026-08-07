@@ -1,7 +1,8 @@
 import { type VariantProps } from "class-variance-authority";
 import { type ComponentProps, type ReactNode } from "react";
 
-import { Button, buttonVariants } from "./button";
+import { buttonVariants } from "./button";
+import { cn } from "@/lib/utils";
 
 export interface LinkButtonProps {
   href: string;
@@ -9,7 +10,8 @@ export interface LinkButtonProps {
   variant?: VariantProps<typeof buttonVariants>["variant"];
   icon?: ReactNode;
   iconRight?: ReactNode;
-  size?: ComponentProps<typeof Button>["size"];
+  size?: ComponentProps<typeof buttonVariants>["size"];
+  className?: string;
 }
 
 export function LinkButton({
@@ -19,14 +21,16 @@ export function LinkButton({
   icon,
   iconRight,
   size = "lg",
+  className,
 }: LinkButtonProps) {
   return (
-    <Button variant={variant} size={size} asChild>
-      <a href={href}>
-        {icon}
-        {children}
-        {iconRight}
-      </a>
-    </Button>
+    <a
+      href={href}
+      className={cn(buttonVariants({ variant, size, className }))}
+    >
+      {icon}
+      {children}
+      {iconRight}
+    </a>
   );
 }
