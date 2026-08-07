@@ -68,6 +68,13 @@ export const navItems: NavItem[] = [
         icon: 'Activity',
         label: 'Training Telemetry',
         href: '/dashboard/format/training'
+      },
+      {
+        icon: 'CloudOff',
+        label: 'Cloud-Free Demonstration',
+        href: '/dashboard/format/cloud-free',
+        badge: 'DEMO',
+        badgeClassName: 'bg-[#FBBA72]/15 text-[#FBBA72] border-[#FBBA72]/40'
       }
     ]
   }

@@ -80,6 +80,11 @@ export default function Navigation({
       href: "/dashboard/format/training",
       description: "Real-time loss convergence curves, learning rates, and validation metrics.",
     },
+    {
+      title: "Cloud-Free Demonstration",
+      href: "/dashboard/format/cloud-free",
+      description: "Bypass 90%+ cloud-cover by querying Sentinel-1 SAR radar to retrieve clear-sky optical scenes.",
+    },
   ],
   components = [
     {
