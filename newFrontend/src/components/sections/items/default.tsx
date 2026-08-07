@@ -20,63 +20,68 @@ interface ItemProps {
 }
 
 interface ItemsProps {
-  title?: string;
+  title?: ReactNode;
   items?: ItemProps[] | false;
   className?: string;
 }
 
 const DEFAULT_ITEMS: ItemProps[] = [
   {
-    title: "Accessibility first",
-    description: "Fully WCAG 2.0 compliant, made with best a11y practices",
-    icon: <ScanFaceIcon className="size-5 stroke-1" />,
-  },
-  {
-    title: "Responsive design",
-    description: "Looks and works great on any device and screen size",
-    icon: <MonitorSmartphoneIcon className="size-5 stroke-1" />,
-  },
-  {
-    title: "Light and dark mode",
-    description: "Seamless switching between color schemes, 6 themes included",
-    icon: <EclipseIcon className="size-5 stroke-1" />,
-  },
-  {
-    title: "Easy to customize",
-    description: "Flexible options to match your product or brand",
-    icon: <BlocksIcon className="size-5 stroke-1" />,
-  },
-  {
-    title: "Top-level performance",
-    description: "Made for lightning-fast load times and smooth interactions",
+    title: "Cross-Modal CFM Bridge",
+    description: "Continuous Flow Matching probability ODE translating SAR to Optical latent space.",
     icon: <FastForwardIcon className="size-5 stroke-1" />,
   },
   {
-    title: "Production ready",
-    description: "Thoroughly tested and launch-prepared",
+    title: "Wavelength-Conditioned ViT",
+    description: "Frozen DOFA backbone with dynamic central wavelength patch hypernetworks.",
+    icon: <BlocksIcon className="size-5 stroke-1" />,
+  },
+  {
+    title: "Sub-30ms FAISS Search",
+    description: "Real-time vector similarity indexing with k-reciprocal graph re-ranking.",
     icon: <RocketIcon className="size-5 stroke-1" />,
   },
   {
-    title: "Made for localization",
-    description: "Easy to implement support for multiple languages and regions",
+    title: "Multi-Sensor Support",
+    description: "Sentinel-1 SAR, Sentinel-2 Optical, Gaofen-1 PAN, and Gaofen-1 MS satellite data.",
+    icon: <MonitorSmartphoneIcon className="size-5 stroke-1" />,
+  },
+  {
+    title: "Multi-Label Jaccard Loss",
+    description: "Direct alignment of cosine embedding geometry with ground-truth land cover overlap.",
+    icon: <ScanFaceIcon className="size-5 stroke-1" />,
+  },
+  {
+    title: "LoRA Parameter Efficiency",
+    description: "Only 1.82% trainable parameters (2.06M) for low-overhead fine-tuning.",
+    icon: <EclipseIcon className="size-5 stroke-1" />,
+  },
+  {
+    title: "Telemetry Latency Profiling",
+    description: "Nanosecond timing breakdown across feature extraction, ODE flow, and FAISS indexing.",
     icon: <LanguagesIcon className="size-5 stroke-1" />,
   },
   {
-    title: "CMS friendly",
-    description: "Built to work with any headless content management system",
+    title: "Multi-Sensor Inspector",
+    description: "Interactive candidate scene inspector analyzing spectral channels and class overlaps.",
     icon: <SquarePenIcon className="size-5 stroke-1" />,
   },
 ];
 
 export default function Items({
-  title = "Everything you need. Nothing you don't.",
+  title = (
+    <>
+      SABER Core Architecture <br className="hidden sm:inline" />
+      & Capabilities
+    </>
+  ),
   items = DEFAULT_ITEMS,
   className,
 }: ItemsProps) {
   return (
     <Section className={className}>
       <div className="max-w-container mx-auto flex flex-col items-center gap-6 sm:gap-20">
-        <h2 className="max-w-[560px] text-center text-3xl leading-tight font-semibold sm:text-5xl sm:leading-tight">
+        <h2 className="max-w-[700px] text-center text-3xl leading-tight font-semibold sm:text-5xl sm:leading-tight">
           {title}
         </h2>
         {items !== false && items.length > 0 && (

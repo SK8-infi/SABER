@@ -36,6 +36,8 @@ __pycache__/
 checkpoints/
 /Datasets/
 /datasets/
+*.pth
+saber_search_db.pth
 
 
 # Old dev workspaces (merged into Saber/)

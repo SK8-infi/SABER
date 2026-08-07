@@ -7,6 +7,8 @@ import { ReactNode } from "react";
 import { siteConfig } from "@/config/site";
 import { cn } from "@/lib/utils";
 
+import LogoSvg from "@/assets/svg/logo";
+import ModeToggle from "@/components/layout/ModeToggle";
 import LaunchUI from "../../logos/launch-ui";
 import { Button, buttonVariants } from "../../ui/button";
 import {
@@ -43,19 +45,17 @@ interface NavbarProps {
 }
 
 export default function Navbar({
-  logo = <LaunchUI />,
-  name = "Launch UI",
-  homeUrl = siteConfig.url,
+  logo = <LogoSvg className="size-8" />,
+  name = "SABER",
+  homeUrl = "/",
   mobileLinks = [
-    { text: "Getting Started", href: siteConfig.url },
-    { text: "Components", href: siteConfig.url },
-    { text: "Documentation", href: siteConfig.url },
+    { text: "Results & Metrics", href: "#results" },
+    { text: "Live Dashboard", href: "/dashboard/format/query" },
   ],
   actions = [
-    { text: "Sign in", href: siteConfig.url, isButton: false },
     {
-      text: "Get Started",
-      href: siteConfig.url,
+      text: "Launch Dashboard",
+      href: "/dashboard/format/query",
       isButton: true,
       variant: "default",
     },
@@ -80,6 +80,7 @@ export default function Navbar({
             {showNavigation && (customNavigation || <Navigation />)}
           </NavbarLeft>
           <NavbarRight>
+            <ModeToggle />
             {actions.map((action) =>
               action.isButton ? (
                 <Button

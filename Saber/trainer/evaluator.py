@@ -174,13 +174,12 @@ class Evaluator:
         use_dba = self.config.get("retrieval", {}).get("use_dba", False) if isinstance(self.config, dict) else getattr(self.config.retrieval, "use_dba", False)
         use_qe = self.config.get("retrieval", {}).get("use_qe", False) if isinstance(self.config, dict) else getattr(self.config.retrieval, "use_qe", False)
 
-        mu = np.mean(gallery_embeds, axis=0, keepdims=True)
-        gallery_embeds = gallery_embeds - mu
-        query_embeds = query_embeds - mu
-
         if use_pca:
             whiten_dim = min(512, query_embeds.shape[1])
             logger.info(f"Stage 1: PCA Whitening (768-D -> {whiten_dim}-D)...")
+            mu = np.mean(gallery_embeds, axis=0, keepdims=True)
+            gallery_embeds = gallery_embeds - mu
+            query_embeds = query_embeds - mu
             cov = np.cov(gallery_embeds, rowvar=False)
             eigenvalues, eigenvectors = np.linalg.eigh(cov)
             idx = np.argsort(eigenvalues)[::-1]
@@ -189,10 +188,8 @@ class Evaluator:
             W = np.diag(1.0 / np.sqrt(eigenvalues)) @ eigenvectors_d.T
             query_embeds = query_embeds @ W.T
             gallery_embeds = gallery_embeds @ W.T
-
-        # L2 normalize
-        query_embeds = query_embeds / (np.linalg.norm(query_embeds, axis=1, keepdims=True) + 1e-8)
-        gallery_embeds = gallery_embeds / (np.linalg.norm(gallery_embeds, axis=1, keepdims=True) + 1e-8)
+            query_embeds = query_embeds / (np.linalg.norm(query_embeds, axis=1, keepdims=True) + 1e-8)
+            gallery_embeds = gallery_embeds / (np.linalg.norm(gallery_embeds, axis=1, keepdims=True) + 1e-8)
 
         if use_dba:
             dba_k = 5

@@ -16,11 +16,6 @@ const nextConfig: NextConfig = {
   redirects: async () => {
     return [
       {
-        source: '/',
-        destination: '/dashboard/format/query',
-        permanent: false
-      },
-      {
         source: '/apps/users',
         destination: '/apps/users/list',
         permanent: true

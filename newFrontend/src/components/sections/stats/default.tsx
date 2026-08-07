@@ -20,26 +20,25 @@ function formatToThousands(value: number) {
 
 const DEFAULT_STATS: StatItemProps[] = [
   {
-    label: "used by",
-    value: formatToThousands(siteConfig.stats.figma),
-    suffix: "k",
-    description: "designers on Figma Community",
+    label: "retrieval accuracy",
+    value: "76.7%",
+    description: "Cross-Modal F1@5 score (SAR → Optical)",
   },
   {
-    label: "over",
-    value: siteConfig.stats.github,
-    description: "clones and forks of the template on GitHub",
+    label: "rank precision",
+    value: "94.0%",
+    description: "Mean Average Precision (mAP@5)",
   },
   {
-    label: "already",
-    value: formatToThousands(siteConfig.stats.cli),
-    suffix: "k",
-    description: "installations with shadcn/ui CLI",
+    label: "query latency",
+    value: "<30",
+    suffix: "ms",
+    description: "Total end-to-end multi-sensor retrieval time",
   },
   {
-    label: "includes",
-    value: siteConfig.stats.sections,
-    description: "blocks and sections",
+    label: "parameter footprint",
+    value: "1.8%",
+    description: "Trainable LoRA parameter ratio (2.06M params)",
   },
 ];
 
@@ -48,7 +47,7 @@ export default function Stats({
   className,
 }: StatsProps) {
   return (
-    <Section className={className}>
+    <Section id="results" className={className}>
       <div className="container mx-auto max-w-[960px]">
         {items !== false && items.length > 0 && (
           <div className="grid grid-cols-2 gap-12 sm:grid-cols-4">

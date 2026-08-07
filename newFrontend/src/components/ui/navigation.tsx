@@ -7,6 +7,7 @@ import { ReactNode } from "react";
 import { siteConfig } from "@/config/site";
 import { cn } from "@/lib/utils";
 
+import LogoSvg from "@/assets/svg/logo";
 import LaunchUI from "../logos/launch-ui";
 import {
   NavigationMenu,
@@ -48,75 +49,57 @@ interface NavigationProps {
 export default function Navigation({
   menuItems = [
     {
-      title: "Getting started",
-      content: "default",
-    },
-    {
-      title: "Components",
-      content: "components",
-    },
-    {
-      title: "Documentation",
+      title: "Results & Metrics",
       isLink: true,
-      href: siteConfig.getStartedUrl,
+      href: "#results",
+    },
+    {
+      title: "Live Dashboard",
+      isLink: true,
+      href: "/dashboard/format/query",
     },
   ],
   components = [
     {
-      title: "Alert Dialog",
-      href: `${siteConfig.url}/docs/primitives/alert-dialog`,
-      description:
-        "A modal dialog that interrupts the user with important content and expects a response.",
+      title: "01. Multi-Sensor Ingestion",
+      href: "#architecture",
+      description: "Ingests Sentinel-1 SAR & Sentinel-2 12-band optical tiles into wavelength-calibrated patches.",
     },
     {
-      title: "Hover Card",
-      href: `${siteConfig.url}/docs/primitives/hover-card`,
-      description:
-        "For sighted users to preview content available behind a link.",
+      title: "02. Wavelength ViT & LoRA",
+      href: "#architecture",
+      description: "Dynamic DOFA patch hypernetworks with parameter-efficient LoRA adapters (1.82% trainable).",
     },
     {
-      title: "Progress",
-      href: `${siteConfig.url}/docs/primitives/progress`,
-      description:
-        "Displays an indicator showing the completion progress of a task, typically displayed as a progress bar.",
+      title: "03. CFM Latent ODE Bridge",
+      href: "#architecture",
+      description: "Neural vector-field ODE solving straight-line probability paths connecting SAR & Optical embeddings.",
     },
     {
-      title: "Scroll Area",
-      href: `${siteConfig.url}/docs/primitives/scroll-area`,
-      description: "A scrollable container with custom scrollbars.",
-    },
-    {
-      title: "Tabs",
-      href: `${siteConfig.url}/docs/primitives/tabs`,
-      description:
-        "A set of layered sections of content, known as tab panels, that are displayed one at a time.",
-    },
-    {
-      title: "Tooltip",
-      href: `${siteConfig.url}/docs/primitives/tooltip`,
-      description:
-        "A popup that displays information related to an element when the element receives keyboard focus or the mouse hovers over it.",
+      title: "04. FAISS Vector Search",
+      href: "#architecture",
+      description: "Sub-30ms similarity retrieval using IVF-PQ index with k-reciprocal graph re-ranking.",
     },
   ],
-  logo = <LaunchUI />,
-  logoTitle = "Launch UI",
-  logoDescription = "Landing page template built with React, Shadcn/ui and Tailwind that you can copy/paste into your project.",
-  logoHref = siteConfig.getStartedUrl,
+  logo = <LogoSvg className="size-10" />,
+  logoTitle = "SABER Pipeline Flow",
+  logoDescription = "Cross-modal satellite image retrieval unifying SAR radar & Optical imagery onto a metric-optimized hypersphere.",
+  logoHref = "#architecture",
   introItems = [
     {
-      title: "Introduction",
-      href: siteConfig.getStartedUrl,
-      description: "Reusable components built using Radix UI and Tailwind CSS.",
+      title: "End-to-End Pipeline",
+      href: "#architecture",
+      description: "Explore the 4-stage pipeline translating SAR radar backscatter to optical spectral space.",
     },
     {
-      title: "Installation",
-      href: siteConfig.getStartedUrl,
-      description: "How to install dependencies and structure your app.",
+      title: "CFM Latent ODE Bridge",
+      href: "#architecture",
+      description: "Continuous Flow Matching probability ODE translating SAR to Optical latent space in 11.6ms.",
     },
     {
-      title: "Typography",
-      href: siteConfig.getStartedUrl,
-      description: "Styles for headings, paragraphs, and lists.",
+      title: "Sub-30ms Search",
+      href: "/dashboard/format/query",
+      description: "Real-time FAISS ANN search with k-reciprocal land-cover graph re-ranking.",
     },
   ],
 }: NavigationProps) {
