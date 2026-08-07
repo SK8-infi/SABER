@@ -71,6 +71,7 @@ export interface RetrievedCandidate {
 
 export interface DualRetrievalData {
   queryPoint: EmbeddingPoint
+  queryActiveClasses: string[]
   same: {
     candidates: RetrievedCandidate[]
     telemetry?: { bridge_ms?: number; faiss_ms?: number; total_ms?: number }
@@ -81,11 +82,14 @@ export interface DualRetrievalData {
   }
 }
 
-function graphCandidateToSceneData(c: RetrievedCandidate, queryClass: string): SceneData {
+function graphCandidateToSceneData(c: RetrievedCandidate, queryClasses: string[]): SceneData {
   const sim = c.similarity
   const pct = Math.min(Math.max(Math.round(sim), 0), 100)
-  const candidateClasses = c.classes && c.classes.length > 0 ? c.classes : [queryClass]
-  const hasOverlap = c.jaccard > 0 || candidateClasses.includes(queryClass)
+  const candidateClasses = c.classes && c.classes.length > 0 ? c.classes : []
+  
+  // Calculate multi-class land cover overlap
+  const matchingClasses = candidateClasses.filter(cl => queryClasses.includes(cl))
+  const hasOverlap = c.jaccard > 0 || matchingClasses.length > 0
 
   return {
     sceneId: c.name,
@@ -97,7 +101,7 @@ function graphCandidateToSceneData(c: RetrievedCandidate, queryClass: string): S
     matchScore: `${sim}%`,
     tags: candidateClasses.slice(0, 4).map(label => ({
       label,
-      checked: label === queryClass || c.jaccard > 0,
+      checked: queryClasses.includes(label),
     })),
   }
 }
@@ -216,6 +220,7 @@ export default function EmbeddingSpaceGraph({ maxSamples = 1000 }: EmbeddingSpac
             }))
 
             return {
+              queryActiveClasses: json.query?.active_classes || [],
               candidates,
               telemetry: {
                 bridge_ms: json.latency_telemetry?.latent_bridge_ms ?? (isCross ? 11.6 : 0),
@@ -246,6 +251,7 @@ export default function EmbeddingSpaceGraph({ maxSamples = 1000 }: EmbeddingSpac
         .slice(0, 5)
 
       return {
+        queryActiveClasses: [point.dominant_class],
         candidates: sorted.map((s, idx) => ({
           rank: idx + 1,
           id: s.p.id,
@@ -269,8 +275,15 @@ export default function EmbeddingSpaceGraph({ maxSamples = 1000 }: EmbeddingSpac
       fetchSingleQuery(true),
     ])
 
+    const activeQueryClasses = sameData.queryActiveClasses?.length
+      ? sameData.queryActiveClasses
+      : crossData.queryActiveClasses?.length
+      ? crossData.queryActiveClasses
+      : [point.dominant_class]
+
     setDualResults({
       queryPoint: point,
+      queryActiveClasses: activeQueryClasses,
       same: sameData,
       cross: crossData,
     })
@@ -895,7 +908,7 @@ export default function EmbeddingSpaceGraph({ maxSamples = 1000 }: EmbeddingSpac
                       billing: 'Manual' as const,
                       joinedDate: '',
                     }}
-                    sceneData={graphCandidateToSceneData(candidate, dualResults.queryPoint.dominant_class)}
+                    sceneData={graphCandidateToSceneData(candidate, dualResults.queryActiveClasses)}
                     onInspect={() => {
                       const matchPoint = data?.points.find(p => p.id === candidate.id)
                       if (matchPoint) setSelectedPoint(matchPoint)
@@ -905,7 +918,7 @@ export default function EmbeddingSpaceGraph({ maxSamples = 1000 }: EmbeddingSpac
                         thumbnail: candidate.thumbnail,
                         similarity_score: candidate.similarity,
                         jaccard_overlap: candidate.jaccard,
-                        active_classes: candidate.classes && candidate.classes.length > 0 ? candidate.classes : [dualResults.queryPoint.dominant_class],
+                        active_classes: candidate.classes && candidate.classes.length > 0 ? candidate.classes : dualResults.queryActiveClasses,
                       })
                     }}
                     className="w-full hover:border-sky-500/40 transition-all cursor-pointer"
@@ -973,7 +986,7 @@ export default function EmbeddingSpaceGraph({ maxSamples = 1000 }: EmbeddingSpac
                       billing: 'Manual' as const,
                       joinedDate: '',
                     }}
-                    sceneData={graphCandidateToSceneData(candidate, dualResults.queryPoint.dominant_class)}
+                    sceneData={graphCandidateToSceneData(candidate, dualResults.queryActiveClasses)}
                     onInspect={() => {
                       const matchPoint = data?.points.find(p => p.id === candidate.id)
                       if (matchPoint) setSelectedPoint(matchPoint)
@@ -983,7 +996,7 @@ export default function EmbeddingSpaceGraph({ maxSamples = 1000 }: EmbeddingSpac
                         thumbnail: candidate.thumbnail,
                         similarity_score: candidate.similarity,
                         jaccard_overlap: candidate.jaccard,
-                        active_classes: candidate.classes && candidate.classes.length > 0 ? candidate.classes : [dualResults.queryPoint.dominant_class],
+                        active_classes: candidate.classes && candidate.classes.length > 0 ? candidate.classes : dualResults.queryActiveClasses,
                       })
                     }}
                     className="w-full hover:border-[#FBBA72]/40 transition-all cursor-pointer"
