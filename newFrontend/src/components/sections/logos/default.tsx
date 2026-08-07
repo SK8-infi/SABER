@@ -2,8 +2,11 @@ import { ReactNode } from "react";
 
 import { siteConfig } from "@/config/site";
 
+import Cfm from "../../logos/cfm";
+import Dofa from "../../logos/dofa";
 import Faiss from "../../logos/faiss";
 import FastAPI from "../../logos/fastapi";
+import Lora from "../../logos/lora";
 import Python from "../../logos/python";
 import PyTorch from "../../logos/pytorch";
 import React from "../../logos/react";
@@ -22,13 +25,34 @@ interface LogosProps {
 }
 
 export default function Logos({
-  title = "Built with state-of-the-art AI frameworks, vector engines and modern web tools",
+  title = "Built with state-of-the-art AI models, frameworks, vector engines and modern web tools",
   badge = (
     <Badge variant="outline" className="border-brand/30 text-brand">
-      SABER Tech Stack
+      SABER Tech Stack & AI Models
     </Badge>
   ),
   logos = [
+    <Logo
+      key="dofa"
+      image={Dofa}
+      name="DOFA ViT"
+      version="Wavelength"
+      badge="Foundation Model"
+    />,
+    <Logo
+      key="cfm"
+      image={Cfm}
+      name="CFM Latent ODE"
+      version="Vector Field"
+      badge="ODE Bridge"
+    />,
+    <Logo
+      key="lora"
+      image={Lora}
+      name="LoRA Adapters"
+      version="PEFT"
+      badge="1.82% Trainable"
+    />,
     <Logo
       key="pytorch"
       image={PyTorch}
