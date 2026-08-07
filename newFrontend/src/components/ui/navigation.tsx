@@ -61,22 +61,22 @@ export default function Navigation({
   ],
   formatModules = [
     {
-      title: "01. Interactive Query Space",
+      title: "Interactive Query Space",
       href: "/dashboard/format/embeddings",
       description: "2D metric-preserving manifold projection with real-time cross-modal retrieval.",
     },
     {
-      title: "02. Classic Query Inspector",
+      title: "Classic Query Inspector",
       href: "/dashboard/format/query",
       description: "Single scene query engine inspecting candidate ranks & land-cover overlap.",
     },
     {
-      title: "03. Ablation Studies",
+      title: "Ablation Studies",
       href: "/dashboard/format/abliation",
       description: "Component-wise ablation benchmarks comparing CFM ODE, LoRA, and DOFA.",
     },
     {
-      title: "04. Training Telemetry",
+      title: "Training Telemetry",
       href: "/dashboard/format/training",
       description: "Real-time loss convergence curves, learning rates, and validation metrics.",
     },

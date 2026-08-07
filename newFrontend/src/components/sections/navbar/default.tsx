@@ -15,6 +15,7 @@ import {
   NavbarLeft,
   NavbarRight,
 } from "../../ui/navbar";
+import Navigation from "../../ui/navigation";
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "../../ui/sheet";
 
 interface NavbarLink {
@@ -65,13 +66,6 @@ export default function Navbar({
   customNavigation,
   className,
 }: NavbarProps) {
-  const dashboardLinks = [
-    { text: "Query Space", href: "/dashboard/format/embeddings" },
-    { text: "Query Inspector", href: "/dashboard/format/query" },
-    { text: "Ablation", href: "/dashboard/format/abliation" },
-    { text: "Training", href: "/dashboard/format/training" },
-  ];
-
   return (
     <header className={cn("sticky top-0 z-50 -mb-4 px-4 pb-4", className)}>
       <div className="fade-bottom bg-background/15 absolute left-0 h-24 w-full backdrop-blur-lg"></div>
@@ -82,18 +76,7 @@ export default function Navbar({
               {logo}
               {name}
             </a>
-            {/* Dashboard format links right after logo */}
-            <nav className="hidden items-center gap-1 md:flex ml-2">
-              {dashboardLinks.map((link) => (
-                <a
-                  key={link.href}
-                  href={link.href}
-                  className="rounded-md px-3 py-1.5 text-sm text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors"
-                >
-                  {link.text}
-                </a>
-              ))}
-            </nav>
+            {showNavigation && (customNavigation || <Navigation />)}
           </NavbarLeft>
           <NavbarRight>
             <ModeToggle />
