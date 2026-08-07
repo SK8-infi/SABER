@@ -35,6 +35,7 @@ interface MenuItem {
 interface NavigationProps {
   menuItems?: MenuItem[];
   components?: ComponentItem[];
+  formatModules?: ComponentItem[];
   logo?: ReactNode;
   logoTitle?: string;
   logoDescription?: string;
@@ -51,12 +52,38 @@ export default function Navigation({
     {
       title: "Results & Metrics",
       isLink: true,
-      href: "/dashboard/format/embeddings",
+      href: "/#results",
+    },
+    {
+      title: "Dashboard Format",
+      content: "format-modules",
     },
     {
       title: "Live Dashboard",
       isLink: true,
       href: "/dashboard/format/embeddings",
+    },
+  ],
+  formatModules = [
+    {
+      title: "01. Interactive Query Space",
+      href: "/dashboard/format/embeddings",
+      description: "2D metric-preserving manifold projection with real-time cross-modal retrieval.",
+    },
+    {
+      title: "02. Classic Query Inspector",
+      href: "/dashboard/format/query",
+      description: "Single scene query engine inspecting candidate ranks & land-cover overlap.",
+    },
+    {
+      title: "03. Ablation Studies",
+      href: "/dashboard/format/abliation",
+      description: "Component-wise ablation benchmarks comparing CFM ODE, LoRA, and DOFA.",
+    },
+    {
+      title: "04. Training Telemetry",
+      href: "/dashboard/format/training",
+      description: "Real-time loss convergence curves, learning rates, and validation metrics.",
     },
   ],
   components = [
@@ -147,6 +174,18 @@ export default function Navigation({
                         </ListItem>
                       ))}
                     </ul>
+                  ) : item.content === "format-modules" ? (
+                    <ul className="grid w-[400px] gap-3 p-4 md:w-[500px] md:grid-cols-2 lg:w-[600px]">
+                      {formatModules.map((module) => (
+                        <ListItem
+                          key={module.title}
+                          title={module.title}
+                          href={module.href}
+                        >
+                          {module.description}
+                        </ListItem>
+                      ))}
+                    </ul>
                   ) : item.content === "components" ? (
                     <ul className="grid w-[400px] gap-3 p-4 md:w-[500px] md:grid-cols-2 lg:w-[600px]">
                       {components.map((component) => (
@@ -183,10 +222,7 @@ function ListItem({
       <NavigationMenuLink asChild>
         <a
           data-slot="list-item"
-          className={cn(
-            "hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground block space-y-1 rounded-md p-3 leading-none no-underline outline-hidden transition-colors select-none",
-            className,
-          )}
+          className="hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground block space-y-1 rounded-md p-3 leading-none no-underline outline-hidden transition-colors select-none"
           {...props}
         >
           <div className="text-sm leading-none font-medium">{title}</div>
