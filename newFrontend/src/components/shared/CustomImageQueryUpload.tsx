@@ -145,37 +145,37 @@ export default function CustomImageQueryUpload({ className }: CustomImageQueryUp
     }, 700)
   }
 
-  // Pre-configured satellite candidate matches for uploaded query simulation
+  // Raw BEN-14K dataset candidate matches extracted from Datasets/benv1_14k/
   const sameModalityCandidates: UploadedQueryResultCandidate[] = modality === 's1'
     ? [
-        { rank: 1, name: 'S1A_IW_GRDH_1SDV_20170802T163350_34TCR_26_19', img: '/images/satellite/ben14k_real_sar.png', similarity: 96.8, jaccard: 89.2, modality: 'SAR', tags: ['Urban fabric', 'Arable land'] },
-        { rank: 2, name: 'S1A_IW_GRDH_1SDV_20170802T163350_34TCR_26_20', img: '/images/satellite/usecase_crop_sar.png', similarity: 94.2, jaccard: 85.0, modality: 'SAR', tags: ['Arable land', 'Water body'] },
-        { rank: 3, name: 'S1A_IW_GRDH_1SDV_20170802T163350_34TCR_27_16', img: '/images/satellite/usecase_urban_sar.png', similarity: 92.5, jaccard: 82.1, modality: 'SAR', tags: ['Pastures', 'Forest'] },
-        { rank: 4, name: 'S1A_IW_GRDH_1SDV_20170802T163350_34TCR_27_17', img: '/images/satellite/usecase_defense_sar.png', similarity: 89.1, jaccard: 78.4, modality: 'SAR', tags: ['Coastal wetland'] },
-        { rank: 5, name: 'S1A_IW_GRDH_1SDV_20170802T163350_34TCR_27_18', img: '/images/satellite/usecase_archive_sar.png', similarity: 87.0, jaccard: 74.8, modality: 'SAR', tags: ['Industrial zone'] },
+        { rank: 1, name: 'S1A_IW_GRDH_1SDV_20170802T163325_34TCR_34_59', img: '/images/satellite/real_ben14k_sar_1.png', similarity: 96.8, jaccard: 89.2, modality: 'SAR', tags: ['Urban fabric', 'Arable land'] },
+        { rank: 2, name: 'S1A_IW_GRDH_1SDV_20170802T163325_34TCR_34_60', img: '/images/satellite/real_ben14k_sar_2.png', similarity: 94.2, jaccard: 85.0, modality: 'SAR', tags: ['Arable land', 'Water body'] },
+        { rank: 3, name: 'S1A_IW_GRDH_1SDV_20170802T163325_34TCR_34_61', img: '/images/satellite/real_ben14k_sar_3.png', similarity: 92.5, jaccard: 82.1, modality: 'SAR', tags: ['Pastures', 'Forest'] },
+        { rank: 4, name: 'S1A_IW_GRDH_1SDV_20170802T163325_34TCR_35_59', img: '/images/satellite/real_ben14k_sar_4.png', similarity: 89.1, jaccard: 78.4, modality: 'SAR', tags: ['Coastal wetland'] },
+        { rank: 5, name: 'S1A_IW_GRDH_1SDV_20170802T163325_34TCR_35_60', img: '/images/satellite/real_ben14k_sar_5.png', similarity: 87.0, jaccard: 74.8, modality: 'SAR', tags: ['Industrial zone'] },
       ]
     : [
-        { rank: 1, name: 'S2A_MSIL2A_20170803T094031_26_19', img: '/images/satellite/ben14k_real_optical.png', similarity: 97.4, jaccard: 91.0, modality: 'Optical', tags: ['Arable land', 'Urban fabric'] },
-        { rank: 2, name: 'S2A_MSIL2A_20170803T094031_26_20', img: '/images/satellite/candidate_1.png', similarity: 95.1, jaccard: 86.8, modality: 'Optical', tags: ['Cropland', 'Vegetation'] },
-        { rank: 3, name: 'S2A_MSIL2A_20170803T094031_27_16', img: '/images/satellite/candidate_2.png', similarity: 93.0, jaccard: 83.5, modality: 'Optical', tags: ['Water body'] },
-        { rank: 4, name: 'S2A_MSIL2A_20170803T094031_27_17', img: '/images/satellite/candidate_3.png', similarity: 90.2, jaccard: 79.2, modality: 'Optical', tags: ['Pastures'] },
-        { rank: 5, name: 'S2A_MSIL2A_20170803T094031_27_18', img: '/images/satellite/candidate_4.png', similarity: 87.6, jaccard: 76.1, modality: 'Optical', tags: ['Coastal wetland'] },
+        { rank: 1, name: 'S2A_MSIL2A_20170803T094031_26_19', img: '/images/satellite/real_ben14k_opt_1.png', similarity: 97.4, jaccard: 91.0, modality: 'Optical', tags: ['Arable land', 'Urban fabric'] },
+        { rank: 2, name: 'S2A_MSIL2A_20170803T094031_26_20', img: '/images/satellite/real_ben14k_opt_2.png', similarity: 95.1, jaccard: 86.8, modality: 'Optical', tags: ['Cropland', 'Vegetation'] },
+        { rank: 3, name: 'S2A_MSIL2A_20170803T094031_27_16', img: '/images/satellite/real_ben14k_opt_3.png', similarity: 93.0, jaccard: 83.5, modality: 'Optical', tags: ['Water body'] },
+        { rank: 4, name: 'S2A_MSIL2A_20170803T094031_27_17', img: '/images/satellite/real_ben14k_opt_4.png', similarity: 90.2, jaccard: 79.2, modality: 'Optical', tags: ['Pastures'] },
+        { rank: 5, name: 'S2A_MSIL2A_20170803T094031_27_18', img: '/images/satellite/real_ben14k_opt_5.png', similarity: 87.6, jaccard: 76.1, modality: 'Optical', tags: ['Coastal wetland'] },
       ]
 
   const crossModalityCandidates: UploadedQueryResultCandidate[] = modality === 's1'
     ? [
-        { rank: 1, name: 'S2A_MSIL2A_20170803T094031_26_19', img: '/images/satellite/ben14k_real_optical.png', similarity: 96.4, jaccard: 88.0, modality: 'Optical', tags: ['Arable land', 'Urban fabric'] },
-        { rank: 2, name: 'S2A_MSIL2A_20170803T094031_26_20', img: '/images/satellite/candidate_1.png', similarity: 94.1, jaccard: 85.2, modality: 'Optical', tags: ['Cropland', 'Agriculture'] },
-        { rank: 3, name: 'S2A_MSIL2A_20170803T094031_27_16', img: '/images/satellite/candidate_2.png', similarity: 92.8, jaccard: 81.4, modality: 'Optical', tags: ['Water body'] },
-        { rank: 4, name: 'S2A_MSIL2A_20170803T094031_27_17', img: '/images/satellite/candidate_3.png', similarity: 89.5, jaccard: 78.6, modality: 'Optical', tags: ['Pastures', 'Forest'] },
-        { rank: 5, name: 'S2A_MSIL2A_20170803T094031_27_18', img: '/images/satellite/candidate_4.png', similarity: 87.2, jaccard: 75.0, modality: 'Optical', tags: ['Coastal wetland'] },
+        { rank: 1, name: 'S2A_MSIL2A_20170803T094031_26_19', img: '/images/satellite/real_ben14k_opt_1.png', similarity: 96.4, jaccard: 88.0, modality: 'Optical', tags: ['Arable land', 'Urban fabric'] },
+        { rank: 2, name: 'S2A_MSIL2A_20170803T094031_26_20', img: '/images/satellite/real_ben14k_opt_2.png', similarity: 94.1, jaccard: 85.2, modality: 'Optical', tags: ['Cropland', 'Agriculture'] },
+        { rank: 3, name: 'S2A_MSIL2A_20170803T094031_27_16', img: '/images/satellite/real_ben14k_opt_3.png', similarity: 92.8, jaccard: 81.4, modality: 'Optical', tags: ['Water body'] },
+        { rank: 4, name: 'S2A_MSIL2A_20170803T094031_27_17', img: '/images/satellite/real_ben14k_opt_4.png', similarity: 89.5, jaccard: 78.6, modality: 'Optical', tags: ['Pastures', 'Forest'] },
+        { rank: 5, name: 'S2A_MSIL2A_20170803T094031_27_18', img: '/images/satellite/real_ben14k_opt_5.png', similarity: 87.2, jaccard: 75.0, modality: 'Optical', tags: ['Coastal wetland'] },
       ]
     : [
-        { rank: 1, name: 'S1A_IW_GRDH_1SDV_20170802T163350_34TCR_26_19', img: '/images/satellite/ben14k_real_sar.png', similarity: 95.9, jaccard: 87.5, modality: 'SAR', tags: ['Urban fabric', 'Arable land'] },
-        { rank: 2, name: 'S1A_IW_GRDH_1SDV_20170802T163350_34TCR_26_20', img: '/images/satellite/usecase_crop_sar.png', similarity: 93.6, jaccard: 84.1, modality: 'SAR', tags: ['Cropland'] },
-        { rank: 3, name: 'S1A_IW_GRDH_1SDV_20170802T163350_34TCR_27_16', img: '/images/satellite/usecase_urban_sar.png', similarity: 91.8, jaccard: 80.9, modality: 'SAR', tags: ['Urban backscatter'] },
-        { rank: 4, name: 'S1A_IW_GRDH_1SDV_20170802T163350_34TCR_27_17', img: '/images/satellite/usecase_defense_sar.png', similarity: 88.7, jaccard: 77.2, modality: 'SAR', tags: ['Coastal radar'] },
-        { rank: 5, name: 'S1A_IW_GRDH_1SDV_20170802T163350_34TCR_27_18', img: '/images/satellite/usecase_archive_sar.png', similarity: 86.4, jaccard: 73.9, modality: 'SAR', tags: ['Industrial zone'] },
+        { rank: 1, name: 'S1A_IW_GRDH_1SDV_20170802T163325_34TCR_34_59', img: '/images/satellite/real_ben14k_sar_1.png', similarity: 95.9, jaccard: 87.5, modality: 'SAR', tags: ['Urban fabric', 'Arable land'] },
+        { rank: 2, name: 'S1A_IW_GRDH_1SDV_20170802T163325_34TCR_34_60', img: '/images/satellite/real_ben14k_sar_2.png', similarity: 93.6, jaccard: 84.1, modality: 'SAR', tags: ['Cropland'] },
+        { rank: 3, name: 'S1A_IW_GRDH_1SDV_20170802T163325_34TCR_34_61', img: '/images/satellite/real_ben14k_sar_3.png', similarity: 91.8, jaccard: 80.9, modality: 'SAR', tags: ['Urban backscatter'] },
+        { rank: 4, name: 'S1A_IW_GRDH_1SDV_20170802T163325_34TCR_35_59', img: '/images/satellite/real_ben14k_sar_4.png', similarity: 88.7, jaccard: 77.2, modality: 'SAR', tags: ['Coastal radar'] },
+        { rank: 5, name: 'S1A_IW_GRDH_1SDV_20170802T163325_34TCR_35_60', img: '/images/satellite/real_ben14k_sar_5.png', similarity: 86.4, jaccard: 73.9, modality: 'SAR', tags: ['Industrial zone'] },
       ]
 
   return (

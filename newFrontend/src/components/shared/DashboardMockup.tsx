@@ -176,11 +176,11 @@ export default function DashboardMockup() {
 
             <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
               {[
-                { rank: 1, name: "ROIs18_Nov2023_01", sim: 96.4, jaccard: 88.0, img: "/images/satellite/candidate_1.png" },
-                { rank: 2, name: "ROIs18_Nov2023_02", sim: 94.1, jaccard: 85.2, img: "/images/satellite/candidate_2.png" },
-                { rank: 3, name: "ROIs18_Nov2023_03", sim: 92.8, jaccard: 81.4, img: "/images/satellite/candidate_3.png" },
-                { rank: 4, name: "ROIs18_Nov2023_04", sim: 89.5, jaccard: 78.6, img: "/images/satellite/candidate_4.png" },
-                { rank: 5, name: "ROIs18_Nov2023_05", sim: 87.2, jaccard: 75.0, img: "/images/satellite/candidate_5.png" },
+                { rank: 1, name: "S2A_MSIL2A_20170803T094031_26_19", sim: 96.4, jaccard: 88.0, img: "/images/satellite/real_ben14k_opt_1.png" },
+                { rank: 2, name: "S2A_MSIL2A_20170803T094031_26_20", sim: 94.1, jaccard: 85.2, img: "/images/satellite/real_ben14k_opt_2.png" },
+                { rank: 3, name: "S2A_MSIL2A_20170803T094031_27_16", sim: 92.8, jaccard: 81.4, img: "/images/satellite/real_ben14k_opt_3.png" },
+                { rank: 4, name: "S2A_MSIL2A_20170803T094031_27_17", sim: 89.5, jaccard: 78.6, img: "/images/satellite/real_ben14k_opt_4.png" },
+                { rank: 5, name: "S2A_MSIL2A_20170803T094031_27_18", sim: 87.2, jaccard: 75.0, img: "/images/satellite/real_ben14k_opt_5.png" },
               ].map((c) => (
                 <div
                   key={c.rank}
