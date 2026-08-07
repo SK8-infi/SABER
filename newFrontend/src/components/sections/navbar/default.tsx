@@ -83,37 +83,29 @@ export default function Navbar({
             <ModeToggle />
             {actions.map((action) =>
               action.isButton ? (
-                <Button
+                <a
                   key={`${action.href}-${action.text}`}
-                  variant={action.variant || "default"}
-                  asChild
+                  href={action.href}
+                  className={cn(buttonVariants({ variant: action.variant || "default" }))}
                 >
-                  <a href={action.href}>
-                    {action.icon}
-                    {action.text}
-                    {action.iconRight}
-                  </a>
-                </Button>
+                  {action.icon}
+                  {action.text}
+                  {action.iconRight}
+                </a>
               ) : (
                 <a
                   key={`${action.href}-${action.text}`}
                   href={action.href}
-                  className="hidden text-sm md:block"
+                  className="text-muted-foreground hover:text-foreground text-sm font-medium"
                 >
                   {action.text}
                 </a>
               ),
             )}
             <Sheet>
-              <SheetTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="shrink-0 md:hidden"
-                >
-                  <Menu className="size-5" />
-                  <span className="sr-only">Toggle navigation menu</span>
-                </Button>
+              <SheetTrigger className={cn(buttonVariants({ variant: "ghost", size: "icon" }), "shrink-0 md:hidden")}>
+                <Menu className="size-5" />
+                <span className="sr-only">Toggle navigation menu</span>
               </SheetTrigger>
               <SheetContent side="right">
                 <SheetTitle className="sr-only">Navigation menu</SheetTitle>
