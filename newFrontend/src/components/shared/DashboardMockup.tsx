@@ -1,6 +1,6 @@
 'use client'
 
-import React from 'react'
+import React, { useState } from 'react'
 import {
   Activity,
   Layers,
@@ -64,7 +64,7 @@ function SyntheticOpticalTile({ variant = 0 }: { variant?: number }) {
     { bg: "#1c382b", field1: "#346648", field2: "#4a8a62", river: "#0369a1" },
     { bg: "#233d28", field1: "#3a6140", field2: "#52855b", river: "#38bdf8" },
     { bg: "#1b3324", field1: "#2e543b", field2: "#437854", river: "#0284c7" },
-    { bg: "#25422f", field1: "#3b6b4a", field2: "#508c62", river: "#0ea5e9" },
+    { bg: "#25422f", fill: "#3b6b4a", field2: "#508c62", river: "#0ea5e9" },
   ]
   const c = colors[variant % colors.length]
   return (
@@ -76,6 +76,31 @@ function SyntheticOpticalTile({ variant = 0 }: { variant?: number }) {
       <rect x="60" y="55" width="50" height="50" fill={c.field1} rx="4" />
       <path d="M0 40 Q 60 70 120 45" stroke={c.river} strokeWidth="6" fill="none" opacity="0.8" />
     </svg>
+  )
+}
+
+function DatasetImg({
+  src,
+  alt,
+  fallbackVariant = 0,
+  className,
+}: {
+  src: string
+  alt: string
+  fallbackVariant?: number
+  className?: string
+}) {
+  const [error, setError] = useState(false)
+  if (error) {
+    return <SyntheticOpticalTile variant={fallbackVariant} />
+  }
+  return (
+    <img
+      src={src}
+      alt={alt}
+      className={cn("w-full h-full object-cover", className)}
+      onError={() => setError(true)}
+    />
   )
 }
 
@@ -178,7 +203,12 @@ export default function DashboardMockup() {
           {/* Active Query Scene Card */}
           <div className="p-4 rounded-2xl border border-border/60 bg-card/80 backdrop-blur-md shadow-sm flex flex-col sm:flex-row items-start sm:items-center gap-4">
             <div className="relative size-24 rounded-xl overflow-hidden border border-border/60 bg-zinc-950 shrink-0">
-              <SyntheticSAR />
+              <DatasetImg
+                src="/images/dataset/demo_11_1.png"
+                alt="BEN-14K Query Scene"
+                fallbackVariant={0}
+                className="grayscale contrast-125 brightness-90"
+              />
               <span className="absolute top-1 left-1 px-1.5 py-0.5 rounded bg-sky-500/80 text-[9px] font-bold font-mono text-white">S1</span>
             </div>
 
@@ -230,11 +260,11 @@ export default function DashboardMockup() {
 
             <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
               {[
-                { rank: 1, name: "ROIs18_Nov2023_01", sim: 96.4, jaccard: 88.0 },
-                { rank: 2, name: "ROIs18_Nov2023_02", sim: 94.1, jaccard: 85.2 },
-                { rank: 3, name: "ROIs18_Nov2023_03", sim: 92.8, jaccard: 81.4 },
-                { rank: 4, name: "ROIs18_Nov2023_04", sim: 89.5, jaccard: 78.6 },
-                { rank: 5, name: "ROIs18_Nov2023_05", sim: 87.2, jaccard: 75.0 },
+                { rank: 1, name: "ROIs18_Nov2023_01", sim: 96.4, jaccard: 88.0, img: "/images/dataset/demo_18_0.png" },
+                { rank: 2, name: "ROIs18_Nov2023_02", sim: 94.1, jaccard: 85.2, img: "/images/dataset/demo_4_0.png" },
+                { rank: 3, name: "ROIs18_Nov2023_03", sim: 92.8, jaccard: 81.4, img: "/images/dataset/demo_11_1.png" },
+                { rank: 4, name: "ROIs18_Nov2023_04", sim: 89.5, jaccard: 78.6, img: "/images/dataset/demo_18_0.png" },
+                { rank: 5, name: "ROIs18_Nov2023_05", sim: 87.2, jaccard: 75.0, img: "/images/dataset/demo_4_0.png" },
               ].map((c) => (
                 <div
                   key={c.rank}
@@ -248,7 +278,11 @@ export default function DashboardMockup() {
                   </div>
 
                   <div className="relative aspect-square rounded-lg overflow-hidden border border-border/40 bg-zinc-950">
-                    <SyntheticOpticalTile variant={c.rank} />
+                    <DatasetImg
+                      src={c.img}
+                      alt={c.name}
+                      fallbackVariant={c.rank}
+                    />
                   </div>
 
                   <div className="space-y-1">
