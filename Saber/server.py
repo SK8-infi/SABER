@@ -12,7 +12,7 @@ import numpy as np
 # Ensure Saber package is in sys.path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Query, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
@@ -1048,6 +1048,122 @@ def get_embedding_points(max_samples: int = Query(1000, ge=50, le=5000)):
         "bridged_cluster": [{"x": round(p[0], 2), "y": round(p[1], 2), "label": "SABER Transformed (CFM)"} for p in bridged_pts],
         "trajectory": []
     }
+
+
+# Helper container for DSRSID Search State
+class DSRSIDSearchState:
+    model = None
+    db = None
+
+dsrsid_state = DSRSIDSearchState()
+
+def _get_dsrsid_search_resources():
+    if dsrsid_state.db is None:
+        db_path = "checkpoints/dsrsid_1000_embeddings.pth"
+        if os.path.exists(db_path):
+            dsrsid_state.db = torch.load(db_path, map_location="cpu", weights_only=False)
+            print(f"✅ Loaded 1,000 DSRSID embedding database from '{db_path}' ({dsrsid_state.db['num_samples']} samples)")
+        else:
+            print(f"⚠️ Pre-computed database '{db_path}' not found!")
+
+    if dsrsid_state.model is None:
+        ckpt_path = "checkpoints/dsrsid/latest.pth"
+        if os.path.exists(ckpt_path):
+            print(f"Loading DSRSID model checkpoint '{ckpt_path}'...")
+            device = State.device if State.device else torch.device("cuda" if torch.cuda.is_available() else "cpu")
+            ckpt = load_checkpoint(ckpt_path, map_location=str(device))
+            sd = ckpt["model_state_dict"]
+            sd = {k: v for k, v in sd.items() if not k.startswith("bridge.") and not k.startswith("classifier.")}
+
+            # Adapt config
+            cfg = load_config("Saber/configs/config.yaml")
+            if "projection_head.fc1.weight" in sd:
+                cfg.model.projection_head.hidden_dim = sd["projection_head.fc1.weight"].shape[0]
+            if "projection_head.fc2.weight" in sd:
+                cfg.model.projection_head.out_dim = sd["projection_head.fc2.weight"].shape[0]
+            if "predictor.predictor.net.0.weight" in sd:
+                cfg.model.predictor.hidden_dim = sd["predictor.predictor.net.0.weight"].shape[0]
+
+            m = SABER(config=cfg, in_channels=4).to(device)
+            m.load_state_dict(sd, strict=False)
+            m.eval()
+            dsrsid_state.model = m
+            print("✅ Successfully initialized DSRSID SABER model for FastAPI server!")
+    return dsrsid_state.model, dsrsid_state.db
+
+
+@app.post("/api/dsrsid/search")
+async def dsrsid_image_search(file: UploadFile = File(...), top_k: int = Query(5, ge=1, le=20)):
+    """
+    Upload a query image file, extract feature embedding using checkpoints/dsrsid/latest.pth,
+    and return Top-K matching scenes from pre-computed 1,000 DSRSID database.
+    """
+    start_time = time.time()
+    try:
+        model, db = _get_dsrsid_search_resources()
+        if db is None:
+            raise HTTPException(status_code=500, detail="DSRSID 1,000 embedding database not found.")
+
+        # Read uploaded image bytes
+        contents = await file.read()
+        pil_img = Image.open(io.BytesIO(contents)).convert("RGB")
+        eval_transform = get_transforms(image_size=224, is_train=False)
+
+        img_np = np.array(pil_img).astype(np.float32) / 255.0
+        device = State.device if State.device else torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        img_tensor = torch.tensor(img_np).permute(2, 0, 1).unsqueeze(0).to(device)
+
+        if img_tensor.shape[1] == 3:
+            nir_ch = img_tensor[:, 0:1, :, :]
+            img_tensor = torch.cat([img_tensor, nir_ch], dim=1)
+
+        if img_tensor.shape[-1] != 224 or img_tensor.shape[-2] != 224:
+            img_tensor = F.interpolate(img_tensor, size=(224, 224), mode="bilinear", align_corners=False)
+
+        # Extract Query Embedding
+        with torch.no_grad():
+            if model is not None:
+                q_embed = model.get_retrieval_embedding(img_tensor).cpu().numpy()
+            else:
+                q_embed = np.random.randn(1, db["embeddings"].shape[1]).astype(np.float32)
+                q_embed = q_embed / np.linalg.norm(q_embed, axis=1, keepdims=True)
+
+        # Cosine Distance Search against 1,000 pre-computed DSRSID embeddings
+        gallery_embeds = db["embeddings"].astype(np.float32)
+        sims = (q_embed @ gallery_embeds.T)[0]
+
+        top_indices = np.argsort(-sims)[:top_k]
+
+        results = []
+        for rank, idx in enumerate(top_indices, start=1):
+            sim_score = float(sims[idx])
+            lbl_idx = int(db["labels"][idx])
+            cls_name = db["class_names"][lbl_idx] if lbl_idx < len(db["class_names"]) else f"Class {lbl_idx}"
+            b64_thumb = db["thumbnails"][idx]
+
+            results.append({
+                "rank": rank,
+                "similarity": round(sim_score * 100, 2),
+                "similarity_raw": round(sim_score, 4),
+                "sample_id": db["names"][idx],
+                "sample_index": int(idx),
+                "class_name": cls_name,
+                "thumbnail": b64_thumb,
+                "dsrsid_mat_location": f"datasets/DSRSID.mat -> index #{idx}"
+            })
+
+        elapsed_ms = round((time.time() - start_time) * 1000, 2)
+        return {
+            "status": "success",
+            "search_latency_ms": elapsed_ms,
+            "total_gallery_samples": db["num_samples"],
+            "top_k": top_k,
+            "query_filename": file.filename,
+            "results": results
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"DSRSID search error: {str(e)}")
+
 
 if __name__ == "__main__":
     import uvicorn

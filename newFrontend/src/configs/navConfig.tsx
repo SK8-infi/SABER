@@ -60,6 +60,13 @@ export const navItems: NavItem[] = [
         href: '/dashboard/format/query'
       },
       {
+        icon: 'Database',
+        label: 'DSRSID 1,000 Scene Search',
+        href: '/dashboard/format/dsrsid-search',
+        badge: '1000 SCENES',
+        badgeClassName: 'bg-sky-500/10 text-sky-400 border-sky-500/30'
+      },
+      {
         icon: 'Sliders',
         label: 'Ablation Studies',
         href: '/dashboard/format/abliation'
