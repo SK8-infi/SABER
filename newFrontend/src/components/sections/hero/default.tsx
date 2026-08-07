@@ -32,7 +32,7 @@ const DEFAULT_HERO_BUTTONS: HeroButtonProps[] = [
     variant: "default",
   },
   {
-    href: siteConfig.links.github,
+    href: "https://github.com/SK8-infi/SABER",
     text: "GitHub",
     variant: "glow",
     icon: <Github className="mr-2 size-4" />,

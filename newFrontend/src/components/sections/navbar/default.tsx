@@ -9,14 +9,12 @@ import { cn } from "@/lib/utils";
 
 import LogoSvg from "@/assets/svg/logo";
 import ModeToggle from "@/components/layout/ModeToggle";
-import LaunchUI from "../../logos/launch-ui";
 import { Button, buttonVariants } from "../../ui/button";
 import {
   Navbar as NavbarComponent,
   NavbarLeft,
   NavbarRight,
 } from "../../ui/navbar";
-import Navigation from "../../ui/navigation";
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "../../ui/sheet";
 
 interface NavbarLink {
@@ -49,8 +47,10 @@ export default function Navbar({
   name = "SABER",
   homeUrl = "/",
   mobileLinks = [
-    { text: "Results & Metrics", href: "#results" },
-    { text: "Live Dashboard", href: "/dashboard/format/embeddings" },
+    { text: "Interactive Query Space", href: "/dashboard/format/embeddings" },
+    { text: "Classic Query Inspector", href: "/dashboard/format/query" },
+    { text: "Ablation Studies", href: "/dashboard/format/abliation" },
+    { text: "Training Telemetry", href: "/dashboard/format/training" },
   ],
   actions = [
     {
@@ -64,36 +64,49 @@ export default function Navbar({
   customNavigation,
   className,
 }: NavbarProps) {
+  const dashboardLinks = [
+    { text: "Query Space", href: "/dashboard/format/embeddings" },
+    { text: "Query Inspector", href: "/dashboard/format/query" },
+    { text: "Ablation", href: "/dashboard/format/abliation" },
+    { text: "Training", href: "/dashboard/format/training" },
+  ];
+
   return (
     <header className={cn("sticky top-0 z-50 -mb-4 px-4 pb-4", className)}>
       <div className="fade-bottom bg-background/15 absolute left-0 h-24 w-full backdrop-blur-lg"></div>
       <div className="max-w-container relative mx-auto">
         <NavbarComponent>
           <NavbarLeft>
-            <a
-              href={homeUrl}
-              className="flex items-center gap-2 text-xl font-bold"
-            >
+            <a href={homeUrl} className="flex items-center gap-2 text-xl font-bold shrink-0">
               {logo}
               {name}
             </a>
-            {showNavigation && (customNavigation || <Navigation />)}
+            {/* Dashboard format links right after logo */}
+            <nav className="hidden items-center gap-1 md:flex ml-2">
+              {dashboardLinks.map((link) => (
+                <a
+                  key={link.href}
+                  href={link.href}
+                  className="rounded-md px-3 py-1.5 text-sm text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors"
+                >
+                  {link.text}
+                </a>
+              ))}
+            </nav>
           </NavbarLeft>
           <NavbarRight>
             <ModeToggle />
             {actions.map((action) =>
               action.isButton ? (
-                <Button
+                <a
                   key={`${action.href}-${action.text}`}
-                  variant={action.variant || "default"}
-                  asChild
+                  href={action.href}
+                  className={cn(buttonVariants({ variant: action.variant || "default" }))}
                 >
-                  <a href={action.href}>
-                    {action.icon}
-                    {action.text}
-                    {action.iconRight}
-                  </a>
-                </Button>
+                  {action.icon}
+                  {action.text}
+                  {action.iconRight}
+                </a>
               ) : (
                 <a
                   key={`${action.href}-${action.text}`}
@@ -106,11 +119,7 @@ export default function Navbar({
             )}
             <Sheet>
               <SheetTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="shrink-0 md:hidden"
-                >
+                <Button variant="ghost" size="icon" className="shrink-0 md:hidden">
                   <Menu className="size-5" />
                   <span className="sr-only">Toggle navigation menu</span>
                 </Button>
@@ -118,10 +127,7 @@ export default function Navbar({
               <SheetContent side="right">
                 <SheetTitle className="sr-only">Navigation menu</SheetTitle>
                 <nav className="grid gap-6 text-lg font-medium">
-                  <a
-                    href={homeUrl}
-                    className="flex items-center gap-2 text-xl font-bold"
-                  >
+                  <a href={homeUrl} className="flex items-center gap-2 text-xl font-bold">
                     <span>{name}</span>
                   </a>
                   {mobileLinks.map((link) => (
