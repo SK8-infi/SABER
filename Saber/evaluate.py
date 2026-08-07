@@ -78,7 +78,16 @@ def main() -> None:
     logger.info("Initializing REJEPA/SABER Evaluation & Indexing runner...")
 
     # Direct Database Evaluation Mode (.pth database payload)
-    target_db_path = args.db or (args.checkpoint if args.checkpoint and (args.checkpoint.endswith(".pth") or args.checkpoint.endswith(".pt")) and not os.path.exists(os.path.join(args.checkpoint, "model")) else None)
+    db_candidates = [
+        args.db,
+        "saber_search_db.pth",
+        "checkpoints/saber_search_db.pth",
+        "/content/SABER/saber_search_db.pth",
+        "/content/drive/Shareddrives/SABER_Data/SOTA/saber_search_db.pth",
+        "/content/drive/MyDrive/SABER_Data/SOTA/saber_search_db.pth",
+        "/content/drive/MyDrive/SOTA/saber_search_db.pth",
+    ]
+    target_db_path = resolve_existing_path(args.db, db_candidates)
     if target_db_path and os.path.exists(target_db_path):
         try:
             db = torch.load(target_db_path, map_location="cpu", weights_only=False)
@@ -213,54 +222,41 @@ def main() -> None:
     # Load val/test spatial transforms (is_train=False)
     eval_transform = get_transforms(image_size=config.dataset.image_size, is_train=False)
 
-    # Initialize Dataset loaders (is_train=False, split=args.split)
+    # Instantiate Dataset & DataLoader
     dataset_name = config.dataset.name.lower()
-    eval_split = args.split.lower()
+    in_channels = 3
     if dataset_name == "ben14k":
-        eval_dataset = BEN14KDataset(
+        ds = BEN14KDataset(
             data_dir=config.dataset.data_dir,
-            use_synthetic=config.dataset.use_synthetic,
-            size=config.dataset.get("size", 1000),
-            image_size=config.dataset.image_size,
             transform=eval_transform,
-            modality=config.dataset.get("modality", "s2"),
-            is_train=False,
-            split=eval_split
+            use_synthetic=config.dataset.use_synthetic,
+            modality=config.dataset.modality,
+            size=config.dataset.size,
+            split=args.split.lower() if args.split else "test",
         )
-        in_channels = eval_dataset.num_channels
     elif dataset_name == "dsrsid":
-        dsrsid_size = args.size if args.size is not None else None
-        eval_dataset = DSRSIDDataset(
+        ds = DSRSIDDataset(
             data_dir=config.dataset.data_dir,
-            use_synthetic=config.dataset.use_synthetic,
-            size=dsrsid_size,
-            image_size=config.dataset.image_size,
             transform=eval_transform,
-            modality=config.dataset.get("modality", "ms"),
-            is_train=False,
-            split=eval_split
+            use_synthetic=config.dataset.use_synthetic,
+            modality=config.dataset.modality,
+            size=config.dataset.size,
+            split=args.split.lower() if args.split else "test",
         )
-        in_channels = eval_dataset.num_channels
-
     else:
-        raise ValueError(f"Unknown dataset configuration: '{config.dataset.name}'")
+        raise ValueError(f"Unsupported dataset target: '{dataset_name}'")
 
-    logger.info(f"Dataset Loaded: {config.dataset.name.upper()} [{eval_split.upper()} HELD-OUT PARTITION] (Synthetic={eval_dataset.use_synthetic})")
-
-    # Build Dataloader
-    num_workers = config.dataset.get("num_workers", 2)
-    extraction_batch_size = 256 if torch.cuda.is_available() else config.dataset.batch_size
-    eval_loader = DataLoader(
-        eval_dataset,
-        batch_size=extraction_batch_size,
+    logger.info(f"Dataset Loaded: {dataset_name.upper()} [{args.split.upper() if args.split else 'TEST'} HELD-OUT PARTITION] (Synthetic={ds.use_synthetic})")
+    loader = DataLoader(
+        ds,
+        batch_size=config.dataset.batch_size,
         shuffle=False,
-        num_workers=num_workers,
-        pin_memory=torch.cuda.is_available(),
-        persistent_workers=(num_workers > 0)
+        num_workers=config.dataset.get("num_workers", 2),
+        pin_memory=True if device.type == "cuda" else False,
     )
 
-
-    arch = config.model.get("architecture", "saber").lower()
+    # Instantiate Model
+    arch = config.model.architecture.lower()
     if arch == "saber":
         logger.info("Instantiating SABER model (DOFA + LoRA)...")
         model = SABER(config=config, in_channels=in_channels).to(device)
@@ -270,17 +266,23 @@ def main() -> None:
     else:
         raise ValueError(f"Unknown architecture target: '{arch}'")
 
-    # Load checkpoint parameters strictly from local workspace folders
+    # Load checkpoint parameters strictly from local workspace & drive folders
     configured_dir = config.get("checkpoint_dir", "checkpoints_v10")
     local_encoder_candidates = [
+        "checkpoints/latest_ben14k.pth",
+        "checkpoints/latest_dsrsid.pth",
+        "checkpoints/latest.pth",
+        "checkpoints/saber_unified.pth",
+        "checkpoints/saber_unified_clean.pth",
+        "/content/SABER/checkpoints/latest_ben14k.pth",
+        "/content/drive/Shareddrives/SABER_Data/SOTA/latest_ben14k.pth",
+        "/content/drive/MyDrive/SABER_Data/SOTA/latest_ben14k.pth",
+        "/content/drive/MyDrive/SOTA/latest_ben14k.pth",
+        os.path.join(configured_dir, "latest_ben14k.pth"),
         os.path.join(configured_dir, "saber_unified_clean.pth"),
         os.path.join(configured_dir, "saber_unified.pth"),
         "checkpoints_v10/saber_unified_clean.pth",
         "checkpoints_v10/saber_unified.pth",
-        "checkpoints_sigreg/saber_unified_clean.pth",
-        "checkpoints_sigreg/saber_unified.pth",
-        "checkpoints/saber_unified_clean.pth",
-        "checkpoints/saber_unified.pth",
     ]
 
     ckpt_target = resolve_existing_path(
@@ -304,18 +306,22 @@ def main() -> None:
     else:
         logger.warning("No valid model checkpoint specified or found. Running evaluation with initialized model weights.")
 
-    # Load separate bridge checkpoint strictly from local workspace folders
+    # Load separate bridge checkpoint strictly from local workspace folders & drive folders
     if getattr(model, "bridge", None) is not None:
-        configured_bridge_path = config.get("bridge", {}).get("checkpoint", os.path.join(configured_dir, "bridge_unified.pth"))
+        configured_bridge_path = config.get("bridge", {}).get("checkpoint", os.path.join(configured_dir, "bridge_best_ben14k.pth"))
         local_bridge_candidates = [
             configured_bridge_path,
-            os.path.join(configured_dir, "bridge_unified.pth"),
-            os.path.join(configured_dir, "bridge_best_ben14k.pth"),
-            "checkpoints_v10/bridge_unified.pth",
-            "checkpoints_v10/bridge_best_ben14k.pth",
-            "checkpoints_sigreg/bridge_unified.pth",
-            "checkpoints/bridge_unified.pth",
+            "checkpoints/bridge_best_ben14k.pth",
             "checkpoints/bridge_best.pth",
+            "checkpoints/bridge_unified.pth",
+            "/content/SABER/checkpoints/bridge_best_ben14k.pth",
+            "/content/drive/Shareddrives/SABER_Data/SOTA/bridge_best_ben14k.pth",
+            "/content/drive/MyDrive/SABER_Data/SOTA/bridge_best_ben14k.pth",
+            "/content/drive/MyDrive/SOTA/bridge_best_ben14k.pth",
+            os.path.join(configured_dir, "bridge_best_ben14k.pth"),
+            os.path.join(configured_dir, "bridge_unified.pth"),
+            "checkpoints_v10/bridge_best_ben14k.pth",
+            "checkpoints_v10/bridge_unified.pth",
         ]
 
         resolved_bridge_path = ""
