@@ -43,6 +43,7 @@ def main() -> None:
     parser.add_argument("--direction", type=str, default="s1_to_s2", choices=["s1_to_s2", "s2_to_s1"], help="Cross-modal retrieval direction")
     parser.add_argument("--split", type=str, default="test", choices=["train", "val", "test", "all"], help="Dataset split partition for evaluation ('test', 'val', 'train', 'all')")
     parser.add_argument("--rerank", type=str, default=None, help="Enable/disable k-reciprocal reranking ('true' or 'false')")
+    parser.add_argument("--db", "--database", type=str, default=None, help="Path to pre-computed embedding database file (.pth) for direct evaluation")
     parser.add_argument("--viz", action="store_true", help="Generate and save t-SNE and UMAP visualizations")
     args = parser.parse_args()
 
@@ -75,6 +76,98 @@ def main() -> None:
     # Set up Logger
     logger = setup_logger(name="saber", log_dir=config.log_dir)
     logger.info("Initializing REJEPA/SABER Evaluation & Indexing runner...")
+
+    # Direct Database Evaluation Mode (.pth database payload)
+    target_db_path = args.db or (args.checkpoint if args.checkpoint and (args.checkpoint.endswith(".pth") or args.checkpoint.endswith(".pt")) and not os.path.exists(os.path.join(args.checkpoint, "model")) else None)
+    if target_db_path and os.path.exists(target_db_path):
+        try:
+            db = torch.load(target_db_path, map_location="cpu", weights_only=False)
+        except Exception:
+            db = None
+
+        if isinstance(db, dict) and "labels" in db and ("s2_embeds" in db or "s1_embeds" in db or "hybrid_s2_embeds" in db):
+            logger.info("=========================================================")
+            logger.info("  DIRECT DATABASE BENCHMARK EVALUATION MODE ACTIVE       ")
+            logger.info(f"  Database Payload: '{target_db_path}'                   ")
+            logger.info("=========================================================")
+
+            labels = db["labels"]
+            names = db.get("names", np.array([f"sample_{i}" for i in range(len(labels))]))
+            num_samples = len(labels)
+            logger.info(f"Total Multi-Modal Database Samples: {num_samples}")
+
+            from Saber.trainer.metrics import compute_retrieval_metrics
+
+            def evaluate_payload_embeddings(q_emb, g_emb, q_lbl, g_lbl, k_list=[5, 10], is_same_modal=False, q_names=None):
+                num_q = len(q_emb)
+                q_norm = q_emb / (np.linalg.norm(q_emb, axis=1, keepdims=True) + 1e-8)
+                g_norm = g_emb / (np.linalg.norm(g_emb, axis=1, keepdims=True) + 1e-8)
+
+                # Batch computation over query set to keep RAM usage minimal
+                b_size = 2000
+                res = {}
+                for k in k_list:
+                    prec_list, rec_list, f1_list, map_list = [], [], [], []
+                    for b_start in range(0, num_q, b_size):
+                        b_end = min(b_start + b_size, num_q)
+                        m_batch = compute_retrieval_metrics(
+                            q_norm[b_start:b_end],
+                            g_norm,
+                            q_lbl[b_start:b_end],
+                            g_lbl,
+                            top_k=k,
+                            is_multilabel=True,
+                            exclude_self_matches=is_same_modal,
+                            query_names=q_names[b_start:b_end] if is_same_modal and q_names is not None else None,
+                            gallery_names=q_names if is_same_modal and q_names is not None else None
+                        )
+                        prec_list.append(m_batch[f"precision@{k}"])
+                        rec_list.append(m_batch[f"recall@{k}"])
+                        f1_list.append(m_batch[f"f1@{k}"])
+                        map_list.append(m_batch[f"map@{k}"])
+
+                    res[f"precision@{k}"] = float(np.mean(prec_list))
+                    res[f"recall@{k}"] = float(np.mean(rec_list))
+                    res[f"f1@{k}"] = float(np.mean(f1_list))
+                    res[f"map@{k}"] = float(np.mean(map_list))
+                return res
+
+            # 1. Direct SAR Encoder (s1_embeds -> s2_embeds)
+            if "s1_embeds" in db and "s2_embeds" in db:
+                m_s1 = evaluate_payload_embeddings(db["s1_embeds"].astype(np.float32), db["s2_embeds"].astype(np.float32), labels, labels, k_list=[5, 10])
+                logger.info("--- [1/3] Cross-Modal SAR Encoder (S1 -> S2 Optical) ---")
+                logger.info(f"  mAP@5   : {m_s1['map@5']:.4f}  |  mAP@10  : {m_s1['map@10']:.4f}")
+                logger.info(f"  F1@5    : {m_s1['f1@5']:.4f}  |  F1@10   : {m_s1['f1@10']:.4f}")
+                logger.info(f"  PREC@5  : {m_s1['precision@5']:.4f}  |  PREC@10 : {m_s1['precision@10']:.4f}")
+                logger.info(f"  REC@5   : {m_s1['recall@5']:.4f}  |  REC@10  : {m_s1['recall@10']:.4f}")
+
+            # 2. CFM Translated SAR (s1_translated_embeds -> s2_embeds)
+            if "s1_translated_embeds" in db and "s2_embeds" in db:
+                m_trans = evaluate_payload_embeddings(db["s1_translated_embeds"].astype(np.float32), db["s2_embeds"].astype(np.float32), labels, labels, k_list=[5, 10])
+                logger.info("--- [2/3] CFM Latent Bridge Translation (S1_trans -> S2 Optical) ---")
+                logger.info(f"  mAP@5   : {m_trans['map@5']:.4f}  |  mAP@10  : {m_trans['map@10']:.4f}")
+                logger.info(f"  F1@5    : {m_trans['f1@5']:.4f}  |  F1@10   : {m_trans['f1@10']:.4f}")
+                logger.info(f"  PREC@5  : {m_trans['precision@5']:.4f}  |  PREC@10 : {m_trans['precision@10']:.4f}")
+                logger.info(f"  REC@5   : {m_trans['recall@5']:.4f}  |  REC@10  : {m_trans['recall@10']:.4f}")
+
+            # 3. Same-Modal Optical Ceiling (s2_embeds -> s2_embeds)
+            if "s2_embeds" in db:
+                m_s2 = evaluate_payload_embeddings(db["s2_embeds"].astype(np.float32), db["s2_embeds"].astype(np.float32), labels, labels, k_list=[5, 10], is_same_modal=True, q_names=names)
+                logger.info("--- [3/3] Same-Modal Optical Ceiling (S2 -> S2 Optical) ---")
+                logger.info(f"  mAP@5   : {m_s2['map@5']:.4f}  |  mAP@10  : {m_s2['map@10']:.4f}")
+                logger.info(f"  F1@5    : {m_s2['f1@5']:.4f}  |  F1@10   : {m_s2['f1@10']:.4f}")
+                logger.info(f"  PREC@5  : {m_s2['precision@5']:.4f}  |  PREC@10 : {m_s2['precision@10']:.4f}")
+                logger.info(f"  REC@5   : {m_s2['recall@5']:.4f}  |  REC@10  : {m_s2['recall@10']:.4f}")
+
+            logger.info("=========================================================")
+
+            if args.viz:
+                logger.info("Generating visualization plots from database payload...")
+                os.makedirs(config.viz_dir, exist_ok=True)
+                s2_vecs = db["s2_embeds"].astype(np.float32)
+                plot_tsne(s2_vecs, labels, save_path=os.path.join(config.viz_dir, "db_tsne.png"))
+                plot_umap(s2_vecs, labels, save_path=os.path.join(config.viz_dir, "db_umap.png"))
+            return
 
     # Seed random number generators
     set_seed(config.seed)
