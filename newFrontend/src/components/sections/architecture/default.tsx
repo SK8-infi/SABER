@@ -284,6 +284,22 @@ export default function Architecture() {
                 </div>
               </div>
 
+              {/* Satellite Retrieval Visualizer Preview */}
+              <div className="relative aspect-video rounded-xl overflow-hidden border border-border/60 bg-zinc-950 shadow-inner group">
+                <img
+                  src="/images/satellite/ben14k_retrieval_results.png"
+                  alt="SABER Real Satellite Retrieval Visualizer"
+                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                />
+                <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent" />
+                <Badge
+                  variant="outline"
+                  className="absolute bottom-2 left-2 text-[10px] font-bold font-mono uppercase tracking-wider text-[#FBBA72] bg-background/80 border-[#FBBA72]/50 backdrop-blur-md px-2 py-0.5"
+                >
+                  BEN-14K Real Satellite Data
+                </Badge>
+              </div>
+
               <Button asChild size="default" className="w-full gap-2 mt-4">
                 <a href="/dashboard/format/query">
                   Test Module in Live Dashboard
