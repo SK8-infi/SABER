@@ -65,11 +65,11 @@ const ARCHITECTURE_STEPS: ArchitectureStep[] = [
     tag: "Encoders",
     details: {
       overview:
-        "Extracts dense representation vectors using a Vision Transformer (ViT) with dynamic central-wavelength positional embeddings. Employs low-rank adaptation (LoRA) on attention weights, keeping 98.18% of parameters frozen.",
+        "Extracts dense representation vectors using a Vision Transformer (ViT) with dynamic central-wavelength positional embeddings. Employs low-rank adaptation (LoRA) on attention weights, keeping 99.74% of parameters frozen.",
       techStack: ["DOFA ViT-Base", "LoRA Adapters (r=8)", "Wavelength Hypernet", "Multi-Label Jaccard"],
       metrics: [
         { label: "Embedding Dim", value: "768-D" },
-        { label: "Trainable Params", value: "1.82% (2.06M)" },
+        { label: "Trainable Params", value: "0.26% (294.9K)" },
         { label: "Encoder Latency", value: "14.2ms" },
       ],
       formula: "E_{λ} = ViT_{frozen}(x) + HyperNet(λ_{center})",
@@ -91,7 +91,7 @@ const ARCHITECTURE_STEPS: ArchitectureStep[] = [
       metrics: [
         { label: "ODE Integration", value: "8 Euler Steps" },
         { label: "Bridge Latency", value: "11.6ms" },
-        { label: "Alignment mAP", value: "84.7%" },
+        { label: "Alignment mAP", value: "91.49%" },
       ],
       formula: "dx/dt = v_t(x; θ), \\quad x(0) = z_{SAR}, \\quad x(1) = z_{Optical}",
       flowInput: "SAR Latent Vector (z_SAR)",

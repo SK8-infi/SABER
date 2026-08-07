@@ -14,31 +14,27 @@ interface StatsProps {
   className?: string;
 }
 
-function formatToThousands(value: number) {
-  return Math.round(value / 100) / 10;
-}
-
 const DEFAULT_STATS: StatItemProps[] = [
   {
     label: "retrieval accuracy",
-    value: "76.7%",
-    description: "Cross-Modal F1@5 score (SAR → Optical)",
+    value: "73.5%",
+    description: "Cross-Modal F1@5 score (S1 SAR → S2 Optical)",
   },
   {
     label: "rank precision",
-    value: "94.0%",
-    description: "Mean Average Precision (mAP@5)",
+    value: "91.5%",
+    description: "Cross-Modal mAP (Mean Average Precision)",
   },
   {
     label: "query latency",
-    value: "<30",
+    value: "<28.5",
     suffix: "ms",
     description: "Total end-to-end multi-sensor retrieval time",
   },
   {
     label: "parameter footprint",
-    value: "1.8%",
-    description: "Trainable LoRA parameter ratio (2.06M params)",
+    value: "0.26%",
+    description: "Trainable LoRA parameter ratio (294.9K params)",
   },
 ];
 
@@ -54,25 +50,25 @@ export default function Stats({
             {items.map((item) => (
               <div
                 key={`${item.label}-${item.description}`}
-                className="flex flex-col items-start gap-3 text-left"
+                className="flex flex-col items-start gap-3 text-left font-sans"
               >
                 {item.label && (
-                  <div className="text-muted-foreground text-sm font-semibold">
+                  <div className="text-muted-foreground text-sm font-semibold uppercase tracking-wider">
                     {item.label}
                   </div>
                 )}
                 <div className="flex items-baseline gap-2">
-                  <div className="from-foreground to-foreground dark:to-brand bg-linear-to-r bg-clip-text text-4xl font-medium text-transparent drop-shadow-[2px_1px_24px_var(--brand-foreground)] transition-all duration-300 sm:text-5xl md:text-6xl">
+                  <div className="from-foreground via-brand-foreground to-foreground bg-linear-to-r bg-clip-text text-4xl font-extrabold text-transparent drop-shadow-[2px_1px_24px_var(--brand-foreground)] transition-all duration-300 sm:text-5xl md:text-6xl tracking-tight">
                     {item.value}
                   </div>
                   {item.suffix && (
-                    <div className="text-brand text-2xl font-semibold">
+                    <div className="text-brand text-2xl font-bold">
                       {item.suffix}
                     </div>
                   )}
                 </div>
                 {item.description && (
-                  <div className="text-muted-foreground text-sm font-semibold text-pretty">
+                  <div className="text-muted-foreground text-xs sm:text-sm font-medium text-pretty">
                     {item.description}
                   </div>
                 )}

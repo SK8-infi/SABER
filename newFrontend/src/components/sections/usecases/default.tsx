@@ -29,7 +29,7 @@ const USE_CASES = [
     opticalLabel: "Sentinel-2 Optical · Valencia Pre-flood (ESA/Copernicus)",
     sarImg: "https://upload.wikimedia.org/wikipedia/commons/thumb/5/5d/Floods_in_Valencia_ESA503179_-_Floods_in_Valencia.jpg/960px-Floods_in_Valencia_ESA503179_-_Floods_in_Valencia.jpg",
     opticalImg: "https://upload.wikimedia.org/wikipedia/commons/thumb/0/0e/Spain_from_Sentinel-2.jpg/960px-Spain_from_Sentinel-2.jpg",
-    result: "Matched pre-disaster optical scene in 28ms",
+    result: "Matched pre-disaster optical scene in 28.48ms",
   },
   {
     id: "crop",
@@ -42,7 +42,7 @@ const USE_CASES = [
     opticalLabel: "Sentinel-2 Optical · Crop Reference (ESA/Copernicus)",
     sarImg: "https://upload.wikimedia.org/wikipedia/commons/thumb/5/59/Central-eastern_Brazil%2C_by_Copernicus_Sentinel-2A_satellite.jpg/960px-Central-eastern_Brazil%2C_by_Copernicus_Sentinel-2A_satellite.jpg",
     opticalImg: "https://upload.wikimedia.org/wikipedia/commons/thumb/5/59/Central-eastern_Brazil%2C_by_Copernicus_Sentinel-2A_satellite.jpg/640px-Central-eastern_Brazil%2C_by_Copernicus_Sentinel-2A_satellite.jpg",
-    result: "Cross-modal F1@5 = 83.4% on BEN-14K benchmark",
+    result: "Cross-modal F1@5 = 73.51% on BEN-14K benchmark",
   },
   {
     id: "urban",
@@ -55,7 +55,7 @@ const USE_CASES = [
     opticalLabel: "Sentinel-2 Optical · Historical Reference (ESA/Copernicus)",
     sarImg: "https://upload.wikimedia.org/wikipedia/commons/thumb/5/5d/Toronto_by_Sentinel-2.jpg/960px-Toronto_by_Sentinel-2.jpg",
     opticalImg: "https://upload.wikimedia.org/wikipedia/commons/thumb/c/cb/Los_Angeles_by_Sentinel-2%2C_2019-03-30.jpg/960px-Los_Angeles_by_Sentinel-2%2C_2019-03-30.jpg",
-    result: "Sub-30ms retrieval from 14,832-scene gallery",
+    result: "Sub-28.5ms retrieval from 14,832-scene gallery",
   },
   {
     id: "defense",
@@ -68,7 +68,7 @@ const USE_CASES = [
     opticalLabel: "Sentinel-2 Optical · Island Target Match (ESA)",
     sarImg: "https://upload.wikimedia.org/wikipedia/commons/thumb/8/80/L%27%C3%AEle_de_la_R%C3%A9union_vue_par_le_satellite_Sentinel-2_%28cropped%29.jpg/960px-L%27%C3%AEle_de_la_R%C3%A9union_vue_par_le_satellite_Sentinel-2_%28cropped%29.jpg",
     opticalImg: "https://upload.wikimedia.org/wikipedia/commons/thumb/5/50/North-Sentinel-Island-Sentinel-2A.png/960px-North-Sentinel-Island-Sentinel-2A.png",
-    result: "CFM Bridge closes 11% mAP gap vs. baseline",
+    result: "Cross-Modal mAP = 91.49% (24% higher vs RemoteCLIP)",
   },
   {
     id: "archive",
@@ -94,7 +94,7 @@ const USE_CASES = [
     opticalLabel: "Sentinel-2 Optical · Forest Canopy (ESA)",
     sarImg: "https://upload.wikimedia.org/wikipedia/commons/thumb/f/f7/Bangkok%27s_green_lung_%2840468870113%29_%28cropped%29.jpg/960px-Bangkok%27s_green_lung_%2840468870113%29_%28cropped%29.jpg",
     opticalImg: "https://upload.wikimedia.org/wikipedia/commons/thumb/c/c8/L%27%C3%AEle_de_la_R%C3%A9union_vue_par_le_satellite_Sentinel-2.jpg/960px-L%27%C3%AEle_de_la_R%C3%A9union_vue_par_le_satellite_Sentinel-2.jpg",
-    result: "Jaccard overlap: 76.2% on matched land covers",
+    result: "0.26% Trainable Params (294.9K / 111.6M)",
   },
 ];
 
@@ -352,10 +352,10 @@ export default function UseCases() {
         {/* Bottom Metrics Bar */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 pt-2">
           {[
-            { val: "<30ms", label: "retrieval latency" },
-            { val: "83.4%", label: "cross-modal F1@5" },
-            { val: "14,832", label: "gallery scenes" },
-            { val: "2×", label: "sensors bridged" },
+            { val: "<28.5ms", label: "retrieval latency" },
+            { val: "73.51%", label: "cross-modal F1@5" },
+            { val: "91.49%", label: "cross-modal mAP" },
+            { val: "0.26%", label: "trainable params (LoRA)" },
           ].map((s) => (
             <Card key={s.label} className="border-border/60 bg-card/40 backdrop-blur-md shadow-sm p-4 text-center rounded-2xl">
               <CardContent className="p-0 flex flex-col gap-1">
