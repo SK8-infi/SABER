@@ -130,11 +130,13 @@ class BEN14KDataset(BaseDataset):
         transform: Optional[Any] = None,
         modality: str = "s2",  # "s1", "s2", or "both"
         num_classes: int = 19,
-        is_train: bool = True
+        is_train: bool = True,
+        split: str = "test"
     ) -> None:
         self.modality = modality.lower()
         self.num_classes = num_classes
         self.is_train = is_train
+        self.split = split.lower()
         
         if self.modality == "s1":
             self.num_channels = 2

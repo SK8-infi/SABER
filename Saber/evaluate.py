@@ -15,42 +15,42 @@ from Saber.datasets.dsrsid import DSRSIDDataset
 from Saber.datasets.transforms import get_transforms
 from Saber.models.rejepa import REJEPA
 from Saber.models.saber import SABER
-from Saber.trainer.evaluator import Evaluator
 from Saber.retrieval.faiss_index import AdvancedFAISSIndex
 from Saber.visualization.tsne import plot_tsne
 from Saber.visualization.umap import plot_umap
 from Saber.visualization.similarity import plot_similarity_matrix
+from Saber.trainer.metrics import compute_retrieval_metrics
+
 
 def resolve_existing_path(path: str, candidate_paths: list) -> str:
-    if path and os.path.exists(path):
+    if path and os.path.exists(path) and os.path.getsize(path) > 100000:
         return path
     for cand in candidate_paths:
-        if cand and os.path.exists(cand):
+        if cand and os.path.exists(cand) and os.path.getsize(cand) > 100000:
             return cand
     return path
 
+
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Evaluate REJEPA/SABER Retrieval performance and build FAISS Index")
+    parser = argparse.ArgumentParser(description="SABER Model Real Evaluation Runner (4-Pathway Cross/Same Modal)")
     parser.add_argument("--config", type=str, default="Saber/configs/config.yaml", help="Path to config file")
     parser.add_argument("--architecture", type=str, default=None, help="Override model architecture ('saber' or 'rejepa')")
     parser.add_argument("--checkpoint", type=str, default=None, help="Path to trained model checkpoint file (.pth)")
     parser.add_argument("--synthetic", type=str, default=None, help="Force synthetic dataset mode ('true' or 'false')")
     parser.add_argument("--dataset_name", type=str, default=None, help="Override dataset name ('ben14k' or 'dsrsid')")
     parser.add_argument("--data_dir", type=str, default=None, help="Override path to dataset directory")
-    parser.add_argument("--modality", type=str, default=None, help="Override dataset modality ('s1', 's2', 'both')")
+    parser.add_argument("--modality", type=str, default="both", help="Override dataset modality ('s1', 's2', 'both')")
     parser.add_argument("--size", type=int, default=None, help="Override dataset size")
     parser.add_argument("--batch_size", type=int, default=None, help="Override batch size")
-    parser.add_argument("--direction", type=str, default="s1_to_s2", choices=["s1_to_s2", "s2_to_s1"], help="Cross-modal retrieval direction")
-    parser.add_argument("--split", type=str, default="test", choices=["train", "val", "test", "all"], help="Dataset split partition for evaluation ('test', 'val', 'train', 'all')")
+    parser.add_argument("--direction", type=str, default="s1_to_s2", choices=["s1_to_s2", "s2_to_s1"], help="Primary cross-modal retrieval direction")
+    parser.add_argument("--split", type=str, default="test", choices=["train", "val", "test", "all"], help="Dataset split partition ('test', 'val', 'train', 'all')")
     parser.add_argument("--rerank", type=str, default=None, help="Enable/disable k-reciprocal reranking ('true' or 'false')")
-    parser.add_argument("--db", "--database", type=str, default=None, help="Path to pre-computed embedding database file (.pth) for direct evaluation")
     parser.add_argument("--viz", action="store_true", help="Generate and save t-SNE and UMAP visualizations")
     args = parser.parse_args()
 
     # Load configuration
     config = load_config(args.config)
-    
-    # Initialize retrieval config section if missing
+
     if not hasattr(config, "retrieval"):
         config.retrieval = {}
     config.retrieval.direction = args.direction
@@ -75,133 +75,7 @@ def main() -> None:
 
     # Set up Logger
     logger = setup_logger(name="saber", log_dir=config.log_dir)
-    logger.info("Initializing REJEPA/SABER Evaluation & Indexing runner...")
-
-    # Direct Database Evaluation Mode (.pth database payload)
-    target_db_path = args.db or (args.checkpoint if args.checkpoint and (args.checkpoint.endswith(".pth") or args.checkpoint.endswith(".pt")) and not os.path.exists(os.path.join(args.checkpoint, "model")) else None)
-    if target_db_path and os.path.exists(target_db_path):
-        try:
-            db = torch.load(target_db_path, map_location="cpu", weights_only=False)
-        except Exception:
-            db = None
-
-        if isinstance(db, dict) and "labels" in db and ("s2_embeds" in db or "s1_embeds" in db or "hybrid_s2_embeds" in db):
-            logger.info("=========================================================")
-            logger.info("  DIRECT DATABASE BENCHMARK EVALUATION MODE ACTIVE       ")
-            logger.info(f"  Database Payload: '{target_db_path}'                   ")
-            logger.info("=========================================================")
-
-            labels = db["labels"]
-            names = db.get("names", np.array([f"sample_{i}" for i in range(len(labels))]))
-            num_samples = len(labels)
-
-            # Apply deterministic dataset split partitioning matching BEN14K/DSRSID standard (Seed 42)
-            eval_split = args.split.lower() if args.split else "test"
-            rng = np.random.RandomState(42)
-            shuffled_idx = rng.permutation(num_samples)
-            train_end = int(0.70 * num_samples)
-            val_end = int(0.80 * num_samples)
-
-            if eval_split == "test":
-                q_idx = shuffled_idx[val_end:]       # 20% Held-Out Test Query set (2,967 samples)
-                g_idx = shuffled_idx[:val_end]       # 80% Train+Val Gallery set (11,865 samples)
-                split_desc = f"Held-Out Test Split (Query: {len(q_idx)}, Gallery: {len(g_idx)})"
-            elif eval_split == "val":
-                q_idx = shuffled_idx[train_end:val_end]  # 10% Validation Query set (1,483 samples)
-                g_idx = shuffled_idx[:train_end]        # 70% Train Gallery set (10,382 samples)
-                split_desc = f"Validation Split (Query: {len(q_idx)}, Gallery: {len(g_idx)})"
-            elif eval_split == "train":
-                q_idx = shuffled_idx[:train_end]
-                g_idx = shuffled_idx[:train_end]
-                split_desc = f"Train Split (Query: {len(q_idx)}, Gallery: {len(g_idx)})"
-            else:  # "all"
-                q_idx = np.arange(num_samples)
-                g_idx = np.arange(num_samples)
-                split_desc = f"Full Dataset (Query: {len(q_idx)}, Gallery: {len(g_idx)})"
-
-            logger.info(f"Total Multi-Modal Database Samples: {num_samples}")
-            logger.info(f"Evaluation Split Partition: {split_desc}")
-
-            from Saber.trainer.metrics import compute_retrieval_metrics
-
-            def evaluate_payload_embeddings(q_emb, g_emb, q_lbl, g_lbl, k_list=[5, 10], is_same_modal=False, q_names=None, g_names=None):
-                num_q = len(q_emb)
-                q_norm = q_emb / (np.linalg.norm(q_emb, axis=1, keepdims=True) + 1e-8)
-                g_norm = g_emb / (np.linalg.norm(g_emb, axis=1, keepdims=True) + 1e-8)
-
-                # Batch computation over query set to keep RAM usage minimal
-                b_size = 2000
-                res = {}
-                for k in k_list:
-                    prec_list, rec_list, f1_list, map_list = [], [], [], []
-                    for b_start in range(0, num_q, b_size):
-                        b_end = min(b_start + b_size, num_q)
-                        m_batch = compute_retrieval_metrics(
-                            q_norm[b_start:b_end],
-                            g_norm,
-                            q_lbl[b_start:b_end],
-                            g_lbl,
-                            top_k=k,
-                            is_multilabel=True,
-                            exclude_self_matches=is_same_modal,
-                            query_names=q_names[b_start:b_end] if is_same_modal and q_names is not None else None,
-                            gallery_names=g_names if is_same_modal and g_names is not None else None
-                        )
-                        prec_list.append(m_batch[f"precision@{k}"])
-                        rec_list.append(m_batch[f"recall@{k}"])
-                        f1_list.append(m_batch[f"f1@{k}"])
-                        map_list.append(m_batch[f"map@{k}"])
-
-                    res[f"precision@{k}"] = float(np.mean(prec_list))
-                    res[f"recall@{k}"] = float(np.mean(rec_list))
-                    res[f"f1@{k}"] = float(np.mean(f1_list))
-                    res[f"map@{k}"] = float(np.mean(map_list))
-                return res
-
-            is_same = (eval_split == "all")
-
-            # 1. Direct Cross-Modal SAR Encoder (s1_embeds -> s2_embeds)
-            if "s1_embeds" in db and "s2_embeds" in db:
-                m_s1 = evaluate_payload_embeddings(
-                    db["s1_embeds"][q_idx].astype(np.float32),
-                    db["s2_embeds"][g_idx].astype(np.float32),
-                    labels[q_idx],
-                    labels[g_idx],
-                    k_list=[5, 10]
-                )
-                logger.info(f"--- [1/2] Cross-Modal SAR Encoder (S1 -> S2 Optical) [{eval_split.upper()} SPLIT] ---")
-                logger.info(f"  mAP@5   : {m_s1['map@5']:.4f}  |  mAP@10  : {m_s1['map@10']:.4f}")
-                logger.info(f"  F1@5    : {m_s1['f1@5']:.4f}  |  F1@10   : {m_s1['f1@10']:.4f}")
-                logger.info(f"  PREC@5  : {m_s1['precision@5']:.4f}  |  PREC@10 : {m_s1['precision@10']:.4f}")
-                logger.info(f"  REC@5   : {m_s1['recall@5']:.4f}  |  REC@10  : {m_s1['recall@10']:.4f}")
-
-            # 2. Same-Modal Optical Ceiling (s2_embeds -> s2_embeds)
-            if "s2_embeds" in db:
-                m_s2 = evaluate_payload_embeddings(
-                    db["s2_embeds"][q_idx].astype(np.float32),
-                    db["s2_embeds"][g_idx].astype(np.float32),
-                    labels[q_idx],
-                    labels[g_idx],
-                    k_list=[5, 10],
-                    is_same_modal=is_same,
-                    q_names=names[q_idx],
-                    g_names=names[g_idx]
-                )
-                logger.info(f"--- [2/2] Same-Modal Optical Ceiling (S2 -> S2 Optical) [{eval_split.upper()} SPLIT] ---")
-                logger.info(f"  mAP@5   : {m_s2['map@5']:.4f}  |  mAP@10  : {m_s2['map@10']:.4f}")
-                logger.info(f"  F1@5    : {m_s2['f1@5']:.4f}  |  F1@10   : {m_s2['f1@10']:.4f}")
-                logger.info(f"  PREC@5  : {m_s2['precision@5']:.4f}  |  PREC@10 : {m_s2['precision@10']:.4f}")
-                logger.info(f"  REC@5   : {m_s2['recall@5']:.4f}  |  REC@10  : {m_s2['recall@10']:.4f}")
-
-            logger.info("=========================================================")
-
-            if args.viz:
-                logger.info("Generating visualization plots from database payload...")
-                os.makedirs(config.viz_dir, exist_ok=True)
-                s2_vecs = db["s2_embeds"].astype(np.float32)
-                plot_tsne(s2_vecs, labels, save_path=os.path.join(config.viz_dir, "db_tsne.png"))
-                plot_umap(s2_vecs, labels, save_path=os.path.join(config.viz_dir, "db_umap.png"))
-            return
+    logger.info("Initializing SABER Actual Model Multi-Directional Evaluation Runner...")
 
     # Seed random number generators
     set_seed(config.seed)
@@ -210,59 +84,56 @@ def main() -> None:
     device = torch.device(config.device if torch.cuda.is_available() and config.device == "cuda" else "cpu")
     logger.info(f"Computation Device: {device}")
 
-    # Load val/test spatial transforms (is_train=False)
+    # Load val/test spatial transforms
     eval_transform = get_transforms(image_size=config.dataset.image_size, is_train=False)
 
-    # Initialize Dataset loaders (is_train=False, split=args.split)
+    # Instantiate Dataset & DataLoader with both modalities
     dataset_name = config.dataset.name.lower()
-    eval_split = args.split.lower()
+    in_channels = 3
     if dataset_name == "ben14k":
-        eval_dataset = BEN14KDataset(
+        ds = BEN14KDataset(
             data_dir=config.dataset.data_dir,
-            use_synthetic=config.dataset.use_synthetic,
-            size=config.dataset.get("size", 1000),
-            image_size=config.dataset.image_size,
             transform=eval_transform,
-            modality=config.dataset.get("modality", "s2"),
-            is_train=False,
-            split=eval_split
+            use_synthetic=config.dataset.use_synthetic,
+            modality="both",
+            size=config.dataset.size,
+            split=args.split.lower() if args.split else "test",
         )
-        in_channels = eval_dataset.num_channels
     elif dataset_name == "dsrsid":
-        dsrsid_size = args.size if args.size is not None else None
-        eval_dataset = DSRSIDDataset(
-            data_dir=config.dataset.data_dir,
-            use_synthetic=config.dataset.use_synthetic,
-            size=dsrsid_size,
-            image_size=config.dataset.image_size,
-            transform=eval_transform,
-            modality=config.dataset.get("modality", "ms"),
-            is_train=False,
-            split=eval_split
+        mat_path = resolve_existing_path(
+            config.dataset.dsrsid_path,
+            [
+                config.dataset.data_dir,
+                "datasets/DSRSID-001.mat",
+                "datasets/DSRSID/DSRSID-001.mat",
+                "Datasets/DSRSID/DSRSID-001.mat",
+            ]
         )
-        in_channels = eval_dataset.num_channels
-
+        ds = DSRSIDDataset(
+            data_dir=config.dataset.data_dir,
+            transform=eval_transform,
+            use_synthetic=config.dataset.use_synthetic,
+            modality="both",
+            size=config.dataset.size,
+            split=args.split.lower() if args.split else "test",
+        )
     else:
-        raise ValueError(f"Unknown dataset configuration: '{config.dataset.name}'")
+        raise ValueError(f"Unsupported dataset target: '{dataset_name}'")
 
-    logger.info(f"Dataset Loaded: {config.dataset.name.upper()} [{eval_split.upper()} HELD-OUT PARTITION] (Synthetic={eval_dataset.use_synthetic})")
-
-    # Build Dataloader
-    num_workers = config.dataset.get("num_workers", 2)
-    extraction_batch_size = 256 if torch.cuda.is_available() else config.dataset.batch_size
-    eval_loader = DataLoader(
-        eval_dataset,
-        batch_size=extraction_batch_size,
+    ds_title = getattr(ds, "dataset_name", dataset_name)
+    logger.info(f"Dataset Loaded: {ds_title.upper()} [{args.split.upper() if args.split else 'TEST'} HELD-OUT PARTITION] (Synthetic={ds.use_synthetic})")
+    loader = DataLoader(
+        ds,
+        batch_size=config.dataset.batch_size,
         shuffle=False,
-        num_workers=num_workers,
-        pin_memory=torch.cuda.is_available(),
-        persistent_workers=(num_workers > 0)
+        num_workers=config.dataset.get("num_workers", 2),
+        pin_memory=True if device.type == "cuda" else False,
     )
 
-
-    arch = config.model.get("architecture", "saber").lower()
+    # Instantiate SABER Model
+    arch = config.model.architecture.lower()
     if arch == "saber":
-        logger.info("Instantiating SABER model (DOFA + LoRA)...")
+        logger.info("Instantiating SABER model (DOFA ViT + LoRA)...")
         model = SABER(config=config, in_channels=in_channels).to(device)
     elif arch == "rejepa":
         logger.info("Instantiating REJEPA model (timm baseline)...")
@@ -270,100 +141,247 @@ def main() -> None:
     else:
         raise ValueError(f"Unknown architecture target: '{arch}'")
 
-    # Load checkpoint parameters strictly from local workspace folders
-    configured_dir = config.get("checkpoint_dir", "checkpoints_v10")
+    # Load Encoder Checkpoint Candidates
+    configured_dir = config.get("checkpoint_dir", "checkpoints")
     local_encoder_candidates = [
-        os.path.join(configured_dir, "saber_unified_clean.pth"),
-        os.path.join(configured_dir, "saber_unified.pth"),
-        "checkpoints_v10/saber_unified_clean.pth",
-        "checkpoints_v10/saber_unified.pth",
-        "checkpoints_sigreg/saber_unified_clean.pth",
-        "checkpoints_sigreg/saber_unified.pth",
+        args.checkpoint if args.checkpoint else None,
+        "checkpoints/latest_ben14k.pth",
+        "checkpoints/latest_dsrsid.pth",
+        "checkpoints/latest.pth",
+        "/content/SABER/checkpoints/latest_ben14k.pth",
+        "/content/drive/Shareddrives/SABER_Data/SOTA/latest_ben14k.pth",
+        "/content/drive/MyDrive/SABER_Data/SOTA/latest_ben14k.pth",
+        "/content/drive/MyDrive/SOTA/latest_ben14k.pth",
+        os.path.join(configured_dir, "latest_ben14k.pth"),
         "checkpoints/saber_unified_clean.pth",
         "checkpoints/saber_unified.pth",
+        os.path.join(configured_dir, "saber_unified_clean.pth"),
+        os.path.join(configured_dir, "saber_unified.pth"),
     ]
 
-    ckpt_target = resolve_existing_path(
-        args.checkpoint,
-        local_encoder_candidates
-    )
-    checkpoint_state = None
-    if ckpt_target and os.path.exists(ckpt_target):
+    encoder_loaded = False
+    for cand in local_encoder_candidates:
+        if not cand or not os.path.exists(cand) or os.path.getsize(cand) <= 100000:
+            continue
         try:
-            logger.info(f"Loading checkpoint parameters from: '{ckpt_target}'")
-            checkpoint_state = load_checkpoint(ckpt_target, map_location=str(device))
+            logger.info(f"Loading checkpoint parameters from: '{cand}'")
+            checkpoint_state = load_checkpoint(cand, map_location=str(device))
             state_dict = checkpoint_state["model_state_dict"]
             state_dict = {
                 k: v for k, v in state_dict.items()
                 if not k.startswith("bridge.") and not k.startswith("classifier.")
             }
             model.load_state_dict(state_dict, strict=False)
-            logger.info("Successfully loaded master encoder, LoRA, and projection parameters (strict=False).")
+            logger.info(f"Successfully loaded master encoder parameters from '{cand}' (strict=False).")
+            encoder_loaded = True
+            break
         except Exception as e:
-            logger.error(f"Failed to load checkpoint: {e}. Proceeding with initialized weights.")
-    else:
+            logger.warning(f"Could not load encoder checkpoint from '{cand}': {e}. Trying next candidate...")
+
+    if not encoder_loaded:
         logger.warning("No valid model checkpoint specified or found. Running evaluation with initialized model weights.")
 
-    # Load separate bridge checkpoint strictly from local workspace folders
+    # Load CFM Latent Bridge Checkpoint Candidates
     if getattr(model, "bridge", None) is not None:
-        configured_bridge_path = config.get("bridge", {}).get("checkpoint", os.path.join(configured_dir, "bridge_unified.pth"))
+        configured_bridge_path = config.get("bridge", {}).get("checkpoint", "checkpoints/bridge_best_ben14k.pth")
         local_bridge_candidates = [
-            configured_bridge_path,
-            os.path.join(configured_dir, "bridge_unified.pth"),
-            os.path.join(configured_dir, "bridge_best_ben14k.pth"),
-            "checkpoints_v10/bridge_unified.pth",
-            "checkpoints_v10/bridge_best_ben14k.pth",
-            "checkpoints_sigreg/bridge_unified.pth",
-            "checkpoints/bridge_unified.pth",
+            configured_bridge_path if configured_bridge_path and os.path.exists(configured_bridge_path) and os.path.getsize(configured_bridge_path) > 100000 else None,
+            "checkpoints/bridge_best_ben14k.pth",
             "checkpoints/bridge_best.pth",
+            "/content/SABER/checkpoints/bridge_best_ben14k.pth",
+            "/content/drive/Shareddrives/SABER_Data/SOTA/bridge_best_ben14k.pth",
+            "/content/drive/MyDrive/SABER_Data/SOTA/bridge_best_ben14k.pth",
+            "/content/drive/MyDrive/SOTA/bridge_best_ben14k.pth",
+            os.path.join(configured_dir, "bridge_best_ben14k.pth"),
+            "checkpoints/bridge_unified.pth",
+            os.path.join(configured_dir, "bridge_unified.pth"),
         ]
 
-        resolved_bridge_path = ""
+        bridge_loaded = False
         for cand in local_bridge_candidates:
-            if cand and os.path.exists(cand):
-                resolved_bridge_path = cand
-                break
-
-        if resolved_bridge_path:
-            logger.info(f"Loading CFM Latent Bridge checkpoint from: '{resolved_bridge_path}'")
+            if not cand or not os.path.exists(cand) or os.path.getsize(cand) <= 100000:
+                continue
             try:
-                b_data = torch.load(resolved_bridge_path, map_location=str(device), weights_only=False)
-            except TypeError:
-                b_data = torch.load(resolved_bridge_path, map_location=str(device))
-            b_sd = b_data.get("bridge_state_dict", b_data.get("state_dict", b_data)) if isinstance(b_data, dict) else b_data
-            model.bridge.cfm_bridge.load_state_dict(b_sd, strict=False)
-            logger.info("Successfully loaded bridge model parameters (strict=False).")
-        else:
-            logger.warning(f"CFM Latent Bridge checkpoint not found at '{configured_bridge_path}'. Using random bridge weights.")
+                logger.info(f"Loading CFM Latent Bridge checkpoint from: '{cand}'")
+                try:
+                    b_data = torch.load(cand, map_location=str(device), weights_only=False)
+                except TypeError:
+                    b_data = torch.load(cand, map_location=str(device))
+                b_sd = b_data.get("bridge_state_dict", b_data.get("state_dict", b_data)) if isinstance(b_data, dict) else b_data
+                model.bridge.cfm_bridge.load_state_dict(b_sd, strict=False)
+                logger.info(f"Successfully loaded bridge model parameters from '{cand}' (strict=False).")
+                bridge_loaded = True
+                break
+            except Exception as e:
+                logger.warning(f"Could not load bridge checkpoint from '{cand}': {e}. Trying next candidate...")
 
-    # Initialize Evaluator
-    evaluator = Evaluator(
-        model=model,
-        dataloader=eval_loader,
-        device=device,
-        config=config
+        if not bridge_loaded:
+            logger.warning("CFM Latent Bridge checkpoint not found or failed to load. Using random bridge weights.")
+
+    # --------------------------------------------------------------------------
+    # REAL GPU MODEL FORWARD PASS EMBEDDING EXTRACTION
+    # --------------------------------------------------------------------------
+    logger.info("Extracting bimodal embeddings (S1 SAR & S2 Optical) using actual PyTorch model forward pass...")
+    model.eval()
+    s1_embeds_list = []
+    s2_embeds_list = []
+    labels_list = []
+    names_list = []
+
+    s1_channels = getattr(model, "s1_channels", 2)
+    num_batches = len(loader)
+
+    with torch.no_grad():
+        for batch_idx, batch in enumerate(loader):
+            images = batch.get("image", batch.get("image1")).to(device)
+
+            if images.shape[-1] != 224 or images.shape[-2] != 224:
+                import torch.nn.functional as F
+                images = F.interpolate(images, size=(224, 224), mode="bilinear", align_corners=False)
+
+            labels = batch["label"]
+            names = batch["name"]
+
+            x_s1 = images[:, :s1_channels, :, :]
+            x_s2 = images[:, s1_channels:, :, :]
+
+            embed_s1 = model.get_retrieval_embedding(x_s1)
+            embed_s2 = model.get_retrieval_embedding(x_s2)
+
+            s1_embeds_list.append(embed_s1.cpu().numpy())
+            s2_embeds_list.append(embed_s2.cpu().numpy())
+            labels_list.append(labels.numpy())
+            names_list.extend(names)
+
+            if (batch_idx + 1) % 50 == 0 or (batch_idx + 1) == num_batches:
+                logger.info(f"Model Forward Pass Batch [{batch_idx+1}/{num_batches}] completed.")
+
+    all_s1_embeds = np.concatenate(s1_embeds_list, axis=0)
+    all_s2_embeds = np.concatenate(s2_embeds_list, axis=0)
+    all_labels = np.concatenate(labels_list, axis=0)
+    all_names = np.array(names_list)
+
+    num_samples = len(all_labels)
+
+    # Select Held-Out Test Split Partitioning (Seed 42)
+    eval_split = args.split.lower() if args.split else "test"
+    rng = np.random.RandomState(42)
+    shuffled_idx = rng.permutation(num_samples)
+    train_end = int(0.70 * num_samples)
+    val_end = int(0.80 * num_samples)
+
+    if eval_split == "test":
+        q_idx = shuffled_idx[val_end:]       # 20% Held-Out Test Query set (~2,967 samples)
+        g_idx = shuffled_idx[:val_end]       # 80% Train+Val Gallery set (~11,865 samples)
+        split_desc = f"Held-Out Test Split (Query: {len(q_idx)}, Gallery: {len(g_idx)})"
+    elif eval_split == "val":
+        q_idx = shuffled_idx[train_end:val_end]
+        g_idx = shuffled_idx[:train_end]
+        split_desc = f"Validation Split (Query: {len(q_idx)}, Gallery: {len(g_idx)})"
+    elif eval_split == "train":
+        q_idx = shuffled_idx[:train_end]
+        g_idx = shuffled_idx[:train_end]
+        split_desc = f"Train Split (Query: {len(q_idx)}, Gallery: {len(g_idx)})"
+    else:  # "all"
+        q_idx = np.arange(num_samples)
+        g_idx = np.arange(num_samples)
+        split_desc = f"Full Dataset (Query: {len(q_idx)}, Gallery: {len(g_idx)})"
+
+    logger.info("==========================================================================")
+    logger.info("  ACTUAL PYTORCH MODEL FORWARD PASS — 4-PATHWAY EVALUATION REPORT         ")
+    logger.info(f"  Dataset: {ds_title.upper()} | Partition: {split_desc}")
+    logger.info("==========================================================================")
+
+    def run_eval(q_emb, g_emb, q_lbl, g_lbl, is_same=False, q_n=None, g_n=None):
+        m5 = compute_retrieval_metrics(
+            query_embeds=q_emb,
+            gallery_embeds=g_emb,
+            query_labels=q_lbl,
+            gallery_labels=g_lbl,
+            top_k=5,
+            is_multilabel=True,
+            rerank_config=config.get("retrieval", None),
+            query_names=q_n,
+            gallery_names=g_n,
+            exclude_self_matches=is_same
+        )
+        m10 = compute_retrieval_metrics(
+            query_embeds=q_emb,
+            gallery_embeds=g_emb,
+            query_labels=q_lbl,
+            gallery_labels=g_lbl,
+            top_k=10,
+            is_multilabel=True,
+            rerank_config=config.get("retrieval", None),
+            query_names=q_n,
+            gallery_names=g_n,
+            exclude_self_matches=is_same
+        )
+        res = {}
+        res.update(m5)
+        res.update(m10)
+        return res
+
+    is_same = (eval_split == "all")
+
+    # Pathway 1: S1 SAR -> S2 Optical (Cross-Modal)
+    m_cross_1 = run_eval(
+        all_s1_embeds[q_idx], all_s2_embeds[g_idx],
+        all_labels[q_idx], all_labels[g_idx]
     )
 
-    # Run evaluation
-    results = evaluator.evaluate(top_k=config.retrieval.top_k)
+    # Pathway 2: S2 Optical -> S1 SAR (Cross-Modal)
+    m_cross_2 = run_eval(
+        all_s2_embeds[q_idx], all_s1_embeds[g_idx],
+        all_labels[q_idx], all_labels[g_idx]
+    )
 
-    # Log metrics
-    logger.info("=========================================")
-    logger.info("           RETRIEVAL METRICS             ")
-    logger.info("=========================================")
-    for metric_name, val in results["metrics"].items():
-        logger.info(f"{metric_name.upper():<15}: {val:.4f}")
-    logger.info("=========================================")
+    # Pathway 3: S1 SAR -> S1 SAR (Same-Modal)
+    m_same_s1 = run_eval(
+        all_s1_embeds[q_idx], all_s1_embeds[g_idx],
+        all_labels[q_idx], all_labels[g_idx],
+        is_same=is_same, q_n=all_names[q_idx], g_n=all_names[g_idx]
+    )
 
-    # Get Gallery and Query representations
-    all_embeddings = results["embeddings"]
-    gallery_indices = results["gallery_indices"]
-    
-    gallery_embeddings = all_embeddings[gallery_indices]
-    gallery_labels = results["labels"][gallery_indices]
-    gallery_names = [results["names"][i] for i in gallery_indices]
+    # Pathway 4: S2 Optical -> S2 Optical (Same-Modal)
+    m_same_s2 = run_eval(
+        all_s2_embeds[q_idx], all_s2_embeds[g_idx],
+        all_labels[q_idx], all_labels[g_idx],
+        is_same=is_same, q_n=all_names[q_idx], g_n=all_names[g_idx]
+    )
 
-    # Build and serialize the FAISS index (using gallery items)
+    # Display Consolidated Report Table
+    logger.info("\n📊 --- [1/4] CROSS-MODAL: Sentinel-1 SAR -> Sentinel-2 Optical ---")
+    logger.info(f"  mAP@5   : {m_cross_1['map@5']:.4f}  |  mAP@10  : {m_cross_1['map@10']:.4f}")
+    logger.info(f"  F1@5    : {m_cross_1['f1@5']:.4f}  |  F1@10   : {m_cross_1['f1@10']:.4f}")
+    logger.info(f"  PREC@5  : {m_cross_1['precision@5']:.4f}  |  PREC@10 : {m_cross_1['precision@10']:.4f}")
+    logger.info(f"  REC@5   : {m_cross_1['recall@5']:.4f}  |  REC@10  : {m_cross_1['recall@10']:.4f}")
+
+    logger.info("\n📊 --- [2/4] CROSS-MODAL: Sentinel-2 Optical -> Sentinel-1 SAR ---")
+    logger.info(f"  mAP@5   : {m_cross_2['map@5']:.4f}  |  mAP@10  : {m_cross_2['map@10']:.4f}")
+    logger.info(f"  F1@5    : {m_cross_2['f1@5']:.4f}  |  F1@10   : {m_cross_2['f1@10']:.4f}")
+    logger.info(f"  PREC@5  : {m_cross_2['precision@5']:.4f}  |  PREC@10 : {m_cross_2['precision@10']:.4f}")
+    logger.info(f"  REC@5   : {m_cross_2['recall@5']:.4f}  |  REC@10  : {m_cross_2['recall@10']:.4f}")
+
+    logger.info("\n📊 --- [3/4] SAME-MODAL: Sentinel-1 SAR -> Sentinel-1 SAR ---")
+    logger.info(f"  mAP@5   : {m_same_s1['map@5']:.4f}  |  mAP@10  : {m_same_s1['map@10']:.4f}")
+    logger.info(f"  F1@5    : {m_same_s1['f1@5']:.4f}  |  F1@10   : {m_same_s1['f1@10']:.4f}")
+    logger.info(f"  PREC@5  : {m_same_s1['precision@5']:.4f}  |  PREC@10 : {m_same_s1['precision@10']:.4f}")
+    logger.info(f"  REC@5   : {m_same_s1['recall@5']:.4f}  |  REC@10  : {m_same_s1['recall@10']:.4f}")
+
+    logger.info("\n📊 --- [4/4] SAME-MODAL: Sentinel-2 Optical -> Sentinel-2 Optical ---")
+    logger.info(f"  mAP@5   : {m_same_s2['map@5']:.4f}  |  mAP@10  : {m_same_s2['map@10']:.4f}")
+    logger.info(f"  F1@5    : {m_same_s2['f1@5']:.4f}  |  F1@10   : {m_same_s2['f1@10']:.4f}")
+    logger.info(f"  PREC@5  : {m_same_s2['precision@5']:.4f}  |  PREC@10 : {m_same_s2['precision@10']:.4f}")
+    logger.info(f"  REC@5   : {m_same_s2['recall@5']:.4f}  |  REC@10  : {m_same_s2['recall@10']:.4f}")
+
+    logger.info("==========================================================================")
+
+    # Build and serialize FAISS index from S2 optical gallery embeddings
+    gallery_embeddings = all_s2_embeds[g_idx]
+    gallery_labels = all_labels[g_idx]
+    gallery_names = all_names[g_idx]
+
     index_type = config.retrieval.get("index_type", "flat").lower()
     faiss_index = AdvancedFAISSIndex(
         dimension=config.model.projection_head.out_dim,
@@ -378,38 +396,7 @@ def main() -> None:
         fast_scan=config.retrieval.get("fast_scan", False)
     )
 
-    # Compute binary codes if hashing is requested
-    binary_codes = None
-    if index_type == "binary_hnsw" or config.hashing.get("enabled", False):
-        if getattr(model, "hashing_head", None) is not None:
-            model.eval()
-            with torch.no_grad():
-                gallery_embeddings_tensor = torch.tensor(gallery_embeddings, device=device)
-                binary_codes = model.hashing_head.hard_codes(gallery_embeddings_tensor).cpu().numpy()
-            logger.info("Generated binary codes using trained model HashingHead.")
-        else:
-            from Saber.models.hashing_head import HashingHead
-            hashing_head = HashingHead(
-                in_dim=config.model.projection_head.out_dim,
-                num_bits=config.hashing.get("num_bits", 256),
-                hidden_dim=config.hashing.get("hidden_dim", 512)
-            ).to(device)
-            
-            # Load hashing head weights from checkpoint if available
-            if checkpoint_state and "hashing_head_state_dict" in checkpoint_state:
-                hashing_head.load_state_dict(checkpoint_state["hashing_head_state_dict"])
-                logger.info("Successfully loaded HashingHead parameters from checkpoint.")
-            else:
-                logger.warning("No pre-trained HashingHead weights found. Using initialized hashing projections.")
-
-            hashing_head.eval()
-            with torch.no_grad():
-                gallery_embeddings_tensor = torch.tensor(gallery_embeddings, device=device)
-                binary_codes = hashing_head.hard_codes(gallery_embeddings_tensor).cpu().numpy()
-
-    faiss_index.build_index(gallery_embeddings, binary_codes=binary_codes)
-    
-    # Save FAISS Index
+    faiss_index.build_index(gallery_embeddings)
     faiss_index.save_index(config.retrieval.index_path)
 
     # Save gallery metadata sidecar
@@ -417,25 +404,25 @@ def main() -> None:
     metadata_dir = os.path.dirname(metadata_path)
     if metadata_dir:
         os.makedirs(metadata_dir, exist_ok=True)
-        
+
     torch.save({
         "names": gallery_names,
         "labels": gallery_labels,
         "embeddings": gallery_embeddings,
         "dataset_name": config.dataset.name,
-        "modality": getattr(eval_dataset, "modality", "s2")
+        "modality": "s2"
     }, metadata_path)
     logger.info(f"Saved gallery metadata to: {metadata_path}")
 
-    # Generate and save projections and similarity heatmaps if --viz is set
+    # Generate and save projections if --viz is set
     if args.viz:
         logger.info("Generating visualization plots...")
         os.makedirs(config.viz_dir, exist_ok=True)
-        
+
         tsne_path = os.path.join(config.viz_dir, "tsne.png")
         plot_tsne(
-            embeddings=all_embeddings,
-            labels=results["labels"],
+            embeddings=all_s2_embeds,
+            labels=all_labels,
             save_path=tsne_path,
             perplexity=config.visualization.tsne_perplexity,
             n_iter=config.visualization.tsne_n_iter
@@ -444,25 +431,14 @@ def main() -> None:
 
         umap_path = os.path.join(config.viz_dir, "umap.png")
         plot_umap(
-            embeddings=all_embeddings,
-            labels=results["labels"],
+            embeddings=all_s2_embeds,
+            labels=all_labels,
             save_path=umap_path,
             n_neighbors=config.visualization.umap_n_neighbors,
             min_dist=config.visualization.umap_min_dist
         )
         logger.info(f"Saved UMAP plot to: {umap_path}")
 
-        if results.get("similarity_matrix") is not None:
-            sim_path = os.path.join(config.viz_dir, "similarity_heatmap.png")
-            plot_similarity_matrix(
-                similarity_matrix=results["similarity_matrix"],
-                save_path=sim_path
-            )
-            logger.info(f"Saved similarity matrix heatmap to: {sim_path}")
-    else:
-        logger.info("Visualizations skipped. Pass --viz to generate plots.")
-
-    logger.info("Evaluation complete.")
 
 if __name__ == "__main__":
     main()

@@ -33,11 +33,13 @@ class DSRSIDDataset(BaseDataset):
         transform: Optional[Any] = None,
         modality: str = "ms",  # "pan" or "ms"
         num_classes: int = 8,  # Categorized into 8 classes
-        is_train: bool = True
+        is_train: bool = True,
+        split: str = "test"
     ) -> None:
         self.modality = modality.lower()
         self.num_classes = num_classes
         self.is_train = is_train
+        self.split = split.lower()
         
         if self.modality == "pan":
             self.num_channels = 1
