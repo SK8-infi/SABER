@@ -24,10 +24,10 @@ const USE_CASES = [
     title: "All-Weather Flood Mapping",
     description:
       "On 10 Sep 2023, Storm Daniel caused catastrophic flooding in Derna, Libya. Dense cloud cover blocked every optical satellite for days. Sentinel-1 SAR cut right through — imaging the flood extent in full clarity. SABER takes that SAR image as the query and retrieves the closest pre-flood Sentinel-2 optical reference from the archive in 28ms, giving responders an instant before/after pair for damage assessment — no clear sky required.",
-    sarLabel: "Sentinel-1 SAR · Flood Inundation Query (ESA/Copernicus)",
-    opticalLabel: "Sentinel-2 Optical · Pre-flood Reference Match (ESA)",
-    sarImg: "/images/satellite/demo_4_0.png",
-    opticalImg: "/images/satellite/demo_18_0.png",
+    sarLabel: "Sentinel-1 SAR · Derna Flood Inundation Radar",
+    opticalLabel: "Sentinel-2 Optical · Pre-flood Optical Reference",
+    sarImg: "/images/satellite/usecase_flood_sar.png",
+    opticalImg: "/images/satellite/usecase_flood_opt.png",
     result: "Matched pre-disaster optical scene in 28.48ms",
   },
   {
@@ -37,10 +37,10 @@ const USE_CASES = [
     title: "Crop Monitoring Through Monsoon",
     description:
       "During India's kharif season, cloud cover makes optical imagery unavailable for months. SABER queries available SAR data and retrieves the semantically closest optical scene — enabling crop-type classification and yield estimation without waiting for clear skies.",
-    sarLabel: "Sentinel-1 SAR · Central Farmland Radar (ESA)",
-    opticalLabel: "Sentinel-2 Optical · Crop Canopy Reference (ESA)",
-    sarImg: "/images/satellite/demo_4_0.png",
-    opticalImg: "/images/satellite/demo_11_1.png",
+    sarLabel: "Sentinel-1 SAR · Monsoon Farmland Radar",
+    opticalLabel: "Sentinel-2 Optical · Crop Canopy Reference Match",
+    sarImg: "/images/satellite/usecase_crop_sar.png",
+    opticalImg: "/images/satellite/usecase_crop_opt.png",
     result: "Cross-modal F1@5 = 73.51% on BEN-14K benchmark",
   },
   {
@@ -50,10 +50,10 @@ const USE_CASES = [
     title: "Construction & Urban Expansion",
     description:
       "SAR detects new construction and urban expansion even at night or through haze. SABER retrieves the closest optical reference from the historical archive, letting analysts instantly compare land-cover changes across time and sensors.",
-    sarLabel: "Sentinel-1 SAR · Urban Fabric Radar (ESA)",
-    opticalLabel: "Sentinel-2 Optical · Historical Urban Match (ESA)",
-    sarImg: "/images/satellite/demo_4_0.png",
-    opticalImg: "/images/satellite/demo_18_0.png",
+    sarLabel: "Sentinel-1 SAR · Urban Expansion Backscatter",
+    opticalLabel: "Sentinel-2 Optical · Historical Urban Reference",
+    sarImg: "/images/satellite/usecase_urban_sar.png",
+    opticalImg: "/images/satellite/usecase_urban_opt.png",
     result: "Sub-28.5ms retrieval from 14,832-scene gallery",
   },
   {
@@ -63,10 +63,10 @@ const USE_CASES = [
     title: "All-Weather Target Identification",
     description:
       "SAR imagery is interpretable by machines but hard for analysts unfamiliar with radar backscatter. SABER bridges SAR embeddings to visually interpretable optical matches — enabling rapid confirmation of targets from the historical archive.",
-    sarLabel: "Sentinel-1 SAR · Target Surveillance Scene (ESA)",
-    opticalLabel: "Sentinel-2 Optical · Visual Optical Match (ESA)",
-    sarImg: "/images/satellite/demo_4_0.png",
-    opticalImg: "/images/satellite/demo_11_1.png",
+    sarLabel: "Sentinel-1 SAR · Maritime Vessel Radar Scene",
+    opticalLabel: "Sentinel-2 Optical · High-Resolution Target Match",
+    sarImg: "/images/satellite/usecase_defense_sar.png",
+    opticalImg: "/images/satellite/usecase_defense_opt.png",
     result: "Cross-Modal mAP = 91.49% (24% higher vs RemoteCLIP)",
   },
   {
@@ -76,10 +76,10 @@ const USE_CASES = [
     title: "Cross-Sensor Archive Retrieval",
     description:
       "Space agencies hold petabyte-scale archives spanning decades and multiple sensors. SABER lets researchers search millions of scenes in real-time using any sensor as query — semantic image search across the entire Earth observation archive.",
-    sarLabel: "Sentinel-1 SAR · Archive Radar Query (ESA)",
-    opticalLabel: "Sentinel-2 Optical · Matched Archive Scene (ESA)",
-    sarImg: "/images/satellite/demo_4_0.png",
-    opticalImg: "/images/satellite/demo_18_0.png",
+    sarLabel: "Sentinel-1 SAR · Archive Query Radar Scene",
+    opticalLabel: "Sentinel-2 Optical · Matched Archive Optical Scene",
+    sarImg: "/images/satellite/usecase_archive_sar.png",
+    opticalImg: "/images/satellite/usecase_archive_opt.png",
     result: "14,832-scene gallery · 768-dim embeddings",
   },
   {
@@ -89,10 +89,10 @@ const USE_CASES = [
     title: "Deforestation & Fire Scar Detection",
     description:
       "Forest fire scars and deforestation appear as strong SAR texture anomalies. SABER retrieves the matching optical reference scene for each detected change, letting forest departments confirm, document and measure affected area with visual clarity.",
-    sarLabel: "Sentinel-1 SAR · Deforestation Scar (ESA)",
-    opticalLabel: "Sentinel-2 Optical · Forest Canopy Match (ESA)",
-    sarImg: "/images/satellite/demo_4_0.png",
-    opticalImg: "/images/satellite/demo_11_1.png",
+    sarLabel: "Sentinel-1 SAR · Forest Anomaly Radar Scene",
+    opticalLabel: "Sentinel-2 Optical · Forest Vegetation Canopy Match",
+    sarImg: "/images/satellite/usecase_forest_sar.png",
+    opticalImg: "/images/satellite/usecase_forest_opt.png",
     result: "0.26% Trainable Params (294.9K / 111.6M)",
   },
 ];

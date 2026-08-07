@@ -121,7 +121,7 @@ export default function DashboardMockup() {
           <div className="p-4 rounded-2xl border border-border/60 bg-card/80 backdrop-blur-md shadow-sm flex flex-col sm:flex-row items-start sm:items-center gap-4">
             <div className="relative size-24 rounded-xl overflow-hidden border border-border/60 bg-zinc-950 shrink-0">
               <img
-                src="/images/satellite/demo_4_0.png"
+                src="/images/satellite/query_sar_hero.png"
                 alt="Sentinel-1 SAR Satellite Query Scene"
                 className="w-full h-full object-cover grayscale contrast-125 brightness-90"
               />
@@ -176,11 +176,11 @@ export default function DashboardMockup() {
 
             <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
               {[
-                { rank: 1, name: "ROIs18_Nov2023_01", sim: 96.4, jaccard: 88.0, img: "/images/satellite/demo_18_0.png" },
-                { rank: 2, name: "ROIs18_Nov2023_02", sim: 94.1, jaccard: 85.2, img: "/images/satellite/demo_11_1.png" },
-                { rank: 3, name: "ROIs18_Nov2023_03", sim: 92.8, jaccard: 81.4, img: "/images/satellite/demo_4_0.png" },
-                { rank: 4, name: "ROIs18_Nov2023_04", sim: 89.5, jaccard: 78.6, img: "/images/satellite/demo_18_0.png" },
-                { rank: 5, name: "ROIs18_Nov2023_05", sim: 87.2, jaccard: 75.0, img: "/images/satellite/demo_11_1.png" },
+                { rank: 1, name: "ROIs18_Nov2023_01", sim: 96.4, jaccard: 88.0, img: "/images/satellite/candidate_1.png" },
+                { rank: 2, name: "ROIs18_Nov2023_02", sim: 94.1, jaccard: 85.2, img: "/images/satellite/candidate_2.png" },
+                { rank: 3, name: "ROIs18_Nov2023_03", sim: 92.8, jaccard: 81.4, img: "/images/satellite/candidate_3.png" },
+                { rank: 4, name: "ROIs18_Nov2023_04", sim: 89.5, jaccard: 78.6, img: "/images/satellite/candidate_4.png" },
+                { rank: 5, name: "ROIs18_Nov2023_05", sim: 87.2, jaccard: 75.0, img: "/images/satellite/candidate_5.png" },
               ].map((c) => (
                 <div
                   key={c.rank}
@@ -196,7 +196,7 @@ export default function DashboardMockup() {
                   <div className="relative aspect-square rounded-lg overflow-hidden border border-border/40 bg-zinc-950">
                     <img
                       src={c.img}
-                      alt={`Sentinel-2 Satellite Match #${c.rank}`}
+                      alt={`Sentinel-2 Satellite Candidate #${c.rank}`}
                       className="w-full h-full object-cover"
                     />
                   </div>
