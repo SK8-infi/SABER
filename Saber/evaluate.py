@@ -120,7 +120,7 @@ def main() -> None:
     else:
         raise ValueError(f"Unsupported dataset target: '{dataset_name}'")
 
-    logger.info(f"Dataset Loaded: {ds.dataset_name.upper()} [{args.split.upper() if args.split else 'TEST'} HELD-OUT PARTITION] (Synthetic={ds.use_synthetic})")
+    logger.info(f"Dataset Loaded: {getattr(ds, 'dataset_name', dataset_name).upper()} [{args.split.upper() if args.split else 'TEST'} HELD-OUT PARTITION] (Synthetic={ds.use_synthetic})")
     loader = DataLoader(
         ds,
         batch_size=config.dataset.batch_size,
@@ -288,7 +288,7 @@ def main() -> None:
 
     logger.info("==========================================================================")
     logger.info("  ACTUAL PYTORCH MODEL FORWARD PASS — 4-PATHWAY EVALUATION REPORT         ")
-    logger.info(f"  Dataset: {ds.dataset_name.upper()} | Partition: {split_desc}")
+    logger.info(f"  Dataset: {getattr(ds, 'dataset_name', dataset_name).upper()} | Partition: {split_desc}")
     logger.info("==========================================================================")
 
     def run_eval(q_emb, g_emb, q_lbl, g_lbl, is_same=False, q_n=None, g_n=None):
