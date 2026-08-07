@@ -5,6 +5,9 @@ import argparse
 import torch
 import numpy as np
 
+if sys.platform == 'win32':
+    sys.stdout.reconfigure(encoding='utf-8')
+
 def run_local_search(
     db_path: str = "saber_search_db.pth",
     query_name: str = None,
