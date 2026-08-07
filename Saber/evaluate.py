@@ -22,10 +22,10 @@ from Saber.visualization.umap import plot_umap
 from Saber.visualization.similarity import plot_similarity_matrix
 
 def resolve_existing_path(path: str, candidate_paths: list) -> str:
-    if path and os.path.exists(path):
+    if path and os.path.exists(path) and os.path.getsize(path) > 100000:
         return path
     for cand in candidate_paths:
-        if cand and os.path.exists(cand):
+        if cand and os.path.exists(cand) and os.path.getsize(cand) > 100000:
             return cand
     return path
 
@@ -269,78 +269,79 @@ def main() -> None:
     # Load checkpoint parameters strictly from local workspace & drive folders
     configured_dir = config.get("checkpoint_dir", "checkpoints_v10")
     local_encoder_candidates = [
+        args.checkpoint if args.checkpoint else None,
         "checkpoints/latest_ben14k.pth",
         "checkpoints/latest_dsrsid.pth",
         "checkpoints/latest.pth",
-        "checkpoints/saber_unified.pth",
-        "checkpoints/saber_unified_clean.pth",
         "/content/SABER/checkpoints/latest_ben14k.pth",
         "/content/drive/Shareddrives/SABER_Data/SOTA/latest_ben14k.pth",
         "/content/drive/MyDrive/SABER_Data/SOTA/latest_ben14k.pth",
         "/content/drive/MyDrive/SOTA/latest_ben14k.pth",
         os.path.join(configured_dir, "latest_ben14k.pth"),
+        "checkpoints/saber_unified_clean.pth",
+        "checkpoints/saber_unified.pth",
         os.path.join(configured_dir, "saber_unified_clean.pth"),
         os.path.join(configured_dir, "saber_unified.pth"),
-        "checkpoints_v10/saber_unified_clean.pth",
-        "checkpoints_v10/saber_unified.pth",
     ]
 
-    ckpt_target = resolve_existing_path(
-        args.checkpoint,
-        local_encoder_candidates
-    )
-    checkpoint_state = None
-    if ckpt_target and os.path.exists(ckpt_target):
+    encoder_loaded = False
+    for cand in local_encoder_candidates:
+        if not cand or not os.path.exists(cand) or os.path.getsize(cand) <= 100000:
+            continue
         try:
-            logger.info(f"Loading checkpoint parameters from: '{ckpt_target}'")
-            checkpoint_state = load_checkpoint(ckpt_target, map_location=str(device))
+            logger.info(f"Loading checkpoint parameters from: '{cand}'")
+            checkpoint_state = load_checkpoint(cand, map_location=str(device))
             state_dict = checkpoint_state["model_state_dict"]
             state_dict = {
                 k: v for k, v in state_dict.items()
                 if not k.startswith("bridge.") and not k.startswith("classifier.")
             }
             model.load_state_dict(state_dict, strict=False)
-            logger.info("Successfully loaded master encoder, LoRA, and projection parameters (strict=False).")
+            logger.info(f"Successfully loaded master encoder parameters from '{cand}' (strict=False).")
+            encoder_loaded = True
+            break
         except Exception as e:
-            logger.error(f"Failed to load checkpoint: {e}. Proceeding with initialized weights.")
-    else:
+            logger.warning(f"Could not load encoder checkpoint from '{cand}': {e}. Trying next candidate...")
+
+    if not encoder_loaded:
         logger.warning("No valid model checkpoint specified or found. Running evaluation with initialized model weights.")
 
     # Load separate bridge checkpoint strictly from local workspace folders & drive folders
     if getattr(model, "bridge", None) is not None:
-        configured_bridge_path = config.get("bridge", {}).get("checkpoint", os.path.join(configured_dir, "bridge_best_ben14k.pth"))
+        configured_bridge_path = config.get("bridge", {}).get("checkpoint", "checkpoints/bridge_best_ben14k.pth")
         local_bridge_candidates = [
-            configured_bridge_path,
+            configured_bridge_path if configured_bridge_path and os.path.exists(configured_bridge_path) and os.path.getsize(configured_bridge_path) > 100000 else None,
             "checkpoints/bridge_best_ben14k.pth",
             "checkpoints/bridge_best.pth",
-            "checkpoints/bridge_unified.pth",
             "/content/SABER/checkpoints/bridge_best_ben14k.pth",
             "/content/drive/Shareddrives/SABER_Data/SOTA/bridge_best_ben14k.pth",
             "/content/drive/MyDrive/SABER_Data/SOTA/bridge_best_ben14k.pth",
             "/content/drive/MyDrive/SOTA/bridge_best_ben14k.pth",
             os.path.join(configured_dir, "bridge_best_ben14k.pth"),
+            "checkpoints/bridge_unified.pth",
             os.path.join(configured_dir, "bridge_unified.pth"),
-            "checkpoints_v10/bridge_best_ben14k.pth",
-            "checkpoints_v10/bridge_unified.pth",
         ]
 
-        resolved_bridge_path = ""
+        bridge_loaded = False
         for cand in local_bridge_candidates:
-            if cand and os.path.exists(cand):
-                resolved_bridge_path = cand
-                break
-
-        if resolved_bridge_path:
-            logger.info(f"Loading CFM Latent Bridge checkpoint from: '{resolved_bridge_path}'")
+            if not cand or not os.path.exists(cand) or os.path.getsize(cand) <= 100000:
+                continue
             try:
-                b_data = torch.load(resolved_bridge_path, map_location=str(device), weights_only=False)
-            except TypeError:
-                b_data = torch.load(resolved_bridge_path, map_location=str(device))
-            b_sd = b_data.get("bridge_state_dict", b_data.get("state_dict", b_data)) if isinstance(b_data, dict) else b_data
-            model.bridge.cfm_bridge.load_state_dict(b_sd, strict=False)
-            logger.info("Successfully loaded bridge model parameters (strict=False).")
-        else:
-            logger.warning(f"CFM Latent Bridge checkpoint not found at '{configured_bridge_path}'. Using random bridge weights.")
+                logger.info(f"Loading CFM Latent Bridge checkpoint from: '{cand}'")
+                try:
+                    b_data = torch.load(cand, map_location=str(device), weights_only=False)
+                except TypeError:
+                    b_data = torch.load(cand, map_location=str(device))
+                b_sd = b_data.get("bridge_state_dict", b_data.get("state_dict", b_data)) if isinstance(b_data, dict) else b_data
+                model.bridge.cfm_bridge.load_state_dict(b_sd, strict=False)
+                logger.info(f"Successfully loaded bridge model parameters from '{cand}' (strict=False).")
+                bridge_loaded = True
+                break
+            except Exception as e:
+                logger.warning(f"Could not load bridge checkpoint from '{cand}': {e}. Trying next candidate...")
+
+        if not bridge_loaded:
+            logger.warning("CFM Latent Bridge checkpoint not found or failed to load. Using random bridge weights.")
 
     # Initialize Evaluator
     evaluator = Evaluator(
