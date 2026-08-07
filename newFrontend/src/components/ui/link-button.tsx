@@ -10,7 +10,7 @@ export interface LinkButtonProps {
   variant?: VariantProps<typeof buttonVariants>["variant"];
   icon?: ReactNode;
   iconRight?: ReactNode;
-  size?: ComponentProps<typeof buttonVariants>["size"];
+  size?: VariantProps<typeof buttonVariants>["size"];
   className?: string;
 }
 
