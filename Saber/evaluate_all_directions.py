@@ -101,8 +101,9 @@ def main() -> None:
     else:
         raise ValueError(f"Unsupported dataset target: '{dataset_name}'")
 
+    in_channels = getattr(ds, "num_channels", 14)
     ds_title = getattr(ds, "dataset_name", dataset_name)
-    logger.info(f"Dataset Loaded: {ds_title.upper()} [{args.split.upper() if args.split else 'TEST'} SPLIT] (Samples: {len(ds)})")
+    logger.info(f"Dataset Loaded: {ds_title.upper()} [{args.split.upper() if args.split else 'TEST'} SPLIT] (Samples: {len(ds)}, Channels: {in_channels})")
     loader = DataLoader(
         ds,
         batch_size=config.dataset.batch_size,
@@ -114,7 +115,7 @@ def main() -> None:
     # Instantiate Model
     arch = config.model.architecture.lower()
     if arch == "saber":
-        logger.info("Instantiating SABER model (DOFA ViT + LoRA)...")
+        logger.info(f"Instantiating SABER model (DOFA ViT + LoRA) with in_channels={in_channels}...")
         model = SABER(config=config, in_channels=in_channels).to(device)
     elif arch == "rejepa":
         logger.info("Instantiating REJEPA model (timm baseline)...")
